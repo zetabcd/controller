@@ -1,0 +1,21 @@
+[submodule "3rdpart/src/casadi"]
+	path = 3rdpart/src/casadi
+	url = https://github.com/casadi/casadi.git
+[submodule "3rdpart/src/ipopt"]
+	path = 3rdpart/src/ipopt
+	url = https://github.com/coin-or/Ipopt.git
+[submodule "3rdpart/src/nlopt"]
+	path = 3rdpart/src/nlopt
+	url = https://github.com/stevengj/nlopt.git
+[submodule "3rdpart/src/osqp"]
+	path = 3rdpart/src/osqp
+	url = https://github.com/osqp/osqp.git
+[submodule "3rdpart/src/qdldl"]
+	path = 3rdpart/src/qdldl
+	url = https://github.com/osqp/qdldl.git
+[submodule "3rdpart/src/eigen"]
+	path = 3rdpart/src/eigen
+	url = https://gitlab.com/libeigen/eigen.git
+[submodule "3rdpart/src/acados"]
+	path = 3rdpart/src/acados
+	url = https://github.com/acados/acados.git

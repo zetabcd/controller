@@ -1,0 +1,109 @@
+<mujoco model="quad">
+  <compiler angle="degree" inertiafromgeom="false" autolimits="true" eulerseq="zyx"  meshdir="assets"/>
+  <option apirate="500" integrator="RK4" density="0" viscosity="0" gravity="0 0 -9.805" wind="0 0 0"/>
+
+  <visual>
+    <scale com="0.05" forcewidth="0.05" framelength="3.0" framewidth="0.3"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="0.0" elevation="-90" ellipsoidinertia="true" bvactive="false"/>
+    <quality shadowsize="0" offsamples="0"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1=".3 .5 .7" rgb2="0.5 0.5 0.5" width="32" height="512"/>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2" 
+      emission=".5" shininess="0.4" />
+    <!-- <texture type="skybox" file="desert.png" gridsize="3 4" gridlayout=".U..LFRB.D.." /> -->
+    <!-- <texture name="plane" type="2d" file="grass.png" width="1" height="1" />
+    <material name="plane" texture="plane" specular="0.0" shininess="0.0" roughness="1" emission=".4" texrepeat="1 1" texuniform="true"/> -->
+
+    <material name="black" rgba="0.235 0.235 0.235 1"/>
+    <material name="white" rgba="1 1 1 1"/>
+    <material name="red" rgba="0.7 0 0 1"/>
+    <material name="green_blue" rgba="0 1 0.5 1"/>
+    <material name="light_blue" rgba="0.8 0.8 1 1"/>
+    <material name="light_purple" rgba="0.8 0.6 1 1"/>
+    <material name="orange" rgba="1 0.502 0 1"/>
+    <mesh file="motor.stl"/>
+    <mesh file="propeller_p.stl"/>
+    <mesh file="propeller_n.stl"/>
+    <mesh file="GEPRC_MK4_5in_blender.stl"/>
+
+      <!-- 定义高亮材质：漫反射拉满(1 1 1) + 柔和高光 + 精致光泽度 -->
+    <material name="bright_mat" 
+              rgba="1.0 0.0 0.0 1.0"   
+              specular="0.5"           
+              shininess="50"/>         
+      <!-- <texture name="plane" file="grass.jpg" type="2d" builtin="flat" rgb1=".4 .2 .0" rgb2=".9 .9 .9"
+        width="512" height="512" mark="random" markrgb=".8 .8 .8" random="0.001"/>
+    <material name="plane" reflectance="0.05" texture="plane" texrepeat="1 1" texuniform="true"/> -->
+  </asset>
+  <!-- <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+  </asset> -->
+
+  <worldbody>
+    <geom name="floor" pos="0 0 0" size="0 0 .25" type="plane" material="grid" condim="3" />
+    <light name="spotlight" mode="targetbodycom" target="quad" 
+      diffuse=".8 .8 .8" specular="0.3 0.3 0.3" ambient="0.3 0.3 0.3" pos="0 0 10" cutoff="30"/>
+    <light name="top" pos="0 0 2" mode="trackcom"/>
+    <!-- <camera name="down" pos="0 0 20" euler="0 0 0"/> -->
+    <camera name="capture_cam" pos="62.50 -108.25 125.00" euler="60 0 60"/>
+    
+    <body name="quad" pos="0 0 5.0"> 
+      <camera name="track_cam" pos="-2 0 1" euler="-90 0 60" mode="track"/>
+      <camera name="fpv" pos="0 0 0.3" euler="-90 0 180" resolution="3280 2464" focal="1.88e-3 1.88e-3" sensorsize="3.936e-3 2.9568e-3"/>
+      <!-- <joint name="quad" type="ball" pos="0 0 0"/> -->
+      <freejoint/>
+      <inertial pos="0 0 0" mass="0.7311" diaginertia="2.4813e-3 2.6667e-3 4.3365e-3"/>
+      <geom mesh="GEPRC_MK4_5in_blender" type="mesh" material="light_blue" euler="-90 0 0"/>
+
+      <body name="motor1">
+        <joint name="motor1" axis="0 0 1"/>
+        <inertial pos="0 0 0" mass="1e-10" diaginertia="1e-10 1e-10 1e-10"/>
+        <geom mesh="motor" type="mesh" material="black"/>
+        <geom name="prop1" mesh="propeller_n" type="mesh" material="green_blue" pos="0 0 0.0202"/>
+      </body>
+      <body name="motor2">
+        <joint name="motor2" axis="0 0 1"/>
+        <inertial pos="0 0 0" mass="1e-10" diaginertia="1e-10 1e-10 1e-10"/>
+        <geom mesh="motor" type="mesh" material="black"/>
+        <geom name="prop2" mesh="propeller_n" type="mesh" material="green_blue" pos="0 0 0.0202"/>
+      </body>
+      <body name="motor3">
+        <joint name="motor3" axis="0 0 1"/>
+        <inertial pos="0 0 0" mass="1e-10" diaginertia="1e-10 1e-10 1e-10"/>
+        <geom mesh="motor" type="mesh" material="black"/>
+        <geom name="prop3" mesh="propeller_p" type="mesh" material="green_blue" pos="0 0 0.0202"/>
+      </body>
+      <body name="motor4">
+        <joint name="motor4" axis="0 0 1"/>
+        <inertial pos="0 0 0" mass="1e-10" diaginertia="1e-10 1e-10 1e-10"/>
+        <geom mesh="motor" type="mesh" material="black"/>
+        <geom name="prop4" mesh="propeller_p" type="mesh" material="green_blue" pos="0 0 0.0202"/>
+      </body>
+
+      <site name="quad_sensor_site"/>
+
+      <!-- <camera name="fpv" mode="fixed" pos="0 0 0.3" euler="90 0 -90" 
+        principalpixel="50 50" focalpixel="1080 1920" sensorsize="4 4" resolution="1920 1080"/> -->
+      
+    </body>
+  </worldbody>
+
+
+  <sensor>
+    <gyro name="body_angvel" site="quad_sensor_site"/> <!-- 体轴系 -->
+    <accelerometer name="body_linacc" site="quad_sensor_site"/> <!-- 体轴系 -->
+    <framequat name="body_quat" objtype="body" objname="quad"/>
+    <framelinvel name="body_vel" objtype="body" objname="quad"/>
+    <framepos name="body_pos" objtype="body" objname="quad"/>
+
+    <framepos name="fpv_pos" objtype="camera" objname="fpv"/>
+    
+  </sensor>
+</mujoco>

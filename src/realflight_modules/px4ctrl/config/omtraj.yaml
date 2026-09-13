@@ -1,0 +1,109 @@
+omtraj_visualizer:
+  ros__parameters:
+    frame_id: map
+
+    output:
+      save_trajectory: true
+      # 默认按此路径保存；命令行 trajectory_file:=/absolute/path/file.csv 可覆盖。
+      trajectory_file: /home/sun/many_controllerV3/src/realflight_modules/px4ctrl/config/omtraj_optimized.csv
+
+    # Ordered intermediate waypoints. Each point is one [x, y, z] vector.
+    # To add/remove points, update waypoint_count and point_0 ... point_(count-1).
+    # Passage times are optimization variables; CSTC enforces the listed order.
+    waypoint_count: 7
+    waypoint_tolerance: 0.12
+    waypoints:
+      point_0: [1.0, 0.5, 1.0]
+      point_1: [2.4, -0.8, 1.5]
+      point_2: [2.0, 1.5, 2.0]
+      point_3: [1.0, 0.9, 2.5]
+      point_4: [-1.0, 0.0, 2.5]
+      point_5: [0.0, -1.5, 1.5]
+      point_6: [2.0, 0.0, 2.0]
+
+
+      # point_0: [1.0, 1.0, 1.0]
+      # point_1: [2.0, -0.8, 1.5]
+      # point_2: [4.0, 2.5, 2.0]
+      # point_3: [0.0, 0.0, 2.5]
+      # point_4: [3.0, -2.5, 1.0]
+
+
+
+
+    initial:
+      position: [0.0, 0.0, 1.0]
+      velocity: [0.0, 0.0, 0.0]
+      yaw: 0.0
+    terminal:
+      position: [1.0, 1.0, 1.5]
+      velocity: [0.0, 0.0, 0.0]
+      yaw: 0.0
+
+    optimizer:
+      # CSTC identification is numerically stable at N=60 for the current route.
+      # Controller and RViz sampling densities are independent of this optimization grid.
+      intervals: 60
+      max_scp_iterations: 20
+      max_time_search_iterations: 12
+      minimum_time: 0.5
+      maximum_time: 20.0
+      initial_speed: 2.0
+      # Outer bisection terminates when T_feasible-T_infeasible is below this value.
+      time_search_tolerance: 0.02
+      thrust_acceleration_min: 0.5
+      thrust_acceleration_max: 39.22
+      body_rate_max: [14.0, 14.0, 14.0]
+      position_trust_region: 1.0
+      velocity_trust_region: 3.0
+      attitude_trust_region: 0.7
+      thrust_trust_region: 8.0
+      body_rate_trust_region: [4.0, 4.0, 4.0]
+      # Try alpha=1,1/2,... and accept the step with the best nonlinear residual merit.
+      scp_backtracking_steps: 6
+      # Strict lexicographic minimum time: outer min(T), inner fixed-T feasibility.
+      optimize_total_time: true
+      convergence_tolerance: 0.002
+      dynamics_tolerance: 0.05
+      # Numerical proximal term on SCP increments only; it is not a physical cost.
+      state_regularization: 1.0
+      # Inner fixed-T feasibility tie-breakers. Outer min(T) remains lexicographically first.
+      input_regularization: 0.05
+      input_smoothness: 0.2
+      virtual_control_weight: 100000.0
+      # Optional actuator-bandwidth model; disabled for paper-level u=[a_T,omega].
+      enforce_input_rate_constraints: false
+      enforce_hover_boundary_input: false
+      thrust_acceleration_rate_max: 12.0
+      body_rate_acceleration_max: [20.0, 20.0, 20.0]
+      enable_cstc: true
+      enforce_strict_waypoint_order: true
+      # CSTC selects passage nodes once; min-time bisection then fixes that active set.
+      lock_cstc_active_set_for_time_search: true
+      # A failed locked-node trial is retried with CSTC enabled before it is called infeasible.
+      retry_cstc_on_locked_failure: true
+      progress_trust_region: 0.35
+      # Hold a feasible CSTC schedule while time-dilated dynamics are restored.
+      cstc_warm_start_iterations: 3
+      # Use a small multi-node progress seed and gradually tighten complementarity.
+      # This prevents tiny waypoint changes from locking CSTC to one rounded node.
+      cstc_initial_support_radius: 2
+      cstc_relaxation_initial: 0.05
+      cstc_relaxation_decay: 0.5
+      cstc_slack_weight: 200000.0
+      cstc_tolerance: 0.0001
+      cstc_slack_tolerance: 0.0001
+
+    visualization:
+      marker_topic: omtraj/markers
+      # Accepted SCP steps are published live once; only the final vehicle loops.
+      # The simulated vehicle is updated smoothly and loops on the final trajectory.
+      vehicle_publish_rate_hz: 15.0
+      vehicle_playback_speed: 1.0
+      # Dense final display grid; does not enlarge the CSTC/OSQP decision vector.
+      final_display_samples: 240
+      trajectory_width: 0.055
+      # Draw one body-Z/thrust arrow at every trajectory discretization node.
+      thrust_arrow_stride: 1
+      # Arrow length [m] = this scale * thrust acceleration [m/s^2].
+      thrust_arrow_scale: 0.03

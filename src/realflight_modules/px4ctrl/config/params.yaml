@@ -1,0 +1,152 @@
+px4ctrl_node:
+  ros__parameters:
+    # sun: 外环与内环频率分别对应两个 ROS 2 节点，滤波器设计也使用这两个采样频率。
+    ctrl_freq_max : 100.0
+    # [NON-CONTROLLER TIMING CHANGE] 基线为 400 Hz；1000 Hz 只改变原角速度内环
+    # 的调度频率和计算负载，不属于 OmMpc 或四种 NMPC 后端的参数。
+    ratectrl_freq_max : 400.0
+
+    gra    : 9.805
+
+    # CMD 模式的“平滑起飞 + 水平八字”轨迹。length/width 是八字包围盒的
+    # 全长/全宽，speed 是八字段最大路径速度；进入 CMD 时读取这些参数并生成轨迹。
+    trajectory:
+      point_to_point:
+        max_speed: 1.0            # AUTO_HOVER 平移参考最大速度 [m/s]
+        max_acceleration: 1.5     # AUTO_HOVER 平移参考最大加速度 [m/s^2]
+      figure_eight:
+        takeoff_height: 0.1       # 相对进入 CMD 时位置的上升高度 [m]
+        takeoff_duration: 2.5     # 七阶平滑起飞时间 [s]
+        settle_duration: 0.5      # 到达 1 m 后的稳定悬停时间 [s]
+        length: 3.0               # 八字长轴全长 [m]
+        width: 1.8                # 八字短轴全宽 [m]
+        speed: 1.0                # 八字段最大路径速度 [m/s]
+        laps: 2                   # 连续绕行圈数
+      # 论文最小-jerk QP 多圈翻滚；编译时选择 PX4CTRL_CMD_TRAJECTORY=3 后启用。
+      # 默认值复现外部 five_turn_helix 实现，并在前面增加实机平滑起飞。
+      five_turn:
+        takeoff_height: 1.0       # 相对进入 CMD 时位置的上升高度 [m]
+        takeoff_duration: 2.5     # 七阶平滑起飞时间 [s]
+        settle_duration: 0.5      # 起飞后的稳定时间 [s]
+        revolutions: 5            # 连续完整翻滚圈数
+        waypoints_per_revolution: 16 # 每圈圆周硬路标数，必须>=8且为4的倍数
+        radius: 1.0               # 螺旋圆周半径 [m]
+        axial_speed: 0.5          # 沿机头/滚转轴前进速度 [m/s]
+        entry_duration: 1.5       # 从静止进入轴向速度的时间 [s]
+        roll_duration: 9.0        # 完成全部翻滚圈的时间 [s]
+        exit_duration: 1.5        # 从轴向速度减速到静止的时间 [s]
+        velocity_tracking_weight: 100.0
+        acceleration_tracking_weight: 10.0
+        jerk_tracking_weight: 0.1
+      # 选择 PX4CTRL_CMD_TRAJECTORY=4 时只读取离线优化保存的 CSV。
+      # 留空会自动读取当前 px4ctrl 包的 config/omtraj_optimized.csv。
+      omtraj:
+        file: ""
+
+    # 在线线性 MPC 参数；权重顺序为 p(3)、v(3)、姿态误差(3) 和推力/角速度(4)。
+    mpc:
+      horizon: 8
+      prediction_dt: 0.01
+      body_rate_max: [14.0, 14.0, 14.0]
+      state_weight: [15000.0, 15000.0, 17000.0, 40.0, 40.0, 120.0, 200.0, 200.0, 80.0]
+      input_weight: [0.5, 0.6, 0.6, 0.6]
+      terminal_weight_scale: 1.0
+
+    # 四种 NMPC 后端共享参数；acados 的 horizon 必须与生成代码一致。
+    nmpc:
+      horizon: 12
+      prediction_dt: 0.04
+      maximum_iterations: 60
+      body_rate_max: [14.0, 14.0, 14.0]
+
+    # sun: 刚体参数使用 SI 单位；惯量是机体系主轴对角项，机臂角从 +x 轴量起。
+    uav:
+      mass  : 0.811
+      Jvx   : 1.91e-3 # kgm^2
+      Jvy   : 2.37e-3
+      Jvz   : 3.60e-3
+      l     : 0.1216  # m 
+      rp    : 0.06475 # m（5.1寸桨半径）
+      beta_deg  : 45.0  # deg（机架和x轴夹角）
+
+    motor:
+      # sun: Cq/Ct 多项式的自变量是前进比 J，rc2speed 则把归一化油门映射为 rad/s。
+      # cq    : 1.8346e-8 # Nm^2，1.8899e-8
+      Cq_a  : -0.0275
+      Cq_b  : 0.0017
+      Cq_c  : 0.0161
+      # ct    : 1.7368e-6 # N^2，1.6582e-6
+      Ct_a  : -0.1861
+      Ct_b  : -0.1392
+      Ct_c  : 0.1991
+
+      rc2speed_a: -1481.82
+      rc2speed_b: 4350.76
+      rc2speed_c: -27.34
+      # u_min : 0.0 # N 由rc2speed_c来决定
+      # u_max : 13.9254
+
+    # 滤波器
+    filter:
+      lpf_acc_x_cutoff_hz : 10.0
+      lpf_acc_y_cutoff_hz : 10.0
+      lpf_acc_z_cutoff_hz : 10.0
+      lpf_gyro_x_cutoff_hz : 10.0
+      lpf_gyro_y_cutoff_hz : 10.0
+      lpf_gyro_z_cutoff_hz : 10.0
+    # sun: 增益按位置、速度、姿态、角速度四层串级控制器分组，三轴可独立调节。
+    gain:
+      gain_pos_x   : 2.5
+      gain_pos_y   : 1.5
+      gain_pos_z   : 1.5
+      gain_vel_p_x   : 4.0
+      gain_vel_p_y   : 3.0
+      gain_vel_p_z   : 2.5
+      gain_vel_i_x   : 0.8
+      gain_vel_i_y   : 0.8
+      gain_vel_i_z   : 0.5
+      gain_vel_d_x   : 0.2
+      gain_vel_d_y   : 0.2
+      gain_vel_d_z   : 0.0
+      gain_quat_x   : 12.0 # 7.0
+      gain_quat_y   : 13.0 # 8.0
+      gain_quat_z   : 2.0 # 2.0
+      gain_rate_p_x : 16.0 # 10.0
+      gain_rate_p_y : 18.0 # 12.0
+      gain_rate_p_z : 4.0
+      gain_rate_i_x : 3.0
+      gain_rate_i_y : 3.0
+      gain_rate_i_z : 0.5
+      gain_rate_d_x : 0.05
+      gain_rate_d_y : 0.05
+      gain_rate_d_z : 0.0
+
+    # sun: 气动力在机体系计算；kdx/kdy/kdz 为线性阻力项，kh 为水平速度耦合竖直项。
+    aero:
+      rho   : 1.225
+      kdx   : 0.26  # kg/s
+      kdy   : 0.28  # kg/m
+      kdz   : 0.42  
+      kh    : 0.01
+    # kdx   : 0.0  # kg/s
+    # kdy   : 0.0  # kg/m
+    # kdz   : 0.0  
+    # kh    : 0.0
+
+    # RC
+    rc_reverse:
+      roll: true 
+      pitch: true 
+      yaw: false 
+      throttle: true
+
+    tuning:
+      # sun: 两个调参开关会覆盖正常参考，仅用于系留或安全试验环境中的单环响应测试。
+      attitude_loop: false # 姿态环调参
+      euler_des_x_deg: 0.0    # 期望姿态角(deg)，仅在attitude_loop=true时有效
+      euler_des_y_deg: 0.0
+      euler_des_z_deg: 0.0
+      angular_rate_loop: false # 角速度环调参
+      rate_des_x_deg: 57.3    # 期望角速度(deg/s)，仅在angular_rate_loop=true时有效
+      rate_des_y_deg: 0.0
+      rate_des_z_deg: 0.0

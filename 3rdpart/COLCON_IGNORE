@@ -1,0 +1,1 @@
+# Third-party sources are built by build_all.sh, outside the ROS colcon build.

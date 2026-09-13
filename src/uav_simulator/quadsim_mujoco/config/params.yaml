@@ -1,0 +1,34 @@
+quadsim_node:
+  ros__parameters:
+    # sun: 仿真频率同时决定 MuJoCo 固定步长、风场采样间隔和电机模型更新频率。
+    sim_freq_max : 400.0 # 600
+
+    motor:
+      # sun: 电机时间常数按 Tm = Tm_a*rpm + Tm_b 计算，Jm 用于转子陀螺力矩。
+      Tm_a    : -1.7022e-7 # Tm = Tm_a*rpm + Tm_b
+      Tm_b    : 0.034629
+      Jm      : 6.0e-6 # kgm^2
+
+    noise:
+      # sun: 风场、陀螺和加速度噪声可独立启用；标准差均使用对应物理量的 SI 单位。
+      wind_is_valid : false  # 是否启用风场噪声:
+      wind_mean : 4.4  # 风场平均风速m/s（四级风4.4m/s，三级风2.45m/s）
+      wind_height : 10.0  # 风场高度m
+      gyro_is_valid : true  # 是否启用陀螺仪噪声
+      gyro_stddev_x  : 0.07101  # 角速度噪声标准差rad/s
+      gyro_stddev_y  : 0.05167
+      gyro_stddev_z  : 0.28067
+      accel_is_valid : true  # 是否启用加速度计噪声
+      accel_stddev_x : 0.92033 # 加速度噪声标准差m/s^2
+      accel_stddev_y : 0.58970
+      accel_stddev_z : 0.56248
+
+    visual:
+      # sun: 轨迹长度表示 MuJoCo 用户几何体中保留的历史段数，过大会增加渲染开销。
+      arrow_display : true # 是否显示坐标系箭头
+      arrow_width : 0.008 # 箭头粗细
+      arrow_aspect_ratio : 100.0 # 箭头长细比
+      traj_line_display : true # 是否显示轨迹线（当前和参考两条）
+      traj_line_length : 800 # 轨迹线段长度
+      traj_line_width : 3.0  # 轨迹线宽，1~5最佳
+      

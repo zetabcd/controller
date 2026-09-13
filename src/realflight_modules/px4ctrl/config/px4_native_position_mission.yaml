@@ -1,0 +1,29 @@
+px4_native_position_node:
+  ros__parameters:
+    simulation:
+      # true：忽略 AUX1 和 RC 在线状态，定位就绪后自动进入 OFFBOARD、解锁并执行任务。
+      # false：实机安全默认值，必须由 AUX1 UP 启动，DOWN 暂停并悬停。
+      enabled: true
+
+    mission:
+      # 实际执行点数。points_ned 必须恰好包含 point_count 组三维坐标。
+      point_count: 3
+
+      # PX4 本地 NED 坐标 [north, east, down]，单位 m；负 down 表示向上。
+      # 第一个点作为起飞点，在进入 OFFBOARD 和解锁之前就会持续预发送；
+      # 例如 [0, 0, -1] 表示本地原点上方 1 m。
+      points_ned: [
+        0.0, 0.0, -5.0,
+        2.0, 0.0, -5.0,
+        2.0, 2.0, -5.0
+      ]
+
+      # enabled=false：下一航点直接交给 PX4，速度由 PX4 自身参数限制。
+      # enabled=true：起飞点会直接预发送；离地后的航点间按 speed 移动位置设定值。
+      speed_control:
+        enabled: true
+        speed: 0.8               # [m/s]
+
+      acceptance_radius: 0.20    # 实际位置到航点的三维距离阈值 [m]
+      waypoint_hold_time: 0.30   # 阈值内持续该时间才切换下一点 [s]
+      prestream_duration: 1.0    # 请求 OFFBOARD 前预发送第一起飞点的时间 [s]
