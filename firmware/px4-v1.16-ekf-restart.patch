@@ -1,0 +1,169 @@
+diff --git a/src/modules/commander/Commander.cpp b/src/modules/commander/Commander.cpp
+--- a/src/modules/commander/Commander.cpp
++++ b/src/modules/commander/Commander.cpp
+@@ -39,6 +39,7 @@
+  */
+ 
+ #include "Commander.hpp"
++#include "ekf_restart.h"
+ 
+ /* commander module headers */
+ #include "Arming/ArmAuthorization/ArmAuthorization.h"
+@@ -740,6 +741,42 @@
+ 
+ 	/* request to set different system mode */
+ 	switch (cmd.command) {
++	case many_controller::kEkfRestartCommand: {
++			if (!PX4_ISFINITE(cmd.param1) || fabsf(cmd.param1 - many_controller::kEkfRestartKey) > 0.f || !PX4_ISFINITE(cmd.param2)
++			    || cmd.param2 < 1.f || cmd.param2 > 16777215.f || fabsf(floorf(cmd.param2) - cmd.param2) > 0.f) {
++				answer_command(cmd, vehicle_command_ack_s::VEHICLE_CMD_RESULT_DENIED);
++				return true;
++			}
++
++#if defined(CONFIG_MODULES_EKF2)
++			// Repeat ACKs, never repeat the stop/start for a duplicate request.
++			if (_ekf_restart_seen && cmd.source_system == _ekf_restart_command.source_system
++			    && cmd.source_component == _ekf_restart_command.source_component
++			    && static_cast<uint32_t>(cmd.param2) == static_cast<uint32_t>(_ekf_restart_command.param2)) {
++				if (!_ekf_restart_pending) {
++					answer_command(cmd, _ekf_restart_result);
++				}
++				return true;
++			}
++
++			// Multi-EKF cannot allocate new instances while armed.
++			if (isArmed() || _worker_thread.isBusy() || _vehicle_status.calibration_enabled) {
++				answer_command(cmd, vehicle_command_ack_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED);
++				return true;
++			}
++			_ekf_restart_command = cmd;
++			_ekf_restart_seen = true;
++			_ekf_restart_pending = true;
++			// Existing Commander::arm() guard also prevents arming during restart.
++			_vehicle_status.calibration_enabled = true;
++			_worker_thread.startTask(WorkerThread::Request::EkfRestart);
++			// Send a final ACK after the worker completes, not an early success.
++#else
++			answer_command(cmd, vehicle_command_ack_s::VEHICLE_CMD_RESULT_UNSUPPORTED);
++#endif
++			return true;
++		}
++
+ 	case vehicle_command_s::VEHICLE_CMD_DO_REPOSITION: {
+ 
+ 			// Just switch the flight mode here, the navigator takes care of
+@@ -2229,6 +2266,12 @@
+ 	// check if the worker has finished
+ 	if (_worker_thread.hasResult()) {
+ 		int ret = _worker_thread.getResultAndReset();
++		if (_ekf_restart_pending) {
++			_ekf_restart_pending = false;
++			_ekf_restart_result = ret == 0 ? vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED
++					     : vehicle_command_ack_s::VEHICLE_CMD_RESULT_FAILED;
++			answer_command(_ekf_restart_command, _ekf_restart_result);
++		}
+ 		_actuator_armed.in_esc_calibration_mode = false;
+ 
+ 		if (_vehicle_status.calibration_enabled) { // did we do a calibration?
+@@ -2643,6 +2686,10 @@
+ 	vehicle_command_ack_s command_ack{};
+ 	command_ack.command = cmd.command;
+ 	command_ack.result = result;
++	if (cmd.command == many_controller::kEkfRestartCommand && PX4_ISFINITE(cmd.param2)
++	    && cmd.param2 >= 1.f && cmd.param2 <= 16777215.f) {
++		command_ack.result_param2 = static_cast<int32_t>(cmd.param2);
++	}
+ 	command_ack.target_system = cmd.source_system;
+ 	command_ack.target_component = cmd.source_component;
+ 	command_ack.timestamp = hrt_absolute_time();
+diff --git a/src/modules/commander/Commander.hpp b/src/modules/commander/Commander.hpp
+--- a/src/modules/commander/Commander.hpp
++++ b/src/modules/commander/Commander.hpp
+@@ -225,6 +225,10 @@
+ 	MulticopterThrowLaunch  _multicopter_throw_launch{this};
+ 	Safety			_safety{};
+ 	WorkerThread 		_worker_thread{};
++	vehicle_command_s _ekf_restart_command{};
++	bool _ekf_restart_seen{false};
++	bool _ekf_restart_pending{false};
++	uint8_t _ekf_restart_result{vehicle_command_ack_s::VEHICLE_CMD_RESULT_FAILED};
+ 	ModeManagement  	_mode_management{
+ #ifndef CONSTRAINED_FLASH
+ 		_health_and_arming_checks.externalChecks()
+diff --git a/src/modules/commander/worker_thread.hpp b/src/modules/commander/worker_thread.hpp
+--- a/src/modules/commander/worker_thread.hpp
++++ b/src/modules/commander/worker_thread.hpp
+@@ -49,6 +49,7 @@
+ {
+ public:
+ 	enum class Request {
++		EkfRestart,
+ 		GyroCalibration,
+ 		MagCalibration,
+ 		RCTrimCalibration,
+diff --git a/src/modules/commander/worker_thread.cpp b/src/modules/commander/worker_thread.cpp
+--- a/src/modules/commander/worker_thread.cpp
++++ b/src/modules/commander/worker_thread.cpp
+@@ -46,6 +46,12 @@
+ #include <px4_platform_common/log.h>
+ #include <px4_platform_common/shutdown.h>
+ #include <parameters/param.h>
++#include <uORB/Subscription.hpp>
++#include <uORB/topics/vehicle_status.h>
++
++#if defined(CONFIG_MODULES_EKF2)
++extern "C" int ekf2_main(int argc, char *argv[]);
++#endif
+ 
+ 
+ using namespace time_literals;
+@@ -107,6 +113,33 @@
+ 	px4_prctl(PR_SET_NAME, "commander_low_prio", px4_getpid());
+ 
+ 	switch (_request) {
++	case Request::EkfRestart: {
++#if defined(CONFIG_MODULES_EKF2)
++			uORB::SubscriptionData<vehicle_status_s> status{ORB_ID(vehicle_status)};
++			if (status.get().arming_state != vehicle_status_s::ARMING_STATE_DISARMED) {
++				_ret_value = PX4_ERROR;
++				break;
++			}
++			char module[] = "ekf2";
++			char stop[] = "stop";
++			char start[] = "start";
++			char *stop_argv[] = {module, stop, nullptr};
++			char *start_argv[] = {module, start, nullptr};
++			const int stop_result = ekf2_main(2, stop_argv);
++			// Always attempt start, even if stop reported an error.
++			const int start_result = ekf2_main(2, start_argv);
++			_ret_value = stop_result != PX4_OK ? stop_result : start_result;
++			if (_ret_value == PX4_OK) {
++				PX4_INFO("EKF2 restarted by AUX5 DDS command");
++			} else {
++				PX4_ERR("EKF2 restart failed: stop=%d start=%d", stop_result, start_result);
++			}
++#else
++			_ret_value = PX4_ERROR;
++#endif
++			break;
++		}
++
+ 	case Request::GyroCalibration:
+ 		_ret_value = do_gyro_calibration(&_mavlink_log_pub);
+ 		break;
+diff --git a/src/modules/commander/ekf_restart.h b/src/modules/commander/ekf_restart.h
+new file mode 100644
+--- /dev/null
++++ b/src/modules/commander/ekf_restart.h
+@@ -0,0 +1,11 @@
++#pragma once
++
++#include <cstdint>
++
++namespace many_controller {
++// Project-private 32-bit DDS command, not MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN.
++// param1: ASCII "EKF" key; param2: integer sequence 1..16777215.
++// The final ACK echoes param2 in result_param2. No estimator change while armed.
++static constexpr uint32_t kEkfRestartCommand = 100010;
++static constexpr float kEkfRestartKey = 4541254.0F;
++}

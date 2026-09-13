@@ -152,7 +152,11 @@ void RC_Data_t::feed(const px4_msgs::msg::ManualControlSetpoint::UniquePtr msg)
     aux2_changed = aux2 != aux2_last_;
     aux3_changed = aux3 != aux3_last_;
     aux4_changed = aux4 != aux4_last_;
-    aux5_changed = aux5 != aux5_last_;
+    aux5_changed = aux5_initialized_ && aux5 != aux5_last_;
+    if (std::isfinite(msg->aux5)) {
+        if (aux5_changed) ++aux5_change_count;
+        aux5_initialized_ = true;
+    }
     aux6_changed = aux6 != aux6_last_;
     aux1_last_ = aux1;
     aux2_last_ = aux2;

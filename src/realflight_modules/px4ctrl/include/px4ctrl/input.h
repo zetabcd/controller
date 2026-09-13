@@ -72,6 +72,8 @@ public:
     bool aux4_changed;
     bool aux5_changed;
     bool aux6_changed;
+    // Monotonic count preserves multiple AUX5 edges received in one spin_some().
+    uint64_t aux5_change_count{0};
 
     bool aux2_has_downed;
 
@@ -85,6 +87,7 @@ public:
 
 private:
     PX4ControlNode& px4controlnode_;
+    bool aux5_initialized_{false};
 
 };
 
