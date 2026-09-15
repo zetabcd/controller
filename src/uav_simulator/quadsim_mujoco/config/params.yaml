@@ -1,5 +1,7 @@
 quadsim_node:
   ros__parameters:
+    # Relative to the project root; absolute paths are also accepted.
+    log_directory: datalog/quadsimlog
     # sun: 仿真频率同时决定 MuJoCo 固定步长、风场采样间隔和电机模型更新频率。
     sim_freq_max : 400.0 # 600
 

@@ -1,7 +1,7 @@
 flight_data_recorder:
   ros__parameters:
-    # Empty: $ROS_HOME/flight_logs, or ~/.ros/flight_logs.
-    output_directory: ''
+    # Relative to the project root, independent of the launch directory.
+    output_directory: datalog/flightlog
     # false: arm/disarm controls recording; true: start immediately, finish on exit.
     # Change before launching the recorder (applies to record.launch.py and run_ctrl.launch.py).
     simulation_mode: true

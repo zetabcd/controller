@@ -4,8 +4,8 @@ omtraj_visualizer:
 
     output:
       save_trajectory: true
-      # 默认按此路径保存；命令行 trajectory_file:=/absolute/path/file.csv 可覆盖。
-      trajectory_file: /home/sun/many_controllerV3/src/realflight_modules/px4ctrl/config/omtraj_optimized.csv
+      # 相对于工程根目录；px4ctrl 的 trajectory.omtraj.file 应使用同一路径。
+      trajectory_file: datalog/omtraj/omtraj_optimized.csv
 
     # Ordered intermediate waypoints. Each point is one [x, y, z] vector.
     # To add/remove points, update waypoint_count and point_0 ... point_(count-1).

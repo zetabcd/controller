@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyze and visualize a CSV produced by flight_data_recorder_node."""
+"""Analyze archived CSV logs from the retired px4ctrl recorder."""
 
 import argparse
 import csv
@@ -578,7 +578,7 @@ def main() -> int:
         description="全面评估飞行轨迹、姿态、角速度和控制器输出"
     )
     parser.add_argument(
-        "csv", type=Path, help="flight_data_recorder_node生成的CSV"
+        "csv", type=Path, help="旧版 px4ctrl CSV 记录器生成的历史日志"
     )
     parser.add_argument(
         "--state", default="3",

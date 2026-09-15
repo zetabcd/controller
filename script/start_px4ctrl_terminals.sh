@@ -3,7 +3,8 @@
 set +e
 set +u
 
-SETUP_FILE="/home/manifold/sun_space/ManyControllerV2/install/setup.bash"
+CONTROLLER_PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+SETUP_FILE="$CONTROLLER_PROJECT_ROOT/install/setup.bash"
 
 usage() {
   cat <<'USAGE'
@@ -15,7 +16,7 @@ Opens one gnome-terminal window with two tabs:
   2. ros2 launch px4ctrl realflight_trajectory_visualizer.launch.py
 
 Each tab sources:
-  /home/manifold/sun_space/ManyControllerV2/install/setup.bash
+  <project root>/install/setup.bash
 USAGE
 }
 

@@ -9,6 +9,7 @@ from rclpy.duration import Duration
 import math
 import mujoco.viewer # version = 3.2.3
 from ament_index_python.packages import get_package_share_directory
+from uav_utils.project_paths import project_path
 import os
 import csv
 import glfw
@@ -29,7 +30,7 @@ from .quad import PX4CtrlDebug_t
 # sun: 再把 MuJoCo 真值包装成 PX4 传感器消息，并同步完成显示和 CSV 记录。
 
 # 日志配置
-LOG_FOLDER = "/home/sun/.ros/sim_log"
+LOG_FOLDER = "datalog/quadsimlog"
 FILE_PREFIX = "log_data"  # 日志文件前缀
 FILE_SUFFIX = ".csv"       # 日志文件后缀
 # 可视化颜色配置（RGBA格式，范围0-1）
@@ -337,6 +338,9 @@ class QuadSimNode(Node):
             
     def __init__(self, name):
         super().__init__(name)                                    # ROS2节点父类初始化
+        self.log_directory = project_path(
+            self.declare_parameter('log_directory', LOG_FOLDER).value or LOG_FOLDER,
+            get_package_share_directory('quadsim_mujoco'))
         
         # sun: 先与顶层控制节点双向握手，再创建参数和数据通道，避免控制器使用未配置的模型。
         node1_name = "px4ctrl_node"; # px4ctrl_node
@@ -750,10 +754,10 @@ def main(args=None):
         traj_current_idx = arrow_num
 
         # 确保日志目录存在，避免首次运行时打开文件失败。
-        os.makedirs(LOG_FOLDER, exist_ok=True)
+        node.log_directory.mkdir(parents=True, exist_ok=True)
 
         # 2. 拼接新日志文件的完整路径
-        log_filename = os.path.join(LOG_FOLDER, f"{FILE_PREFIX}{FILE_SUFFIX}")
+        log_filename = node.log_directory / f"{FILE_PREFIX}{FILE_SUFFIX}"
         print("LOG已保存:",log_filename,flush=True)
         # 2. 打开文件（w+模式：覆盖+读写，避免重复打开关闭）
         with open(log_filename, 'w+', newline='', encoding='utf-8') as log_file:

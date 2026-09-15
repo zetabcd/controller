@@ -2,6 +2,7 @@
 #include <px4ctrl/ommpc.h>
 #include <px4ctrl/ekf_restart.h>
 #include <uav_utils/other_utils.h>
+#include <uav_utils/project_paths.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <algorithm>
@@ -414,12 +415,12 @@ int main(int argc, char *argv[])
 	node->config_from_ros_handle();
 	node->param_init = node->param;
 #if PX4CTRL_CMD_TRAJECTORY == 4
-	if (node->get_parameter("trajectory.omtraj.file").as_string().empty()) {
-		node->set_parameter(rclcpp::Parameter(
-			"trajectory.omtraj.file",
-			ament_index_cpp::get_package_share_directory("px4ctrl") +
-			"/config/omtraj_optimized.csv"));
-	}
+	const auto trajectory_file = node->get_parameter("trajectory.omtraj.file").as_string();
+	node->set_parameter(rclcpp::Parameter(
+		"trajectory.omtraj.file",
+		uav_utils::projectPath(
+			trajectory_file.empty() ? "datalog/omtraj/omtraj_optimized.csv" : trajectory_file,
+			ament_index_cpp::get_package_share_directory("px4ctrl")).string()));
 #endif
 
 	// ---------------------------------------------------------------------

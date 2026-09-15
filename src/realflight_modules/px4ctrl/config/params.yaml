@@ -39,9 +39,9 @@ px4ctrl_node:
         acceleration_tracking_weight: 10.0
         jerk_tracking_weight: 0.1
       # 选择 PX4CTRL_CMD_TRAJECTORY=4 时只读取离线优化保存的 CSV。
-      # 留空会自动读取当前 px4ctrl 包的 config/omtraj_optimized.csv。
+      # 相对于工程根目录，与 omtraj.yaml 中的输出路径一致。
       omtraj:
-        file: ""
+        file: datalog/omtraj/omtraj_optimized.csv
 
     # 在线线性 MPC 参数；权重顺序为 p(3)、v(3)、姿态误差(3) 和推力/角速度(4)。
     mpc:

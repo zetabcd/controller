@@ -15,6 +15,7 @@
   <depend>px4_msgs</depend>
   <depend>std_srvs</depend>
   <depend>uav_utils</depend>
+  <exec_depend>ament_index_python</exec_depend>
   <depend>stservo_msgs</depend>
   <depend>px4debug_msgs</depend>
 

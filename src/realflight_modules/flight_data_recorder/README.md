@@ -1,6 +1,6 @@
 # ROS 2 飞行数值 ULog 记录节点
 
-`flight_data_recorder` 按话题消息逐条记录基本类型字段和短定长数组，生成标准 ULog v1 `.ulg` 文件，可通过 PlotJuggler 的 **ULog** 文件加载插件读取。代码默认解锁后记录；当前 YAML 开启了仿真启动即记录。没有 50 Hz 定时抽样、最新值拼接或坐标变换。`run_ctrl.launch.py` 已使用这个节点替换原 CSV 记录节点；原 CSV 程序保留在 `px4ctrl` 包中。
+`flight_data_recorder` 按话题消息逐条记录基本类型字段和短定长数组，生成标准 ULog v1 `.ulg` 文件，可通过 PlotJuggler 的 **ULog** 文件加载插件读取。代码默认解锁后记录；当前 YAML 开启了仿真启动即记录。没有 50 Hz 定时抽样、最新值拼接或坐标变换。`run_ctrl.launch.py` 使用这个节点；旧版 CSV 记录节点及其构建目标已删除。
 
 ## 已取消的记录内容
 
@@ -10,7 +10,7 @@
 
 普通数值、布尔值、源时间戳、128个元素以内的基本类型定长数组继续记录；直接嵌套的消息仍在主数据集中用 `__` 展开其数值字段。例如位置、姿态四元数、角速度和电机 `control[12]` 均保留。图像像素、点云字节、字符串和变长数组的内容不再保存。只有被省略字段的话题仍保留接收时间和序号。
 
-每个主数据集的元信息 `omitted_fields` 说明省略的字段路径和原因，不保存这些字段的值。日志内 `recorder_schema_version` 为2，ULog文件格式仍为v1。旧 `.ulg` 不会随代码更新而变化；`docs/` 中2026-09-14的核查文件描述的是旧版日志。
+每个主数据集的元信息 `omitted_fields` 说明省略的字段路径和原因，不保存这些字段的值。日志内 `recorder_schema_version` 为2，ULog文件格式仍为v1。旧 `.ulg` 不会随代码更新而变化。已有核查数据移至工程根目录的 `datalog/flightlog/audit/`，由 Git 忽略；其中2026-09-14的核查文件描述的是旧版日志。
 
 ## 编译与运行
 
@@ -19,7 +19,7 @@
 ```bash
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-colcon build --packages-select flight_data_recorder px4ctrl --symlink-install
+colcon build --packages-select uav_utils flight_data_recorder px4ctrl --symlink-install
 source install/setup.bash
 ros2 launch flight_data_recorder record.launch.py
 ```
@@ -28,7 +28,7 @@ ros2 launch flight_data_recorder record.launch.py
 
 ```bash
 # 单独记录已有 ROS 系统；自定义保存路径
-ros2 launch flight_data_recorder record.launch.py log_directory:=/tmp/flight_logs
+ros2 launch flight_data_recorder record.launch.py log_directory:=datalog/flightlog/experiment_01
 
 # 外环、角速度环与 ULog 记录一起启动
 ros2 launch px4ctrl run_ctrl.launch.py
@@ -40,7 +40,9 @@ ros2 launch px4ctrl run_ctrl.launch.py record_data:=false
 ros2 launch flight_data_recorder record.launch.py status_topic:=/fmu/out/vehicle_status
 ```
 
-默认保存到 `$ROS_HOME/flight_logs`，未设置 `ROS_HOME` 时为 `~/.ros/flight_logs`。不要同时启动多个记录节点，除非确实需要多份记录。`px4_native_position.launch.py` 等其他入口可配合独立的 `record.launch.py` 使用。
+默认保存到工程根目录下的 `datalog/flightlog/`。`output_directory` 和启动参数 `log_directory` 的相对路径均相对于工程根目录解析，支持显式绝对路径。路径通过本包的安装目录向上定位包含 `src/realflight_modules/px4ctrl/package.xml` 的工程根目录，因此从任意终端目录启动均使用同一个保存位置。正常安装和 `--symlink-install` 都支持；整个工程移到其他位置后重新构建并加载新的 `install/setup.bash`。若安装目录完全位于工程外，请显式提供绝对路径。
+
+`log_directory` 留空时保留 YAML 的 `output_directory`，不再用空值覆盖配置。目录自动创建，日志、临时数据及核查结果统一位于被 Git 忽略的 `datalog/` 中。完整路径约定见工程根目录的 [数据目录说明](../../../docs/data_paths.md)。不要同时启动多个记录节点，除非确实需要多份记录。`px4_native_position.launch.py` 等其他入口可配合独立的 `record.launch.py` 使用。
 
 ## 记录边界
 

@@ -17,9 +17,11 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 
-# uav_utils 目前只包含头文件，使用 INTERFACE 库向下游传递依赖和头文件路径。
+# C++ utilities remain header-only; Python nodes share project-path resolution.
+ament_python_install_package(${PROJECT_NAME})
 add_library(uav_utils INTERFACE)
 
 # 用于代替传统的target_link_libraries
@@ -54,5 +56,15 @@ install(
         EXPORT uav_utils
         INCLUDES DESTINATION include
 )
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(project_paths_python test/test_project_paths.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+  add_executable(project_paths_test test/project_paths_test.cpp)
+  target_compile_features(project_paths_test PRIVATE cxx_std_17)
+  target_include_directories(project_paths_test PRIVATE include)
+  add_test(NAME project_paths_cpp COMMAND project_paths_test)
+endif()
 
 ament_package()

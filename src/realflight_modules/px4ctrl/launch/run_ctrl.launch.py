@@ -3,7 +3,8 @@
 from ament_index_python.packages import get_package_share_directory
 import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -24,7 +25,7 @@ def generate_launch_description():
             description='Start the ROS numeric flight-data ULog recorder'),
         DeclareLaunchArgument(
             'log_directory', default_value='',
-            description='ULog directory; empty uses ~/.ros/flight_logs'),
+            description='Project-relative or absolute ULog directory; empty keeps recorder.yaml'),
         Node(
             package='px4ctrl',
             executable='px4ctrl_node',
@@ -38,15 +39,10 @@ def generate_launch_description():
             name='px4ctrlrate_node',
             output='screen'
         ),
-        Node(
-            package='flight_data_recorder',
-            executable='flight_data_recorder_node',
-            name='flight_data_recorder',
-            parameters=[os.path.join(
-                get_package_share_directory('flight_data_recorder'), 'config', 'recorder.yaml'), {
-                'output_directory': LaunchConfiguration('log_directory'),
-            }],
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(
+                get_package_share_directory('flight_data_recorder'), 'launch', 'record.launch.py')),
+            launch_arguments={'log_directory': LaunchConfiguration('log_directory')}.items(),
             condition=IfCondition(LaunchConfiguration('record_data')),
-            output='screen'
         ),
    ])

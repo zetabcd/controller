@@ -3,12 +3,11 @@
 import hashlib
 import json
 import math
-import os
-from pathlib import Path
 import queue
 import time
 
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from rclpy.clock import Clock, ClockType
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -17,6 +16,7 @@ from rclpy.qos_event import SubscriptionEventCallbacks, UnsupportedEventTypeErro
 from rclpy.serialization import deserialize_message
 from rcl_interfaces.msg import ParameterDescriptor
 from rosidl_runtime_py.utilities import get_message
+from uav_utils.project_paths import project_path
 
 from .capture import Capture
 from .codec import RosCodec
@@ -48,9 +48,9 @@ CORE_TOPICS = {
 class FlightDataRecorder(Node):
     def __init__(self):
         super().__init__('flight_data_recorder')
-        default_directory = Path(os.environ.get('ROS_HOME', str(Path.home() / '.ros'))) / 'flight_logs'
-        output = self.declare_parameter('output_directory', '').value
-        self.output_directory = Path(output or default_directory).expanduser()
+        output = self.declare_parameter('output_directory', 'datalog/flightlog').value
+        self.output_directory = project_path(
+            output or 'datalog/flightlog', get_package_share_directory('flight_data_recorder'))
         self.simulation_mode = self.declare_parameter(
             'simulation_mode', False, ParameterDescriptor(
                 read_only=True,

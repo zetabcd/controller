@@ -7,7 +7,11 @@
 /831/
 /0913/
 
+# Local documentation
+/docs/
+
 # Runtime and simulation output
+/datalog/
 /sim_log/
 /MUJOCO_LOG.TXT
 /script/*.csv

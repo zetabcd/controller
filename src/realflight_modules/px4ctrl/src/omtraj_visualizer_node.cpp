@@ -1,4 +1,6 @@
 #include <px4ctrl/omtraj.h>
+#include <uav_utils/project_paths.h>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <geometry_msgs/msg/point.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -65,7 +67,12 @@ public:
       0.005, declare_parameter<double>("visualization.trajectory_width", 0.055));
     save_trajectory_ = declare_parameter<bool>("output.save_trajectory", true);
     trajectory_output_file_ = declare_parameter<std::string>(
-      "output.trajectory_file", "omtraj_optimized.csv");
+      "output.trajectory_file", "datalog/omtraj/omtraj_optimized.csv");
+    if (save_trajectory_) {
+      trajectory_output_file_ = uav_utils::projectPath(
+        trajectory_output_file_.empty() ? "datalog/omtraj/omtraj_optimized.csv" : trajectory_output_file_,
+        ament_index_cpp::get_package_share_directory("px4ctrl")).string();
+    }
 
     const int waypoint_count = std::max(
       0, static_cast<int>(declare_parameter<int>("waypoint_count", 3)));

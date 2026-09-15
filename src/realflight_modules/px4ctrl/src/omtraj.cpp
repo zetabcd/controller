@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <filesystem>
 #include <iomanip>
 #include <limits>
 #include <numeric>
@@ -1381,6 +1382,14 @@ bool saveOmTrajectoryCsv(
     return fail("trajectory is unsuccessful/empty or output path is empty");
   }
 
+  const auto parent = std::filesystem::path(file_path).parent_path();
+  if (!parent.empty()) {
+    std::error_code error_code;
+    std::filesystem::create_directories(parent, error_code);
+    if (error_code) {
+      return fail("cannot create trajectory directory: " + error_code.message());
+    }
+  }
   const std::string temporary_path = file_path + ".tmp";
   std::ofstream stream(temporary_path, std::ios::out | std::ios::trunc);
   if (!stream.is_open()) {

@@ -150,6 +150,8 @@ add_executable(omtraj_visualizer_node
 )
 ament_target_dependencies(omtraj_visualizer_node
   rclcpp
+  ament_index_cpp
+  uav_utils
   geometry_msgs
   visualization_msgs
 )
@@ -169,13 +171,6 @@ ament_target_dependencies(realflight_trajectory_visualizer_node
   px4_msgs
   px4debug_msgs
 )
-
-# 独立记录进程用固定频率汇总控制器与PX4最新快照，并由后台线程落盘，
-# 避免任何磁盘抖动进入飞控实时控制线程。
-add_executable(flight_data_recorder_node
-  src/flight_data_recorder_node.cpp)
-ament_target_dependencies(flight_data_recorder_node
-  rclcpp px4_msgs px4debug_msgs ratectrl_msgs)
 
 # sun: 底层目标依赖 SuiteSparse/UMFPACK，为滑动窗口 TV 正则微分求解稀疏线性系统。
 add_executable(px4ctrlrate_node 
@@ -212,7 +207,6 @@ install(TARGETS px4ctrl_node DESTINATION lib/${PROJECT_NAME})
 install(TARGETS px4ctrlrate_node DESTINATION lib/${PROJECT_NAME})
 install(TARGETS omtraj_visualizer_node DESTINATION lib/${PROJECT_NAME})
 install(TARGETS realflight_trajectory_visualizer_node DESTINATION lib/${PROJECT_NAME})
-install(TARGETS flight_data_recorder_node DESTINATION lib/${PROJECT_NAME})
 install(TARGETS px4_native_position_node DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS ../../../script/analyze_flight_log.py DESTINATION lib/${PROJECT_NAME})
 # Install header files
