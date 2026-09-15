@@ -21,10 +21,10 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'record_data', default_value='true',
-            description='Start the asynchronous CSV flight-data recorder'),
+            description='Start the ROS numeric flight-data ULog recorder'),
         DeclareLaunchArgument(
             'log_directory', default_value='',
-            description='CSV directory; empty uses ~/.ros/flight_logs'),
+            description='ULog directory; empty uses ~/.ros/flight_logs'),
         Node(
             package='px4ctrl',
             executable='px4ctrl_node',
@@ -39,14 +39,12 @@ def generate_launch_description():
             output='screen'
         ),
         Node(
-            package='px4ctrl',
+            package='flight_data_recorder',
             executable='flight_data_recorder_node',
             name='flight_data_recorder',
-            parameters=[{
+            parameters=[os.path.join(
+                get_package_share_directory('flight_data_recorder'), 'config', 'recorder.yaml'), {
                 'output_directory': LaunchConfiguration('log_directory'),
-                'record_rate_hz': 50.0,
-                'flush_interval_rows': 50,
-                'record_only_when_ready': True,
             }],
             condition=IfCondition(LaunchConfiguration('record_data')),
             output='screen'

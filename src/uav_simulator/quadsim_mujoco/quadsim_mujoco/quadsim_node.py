@@ -29,7 +29,7 @@ from .quad import PX4CtrlDebug_t
 # sun: 再把 MuJoCo 真值包装成 PX4 传感器消息，并同步完成显示和 CSV 记录。
 
 # 日志配置
-LOG_FOLDER = "/home/sun/ros2_controller/music-drone-225/sim_log"
+LOG_FOLDER = "/home/sun/.ros/sim_log"
 FILE_PREFIX = "log_data"  # 日志文件前缀
 FILE_SUFFIX = ".csv"       # 日志文件后缀
 # 可视化颜色配置（RGBA格式，范围0-1）

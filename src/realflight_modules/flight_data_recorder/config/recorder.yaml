@@ -1,0 +1,25 @@
+flight_data_recorder:
+  ros__parameters:
+    # Empty: $ROS_HOME/flight_logs, or ~/.ros/flight_logs.
+    output_directory: ''
+    # false: arm/disarm controls recording; true: start immediately, finish on exit.
+    # Change before launching the recorder (applies to record.launch.py and run_ctrl.launch.py).
+    simulation_mode: true
+    status_topic: /fmu/out/vehicle_status_v1
+    auto_discover: true
+    discovery_interval_s: 0.5
+    subscription_depth: 4096
+    max_queue_bytes: 67108864
+    sync_interval_s: 1.0
+    excluded_topics:
+      - /joyStick
+      - /realflight/trajectory_markers
+      - /omtraj/markers
+      - /minco/markers
+      - /minco/trajectory
+      - /tf
+      - /tf_static
+      - /clock
+      - /rosout
+      - /parameter_events
+      - /fmu/out/vehicle_attitude
