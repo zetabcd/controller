@@ -11,11 +11,26 @@
 // 它会让“第一帧传感器是否早于一次性挡位边沿到达”影响仿真启动结果。
 #define USE_WITHOUT_RC
 
+// IMU 数据源统一开关，外环和角速度内环共用；修改后重新编译 px4ctrl。
+// 0：保留原 /fmu/out/sensor_combined 实现（当前 quadsim 也使用此话题）。
+// 1：使用 PX4 已滤波的 vehicle_angular_velocity + vehicle_acceleration。
+// 只切换输入源；角加速度仍由现有 TVR 计算，控制器原有滤波逻辑保持不变。
+#ifndef PX4CTRL_USE_FILTERED_IMU
+#define PX4CTRL_USE_FILTERED_IMU 0
+#endif
+#if PX4CTRL_USE_FILTERED_IMU != 0 && PX4CTRL_USE_FILTERED_IMU != 1
+#error "PX4CTRL_USE_FILTERED_IMU must be 0 or 1"
+#endif
+
 #define SAT_1(x) (std::min(std::max(x, -1.0), 1.0)) //饱和函数
 
 #include <px4_msgs/msg/manual_control_setpoint.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <px4_msgs/msg/sensor_combined.hpp>
+#if PX4CTRL_USE_FILTERED_IMU
+#include <px4_msgs/msg/vehicle_angular_velocity.hpp>
+#include <px4_msgs/msg/vehicle_acceleration.hpp>
+#endif
 #include <px4_msgs/msg/vehicle_attitude.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/battery_status.hpp>
@@ -121,9 +136,22 @@ public:
     rclcpp::Time rcv_stamp;
 
     Sensor_Data_t(PX4ControlNode& px4controlnode);
+#if PX4CTRL_USE_FILTERED_IMU
+    void feed_angular_velocity(const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg);
+    void feed_acceleration(const px4_msgs::msg::VehicleAcceleration::UniquePtr msg);
+    bool filtered_imu_is_received(const rclcpp::Time &now) const;
+#else
     void feed(const px4_msgs::msg::SensorCombined::UniquePtr msg);
+#endif
 private:
     PX4ControlNode& px4controlnode_;
+#if PX4CTRL_USE_FILTERED_IMU
+    // 两个话题独立更新；一方持续到达不能掩盖另一方未收到或超时。
+    rclcpp::Time gyro_rcv_stamp_;
+    rclcpp::Time accel_rcv_stamp_;
+    bool gyro_received_{false};
+    bool accel_received_{false};
+#endif
 };
 
 class Attitude_Data_t

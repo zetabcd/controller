@@ -66,10 +66,19 @@ public:
 			});
 		actuator_motors_publisher_ = this->create_publisher<px4_msgs::msg::ActuatorMotors>("/fmu/in/actuator_motors", qos);
 		// 订阅者
+#if PX4CTRL_USE_FILTERED_IMU
+		const auto imu_qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort().durability_volatile();
+		vehicle_angular_velocity_subscription_ = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
+			"/fmu/out/vehicle_angular_velocity", imu_qos,
+			std::bind(&PX4ControlRateNode::AngularVelocityCallback, this, std::placeholders::_1));
+		RCLCPP_INFO(get_logger(), "Rate IMU source: vehicle_angular_velocity (TVR retained)");
+#else
 		sensor_combined_subscription_ = this->create_subscription<px4_msgs::msg::SensorCombined>(//当前角速度
 									"/fmu/out/sensor_combined", 
 									qos,
 									std::bind(&PX4ControlRateNode::SensorDataCallback, this, std::placeholders::_1));		
+		RCLCPP_INFO(get_logger(), "Rate IMU source: sensor_combined");
+#endif
 		vehicle_local_position_subscription_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>(//当前惯性系速度
 								   "/fmu/out/vehicle_local_position", 
 								   qos,
@@ -208,6 +217,15 @@ public:
 		// std::cout << "is_take_off_:" << is_take_off_ << std::endl;
 	}
 
+#if PX4CTRL_USE_FILTERED_IMU
+	void AngularVelocityCallback(const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg)
+	{
+		state_data_.sens_w << msg->xyz[0], -msg->xyz[1], -msg->xyz[2]; // FRD -> FLU
+		input_stamps_[0].update(msg->timestamp, steadySeconds(), state_data_.sens_w.allFinite());
+		// 只换角速度来源，xyz_derivative 不替代 TVR。
+		// 此消息无 gyro_integral_dt/clipping/calibration_count；相关诊断保留0，表示未提供。
+	}
+#else
 	void SensorDataCallback(const px4_msgs::msg::SensorCombined::UniquePtr msg)
 	{
 		// uint64_t timestamp;
@@ -219,6 +237,7 @@ public:
 		gyro_clipping_ = msg->gyro_clipping;
 		gyro_calibration_count_ = msg->gyro_calibration_count;
 	}
+#endif
 
 	void LocalPoseDataCallback(const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg)
 	{
@@ -673,7 +692,11 @@ private:
     rclcpp::Publisher<px4debug_msgs::msg::Px4ratectrlDebug>::SharedPtr px4ratectrldebug_publisher_;
 	rclcpp::Publisher<px4_msgs::msg::ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	// 订阅者
+#if PX4CTRL_USE_FILTERED_IMU
+	rclcpp::Subscription<px4_msgs::msg::VehicleAngularVelocity>::SharedPtr vehicle_angular_velocity_subscription_;
+#else
 	rclcpp::Subscription<px4_msgs::msg::SensorCombined>::SharedPtr sensor_combined_subscription_;
+#endif
     rclcpp::Subscription<ratectrl_msgs::msg::RatesThrustSetpoint>::SharedPtr rates_thrust_setpoint_subscription_;
 	rclcpp::Subscription<px4debug_msgs::msg::Px4ctrlDebug>::SharedPtr px4ctrldebug_subscription_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr vehicle_local_position_subscription_;
