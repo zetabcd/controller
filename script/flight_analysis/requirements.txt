@@ -1,0 +1,7 @@
+numpy>=1.21
+scipy>=1.8
+matplotlib>=3.5
+Pillow>=9.0
+pyulog>=1.1
+PyYAML>=6.0
+fonttools>=4.0

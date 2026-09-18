@@ -208,7 +208,6 @@ install(TARGETS px4ctrlrate_node DESTINATION lib/${PROJECT_NAME})
 install(TARGETS omtraj_visualizer_node DESTINATION lib/${PROJECT_NAME})
 install(TARGETS realflight_trajectory_visualizer_node DESTINATION lib/${PROJECT_NAME})
 install(TARGETS px4_native_position_node DESTINATION lib/${PROJECT_NAME})
-install(PROGRAMS ../../../script/analyze_flight_log.py DESTINATION lib/${PROJECT_NAME})
 # Install header files
 install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION include/${PROJECT_NAME})
 # Install launch and config
