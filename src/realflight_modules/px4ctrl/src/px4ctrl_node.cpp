@@ -654,7 +654,9 @@ int main(int argc, char *argv[])
 		const bool reboot_allowed = node->fsm.rc_is_received(node->now()) &&
 			node->fsm.sta_data.timestamp != 0 && status_age >= 0.0 && status_age < 1.0 &&
 			node->fsm.sta_data.arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_DISARMED;
-		fcu_reboot.update(aux5_count - last_aux5_change_count, reboot_allowed);
+		// Reuse existing DDS inputs to confirm actual post-reboot data recovery.
+		fcu_reboot.update(aux5_count - last_aux5_change_count, reboot_allowed,
+			node->fsm.sta_data.timestamp, node->fsm.att_data.timestamp);
 		last_aux5_change_count = aux5_count; // Consume changes even while armed.
 		//判断是否解锁和紧急开关，
 		static bool flag_armed = false;
