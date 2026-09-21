@@ -132,8 +132,6 @@ class FlightDataRecorder(Node):
             def callback(raw):
                 self._receive(codec, raw)
             events = SubscriptionEventCallbacks(
-                message_lost=lambda event, t=topic: self._problem(
-                    f'DDS reported loss on {t}: +{event.total_count_change}, total={event.total_count}'),
                 incompatible_qos=lambda event, t=topic: self._problem(
                     f'Incompatible QoS on {t}: policy={event.last_policy_kind}'))
             try:
