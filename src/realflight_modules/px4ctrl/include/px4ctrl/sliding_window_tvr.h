@@ -1,4 +1,6 @@
+#pragma once
 #include <Eigen/Core>
+#include <limits>
 #include <Eigen/Dense>
 #include <vector>
 #include <iostream>
@@ -244,6 +246,14 @@ public:
         int order;
         double weight_scale;
     };
+    struct Diagnostics {
+        uint8_t status{0};
+        bool output_valid{false};
+        size_t samples{0};
+        double mean_dt{std::numeric_limits<double>::quiet_NaN()};
+    };
+    const Diagnostics & diagnostics() const {return diagnostics_;}
+    const swTVR_params_t & parameters() const {return params_;}
     /**
      * 构造函数：初始化滑动窗口TV正则化导数计算器
      * @param window_size 滑动窗口大小
@@ -279,6 +289,8 @@ public:
 
         // 2. 窗口数据不足时返回0
         int cur_n = static_cast<int>(x_window_.size());
+        diagnostics_ = Diagnostics{};
+        diagnostics_.samples = cur_n;
         if (cur_n < params_.window_size) {
             return 0.0;
         }
@@ -291,6 +303,7 @@ public:
 
         // 3. 计算采样步长h（x窗口差分的均值）
         double h = vectorDiff(x_eig).mean();
+        diagnostics_.mean_dt = h;
         if (h < 1e-10) {  // 避免除零
             h = 1e-10;
         }
@@ -326,6 +339,8 @@ public:
             throw std::out_of_range("target_idx超出有效范围");
         }
 
+        diagnostics_.output_valid = diagnostics_.status == 1 && std::isfinite(u(target_idx)) &&
+            std::isfinite(diagnostics_.mean_dt) && diagnostics_.mean_dt > 0;
         return u(target_idx);
 
     }
@@ -334,6 +349,7 @@ public:
     void clear() {
         x_window_.clear();
         y_window_.clear();
+        diagnostics_ = Diagnostics{};
     }
 
     Eigen::VectorXd tv_regularized_derivative_sparse(const Eigen::VectorXd &x, const Eigen::VectorXd &y)
@@ -403,6 +419,7 @@ public:
             info        // 输出：信息
         );
         if (status != UMFPACK_OK) {
+            diagnostics_.status = 2;
             std::cerr << "符号分解失败，错误码：" << status << std::endl;
             umfpack_di_report_info(control, info);
             // 若符号分解失败，Symbolic可能未初始化，无需释放
@@ -423,6 +440,7 @@ public:
             umfpack_di_free_symbolic(&Symbolic); // 仅释放已成功初始化的Symbolic
         }
         if (status != UMFPACK_OK) {
+            diagnostics_.status = 3;
             std::cerr << "数值分解失败，错误码：" << status << std::endl;
             umfpack_di_report_info(control, info);
             return Eigen::VectorXd::Zero(n);
@@ -449,6 +467,7 @@ public:
             // std::cout << "Numeric" << Numeric << std::endl;
             umfpack_di_free_numeric(&Numeric);
         }
+        diagnostics_.status = status == UMFPACK_OK ? 1 : 4;
         if (status != UMFPACK_OK) {
             std::cerr << "求解失败，错误码：" << status << std::endl;
             umfpack_di_report_info(control, info);
@@ -456,6 +475,7 @@ public:
         return Eigen::Map<Eigen::VectorXd>(u.data(), u.size());
     }
 private:
+    Diagnostics diagnostics_;
     swTVR_params_t params_;
     BoundedDeque x_window_;
     BoundedDeque y_window_;

@@ -1284,7 +1284,11 @@ bool PX4CtrlFSM::att_is_received(const rclcpp::Time &now_time)
 
 bool PX4CtrlFSM::sens_is_received(const rclcpp::Time &now_time)
 {
+#if PX4CTRL_USE_FILTERED_IMU
+	return sens_data.filtered_imu_is_received(now_time);
+#else
 	return (now_time - sens_data.rcv_stamp).seconds() < 0.5;
+#endif
 }
 
 bool PX4CtrlFSM::bat_is_received(const rclcpp::Time &now_time)

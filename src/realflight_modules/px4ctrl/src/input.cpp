@@ -205,12 +205,47 @@ void States_Data_t::feed(const px4_msgs::msg::VehicleStatus::UniquePtr msg)
 Sensor_Data_t::Sensor_Data_t(PX4ControlNode& px4controlnode) : px4controlnode_(px4controlnode)
 {
     rcv_stamp = px4controlnode_.get_clock()->now();
+#if PX4CTRL_USE_FILTERED_IMU
+    gyro_rcv_stamp_ = rcv_stamp;
+    accel_rcv_stamp_ = rcv_stamp;
+#endif
     timestamp = 0ull;
     w.setZero();
     a.setZero();
     a_nog.setZero();
 }
 
+#if PX4CTRL_USE_FILTERED_IMU
+void Sensor_Data_t::feed_angular_velocity(const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg)
+{
+    gyro_rcv_stamp_ = px4controlnode_.get_clock()->now();
+    gyro_received_ = true;
+    // 兼容 timestamp 沿用陀螺消息的 timestamp；接收新鲜度分别检查两个话题。
+    timestamp = msg->timestamp;
+    rcv_stamp = std::min(gyro_rcv_stamp_, accel_rcv_stamp_);
+    w << msg->xyz[0], -msg->xyz[1], -msg->xyz[2]; // FRD -> FLU
+}
+
+void Sensor_Data_t::feed_acceleration(const px4_msgs::msg::VehicleAcceleration::UniquePtr msg)
+{
+    accel_rcv_stamp_ = px4controlnode_.get_clock()->now();
+    accel_received_ = true;
+    rcv_stamp = std::min(gyro_rcv_stamp_, accel_rcv_stamp_);
+    // xyz 仍为机体系比力；这里只做 FRD -> FLU，不重复补偿重力。
+    a << msg->xyz[0], -msg->xyz[1], -msg->xyz[2];
+    a_nog = a;
+}
+
+bool Sensor_Data_t::filtered_imu_is_received(const rclcpp::Time &now) const
+{
+    if (!gyro_received_ || !accel_received_ || !w.allFinite() || !a.allFinite()) {
+        return false;
+    }
+    const double gyro_age = (now - gyro_rcv_stamp_).seconds();
+    const double accel_age = (now - accel_rcv_stamp_).seconds();
+    return gyro_age >= 0.0 && gyro_age < 0.5 && accel_age >= 0.0 && accel_age < 0.5;
+}
+#else
 void Sensor_Data_t::feed(const px4_msgs::msg::SensorCombined::UniquePtr msg)
 {
     rcv_stamp = px4controlnode_.get_clock()->now();
@@ -220,6 +255,7 @@ void Sensor_Data_t::feed(const px4_msgs::msg::SensorCombined::UniquePtr msg)
     a << msg->accelerometer_m_s2[0], -msg->accelerometer_m_s2[1], -msg->accelerometer_m_s2[2];
     a_nog = a;
 }
+#endif
 
 Attitude_Data_t::Attitude_Data_t(PX4ControlNode& px4controlnode) : px4controlnode_(px4controlnode)
 {

@@ -37,6 +37,8 @@ def generate_launch_description():
             package='px4ctrl',
             executable='px4ctrlrate_node',
             name='px4ctrlrate_node',
+            parameters=[os.path.join(
+                get_package_share_directory('px4ctrl'), 'config', 'ratectrl_diagnostics.yaml')],
             output='screen'
         ),
         IncludeLaunchDescription(

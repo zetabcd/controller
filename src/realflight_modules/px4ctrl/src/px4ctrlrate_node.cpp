@@ -14,6 +14,7 @@
 #include <px4ctrl/input.h>
 #include <px4ctrl/px4ctrlparam.h>
 #include <px4ctrl/motor_calculate.h>
+#include <px4ctrl/motor_feedback.h>
 #include <px4ctrl/sliding_window_tvr.h>
 
 #include <fms_utils/openfsm.h>
@@ -39,18 +40,45 @@ public:
     : Node(name), sw_tvr_solver_x(swtvr_params), sw_tvr_solver_y(swtvr_params), sw_tvr_solver_z(swtvr_params)
 	{
 		// sun: 构造时仅建立通信和初始化状态；跨节点参数在握手成功后统一拉取。
+		state_timeout_s_ = declare_parameter<double>("diagnostics.state_timeout_s", 0.25);
+		calibration_voltage_ = declare_parameter<double>("diagnostics.calibration_voltage", 16.0);
+		if (!std::isfinite(state_timeout_s_) || state_timeout_s_ <= 0 ||
+			!std::isfinite(calibration_voltage_) || calibration_voltage_ <= 0) {
+			throw std::invalid_argument("diagnostic timeout and calibration voltage must be positive");
+		}
+		feedback_.configure(declare_parameter<double>("diagnostics.esc_timeout_s", 0.25),
+			declare_parameter<std::vector<int64_t>>("diagnostics.esc_slots", std::vector<int64_t>{}),
+			declare_parameter<std::vector<int64_t>>("diagnostics.motor_functions", {101, 102, 103, 104}));
 		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;	// Qos设置表
 		qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT;
 		qos_profile.durability = RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
 		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 1), qos_profile);
 		// 发布者
-		px4ratectrldebug_publisher_ = this->create_publisher<px4debug_msgs::msg::Px4ratectrlDebug>("/debugPx4/ratectrl",1);
+		// Bounded best-effort diagnostics avoid reliable DDS backpressure in the control loop.
+		const auto debug_qos = rclcpp::QoS(100).best_effort();
+		px4ratectrldebug_publisher_ = this->create_publisher<px4debug_msgs::msg::Px4ratectrlDebug>("/debugPx4/ratectrl", debug_qos);
+		motor_feedback_publisher_ = create_publisher<px4debug_msgs::msg::MotorFeedbackDebug>(
+			"/debugPx4/motor_feedback", debug_qos);
+		esc_status_subscription_ = create_subscription<px4_msgs::msg::EscStatus>(
+			declare_parameter<std::string>("diagnostics.esc_topic", "/fmu/out/esc_status"),
+			rclcpp::SensorDataQoS(), [this](px4_msgs::msg::EscStatus::ConstSharedPtr msg) {
+				feedback_.update(*msg, steadySeconds());
+			});
 		actuator_motors_publisher_ = this->create_publisher<px4_msgs::msg::ActuatorMotors>("/fmu/in/actuator_motors", qos);
 		// 订阅者
+#if PX4CTRL_USE_FILTERED_IMU
+		const auto imu_qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort().durability_volatile();
+		vehicle_angular_velocity_subscription_ = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
+			"/fmu/out/vehicle_angular_velocity", imu_qos,
+			std::bind(&PX4ControlRateNode::AngularVelocityCallback, this, std::placeholders::_1));
+		RCLCPP_INFO(get_logger(), "Rate IMU source: vehicle_angular_velocity (TVR retained)");
+#else
 		sensor_combined_subscription_ = this->create_subscription<px4_msgs::msg::SensorCombined>(//当前角速度
 									"/fmu/out/sensor_combined", 
 									qos,
 									std::bind(&PX4ControlRateNode::SensorDataCallback, this, std::placeholders::_1));		
+		RCLCPP_INFO(get_logger(), "Rate IMU source: sensor_combined");
+#endif
 		vehicle_local_position_subscription_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>(//当前惯性系速度
 								   "/fmu/out/vehicle_local_position", 
 								   qos,
@@ -171,6 +199,7 @@ public:
 
 	void PX4ctrlDebugCallback(const px4debug_msgs::msg::Px4ctrlDebug::UniquePtr msg)
 	{
+		input_stamps_[4].update(msg->timestamp, steadySeconds());
 		// sun: 根据顶层 FSM 的状态边沿维护起飞标志，不用单独推断油门或高度。
 		// uint64_t timestamp;
 		// timestamp = msg->timestamp;
@@ -188,24 +217,42 @@ public:
 		// std::cout << "is_take_off_:" << is_take_off_ << std::endl;
 	}
 
+#if PX4CTRL_USE_FILTERED_IMU
+	void AngularVelocityCallback(const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg)
+	{
+		state_data_.sens_w << msg->xyz[0], -msg->xyz[1], -msg->xyz[2]; // FRD -> FLU
+		input_stamps_[0].update(msg->timestamp, steadySeconds(), state_data_.sens_w.allFinite());
+		// 只换角速度来源，xyz_derivative 不替代 TVR。
+		// 此消息无 gyro_integral_dt/clipping/calibration_count；相关诊断保留0，表示未提供。
+	}
+#else
 	void SensorDataCallback(const px4_msgs::msg::SensorCombined::UniquePtr msg)
 	{
 		// uint64_t timestamp;
 		// timestamp = msg->timestamp;
 		// sun: 与顶层输入层保持相同的 FRD -> FLU 符号转换，确保角速度误差在同一坐标系。
 		state_data_.sens_w << msg->gyro_rad[0], -msg->gyro_rad[1], -msg->gyro_rad[2];
+		input_stamps_[0].update(msg->timestamp, steadySeconds(), state_data_.sens_w.allFinite());
+		gyro_integral_dt_us_ = msg->gyro_integral_dt;
+		gyro_clipping_ = msg->gyro_clipping;
+		gyro_calibration_count_ = msg->gyro_calibration_count;
 	}
+#endif
 
 	void LocalPoseDataCallback(const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg)
 	{
 		// sun: 扣除 PX4 发布的速度增量修正后再转换到 ENU，供来流速度和桨系数计算使用。
 		state_data_.v_I << msg->vx - msg->delta_vxy[0], -(msg->vy - msg->delta_vxy[1]), -(msg->vz - msg->delta_vz);
+		input_stamps_[1].update(msg->timestamp, steadySeconds(),
+			msg->v_xy_valid && msg->v_z_valid && state_data_.v_I.allFinite());
 	}
 	void AttitudeCallback(const px4_msgs::msg::VehicleAttitude::UniquePtr msg)
 	{
 		Eigen::Quaterniond q_ned(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
     	state_data_.q = Eigen::Quaterniond(q_ned.w(),q_ned.x(),-q_ned.y(),-q_ned.z());
 		state_data_.Rbi = state_data_.q.toRotationMatrix();
+		input_stamps_[2].update(msg->timestamp, steadySeconds(),
+			state_data_.q.coeffs().allFinite() && std::abs(state_data_.q.norm() - 1.0) < 0.01);
 	}
 
 	void RatesThrustSetpointCallback(const ratectrl_msgs::msg::RatesThrustSetpoint::UniquePtr msg)
@@ -220,6 +267,9 @@ public:
 		}
 		desired_data_.thrust_des = msg->thrust;
 		desired_data_.rate_dot_ref << msg->rate_dot_ref[0], msg->rate_dot_ref[1], msg->rate_dot_ref[2];
+		input_stamps_[3].update(msg->timestamp, steadySeconds(),
+			desired_data_.rate_des.allFinite() && desired_data_.rate_dot_ref.allFinite() &&
+			std::isfinite(desired_data_.thrust_des));
 	}
 
     void publish_actuator_motors_(Eigen::Array4d motor_thro)
@@ -233,18 +283,24 @@ public:
         msg.control = motor_thrust_all;
         msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
         actuator_motors_publisher_->publish(msg);
+        debug_msg_.actuator_timestamp = msg.timestamp;
+        for (size_t i = 0; i < 4; ++i) debug_msg_.actuator_control[i] = msg.control[i];
         // std::cout << "ctrl_output_.thro_setpoint:" << ctrl_output_.thro_setpoint.transpose() << std::endl;
     }
 
 	void calculateControl(Eigen::Array4d &thro_setpoint)
 	{
 		const auto calculation_started = std::chrono::steady_clock::now();
+		debug_msg_.control_updated = true;
 		// sun: dt 使用实际时钟差而非名义频率，使积分项在调度抖动下仍按真实时间累计。
 		auto now_time = this->get_clock()->now();
 		static auto time_last = now_time;
 		double t = (now_time-start_time_).seconds();
 		double dt = (now_time-time_last).seconds();
 		time_last = now_time;  
+		debug_msg_.control_start_timestamp = now_time.nanoseconds() / 1000;
+		debug_msg_.elapsed_s = t;
+		debug_msg_.dt_s = dt;
 		// sun: 当前风速设为零，地速旋转到机体系后近似作为电机轴向来流速度。
 		Eigen::Vector3d w_I = Eigen::Vector3d::Zero();
 		Eigen::Vector3d va_I = state_data_.v_I - w_I; 
@@ -264,10 +320,18 @@ public:
 			lpf_gyro_z_->filter(rate_cur[2]);
 		// 当前角加速度估计（使用滑动窗口二阶TVR求解器）
 		Eigen::Vector3d rate_dot_cur;
-		rate_dot_cur << 
-			sw_tvr_solver_x.update(t, rate_cur[0]),
-			sw_tvr_solver_y.update(t, rate_cur[1]),
-			sw_tvr_solver_z.update(t, rate_cur[2]);
+		SlidingWindowTVDerivative * solvers[] = {&sw_tvr_solver_x, &sw_tvr_solver_y, &sw_tvr_solver_z};
+		for (size_t i = 0; i < 3; ++i) {
+			const auto started = std::chrono::steady_clock::now();
+			rate_dot_cur[i] = solvers[i]->update(t, rate_cur[i]);
+			debug_msg_.tvr_time_ms[i] = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - started).count();
+			const auto & d = solvers[i]->diagnostics();
+			debug_msg_.tvr_status[i] = d.status;
+			debug_msg_.tvr_samples[i] = d.samples;
+			debug_msg_.tvr_output_valid[i] = d.output_valid;
+			debug_msg_.tvr_mean_dt_s[i] = d.mean_dt;
+		}
 		// std::cout << "ome_dot_cur:" << ome_dot_cur.transpose() << std::endl;
 		// sun: PID 先生成期望角加速度，再通过 Euler 刚体方程
 		// sun: τ = J·ω_dot + ω×(Jω) 换算为期望机体系力矩。
@@ -277,6 +341,10 @@ public:
 			param.other.lim_yawrate_int);
 		Eigen::Matrix3d Jv = Eigen::Vector3d(param.uav.Jvx, param.uav.Jvy, param.uav.Jvz).asDiagonal();
 		Eigen::Vector3d rate_err = desired_data_.rate_des - rate_cur;
+		copyVector(debug_msg_.rate_err, rate_err);
+		copyVector(debug_msg_.i_term, ome_int_);
+		copyVector(debug_msg_.saturation_positive_used, saturation_positive_);
+		copyVector(debug_msg_.saturation_negative_used, saturation_negative_);
 		Eigen::Vector3d ome_dot_des = gain_rate_p * rate_err + ome_int_ + gain_rate_d * (Eigen::Vector3d::Zero() - rate_dot_cur) + desired_data_.rate_dot_ref;
 		Eigen::Vector3d tau_des = Jv * ome_dot_des + rate_cur.cross(Jv * rate_cur);
 		for (size_t i = 0; i < 3; i++) {
@@ -290,6 +358,10 @@ public:
 			double i_factor = rate_err(i) / deg2rad(400.0);
 			i_factor = std::max(0.0, 1.0 - i_factor * i_factor);//积分器更新变量
 			double rate_i = ome_int_[i] + i_factor * gain_rate_i(i,i) * rate_err(i) * dt;
+			debug_msg_.i_factor[i] = i_factor;
+			debug_msg_.i_candidate[i] = rate_i;
+			debug_msg_.i_update_finite[i] = std::isfinite(rate_i);
+			debug_msg_.i_clipped[i] = std::isfinite(rate_i) && std::abs(rate_i) > lim_rate_int[i];
 			if (std::isfinite(rate_i)) {
 				ome_int_[i] = clip(rate_i, -lim_rate_int[i], lim_rate_int[i]);
 			}
@@ -304,6 +376,7 @@ public:
 
 		Eigen::Array4d cts = get_cts_from_speed(motor_rad_sol_last_, va_B[2], param);
 		Eigen::Array4d cms = get_cms_from_speed(motor_rad_sol_last_, va_B[2], param);
+		copyVector(debug_msg_.motor_rad_for_model, motor_rad_sol_last_);
 		Eigen::Matrix4d effectiveness;
 		// sun: 第一行为总推力，二至四行依次为滚转、俯仰、偏航力矩；列对应 1~4 号电机。
 		//          x
@@ -330,6 +403,7 @@ public:
 
 		// sun: 逆混控得到单电机推力后按物理边界裁剪，裁剪后的实际可实现力矩用于抗饱和。
 		Eigen::Array4d motor_thrust_sol = (mix * Ttau_des).array();
+		copyVector(debug_msg_.motor_thrust_raw, motor_thrust_sol);
 		motor_thrust_sol = clip(motor_thrust_sol, param.motor.u_min, param.motor.u_max);
 
 		// sun: 比较期望与可实现力矩，记录每个轴的正/负饱和方向供下一周期冻结对应积分。
@@ -352,13 +426,22 @@ public:
 		{
 			double thro_setpoint_i = 0.0;
 			double motor_rad_sol = std::sqrt(motor_thrust_sol[i] / cts[i]);
+			debug_msg_.motor_rad_sol[i] = motor_rad_sol;
+			debug_msg_.thro_discriminant[i] = param.motor.rc2speed_b * param.motor.rc2speed_b -
+				4 * param.motor.rc2speed_a * (param.motor.rc2speed_c - motor_rad_sol);
 			
 			if(motor_rad_sol >= (param.motor.rc2speed_c - param.motor.rc2speed_b*param.motor.rc2speed_b/4/param.motor.rc2speed_a)){
 				thro_setpoint_i = 1.0;
+				debug_msg_.speed_curve_limited[i] = true;
 			}else{
 				thro_setpoint_i = (-param.motor.rc2speed_b+std::sqrt(param.motor.rc2speed_b*param.motor.rc2speed_b-4*param.motor.rc2speed_a*(param.motor.rc2speed_c-motor_rad_sol)))/2/param.motor.rc2speed_a;
 			}
 			thro_setpoint[i] = std::min(thro_setpoint_i,1.0);
+			debug_msg_.thro_setpoint_i[i] = thro_setpoint_i;
+			debug_msg_.thro_setpoint[i] = thro_setpoint[i];
+			debug_msg_.motor_reaction_torque_sol[i] = cms[i] * motor_rad_sol * motor_rad_sol;
+			debug_msg_.thrust_clipped_low[i] = debug_msg_.motor_thrust_raw[i] < param.motor.u_min;
+			debug_msg_.thrust_clipped_high[i] = debug_msg_.motor_thrust_raw[i] > param.motor.u_max;
 			motor_rad_sol_last_[i] = motor_rad_sol;
 			// 调试消息字段单位为 RPM，控制计算内部仍保持 rad/s。
 			debug_msg_.des_motor_rpm[static_cast<std::size_t>(i)] =
@@ -386,14 +469,135 @@ public:
 		debug_msg_.des_u_3 = motor_thrust_sol[2];
 		debug_msg_.des_u_4 = motor_thrust_sol[3];
 
-		rclcpp::Time now = this->get_clock()->now();
+		copyVector(debug_msg_.rate_cur, rate_cur);
+		copyVector(debug_msg_.rate_cur_lpf, rate_cur_lpf);
+		copyVector(debug_msg_.rate_des, desired_data_.rate_des);
+		copyVector(debug_msg_.rate_err_integrator, rate_err);
+		copyVector(debug_msg_.rate_dot_ref, desired_data_.rate_dot_ref);
+		copyVector(debug_msg_.rate_dot_cur, rate_dot_cur);
+		copyVector(debug_msg_.ome_dot_des, ome_dot_des);
+		copyVector(debug_msg_.ome_int_after, ome_int_);
+		copyVector(debug_msg_.p_term, (gain_rate_p * (desired_data_.rate_des - rate_cur)).eval());
+		copyVector(debug_msg_.d_term, (-gain_rate_d * rate_dot_cur).eval());
+		copyVector(debug_msg_.gain_p, gain_rate_p.diagonal());
+		copyVector(debug_msg_.gain_i, gain_rate_i.diagonal());
+		copyVector(debug_msg_.gain_d, gain_rate_d.diagonal());
+		copyVector(debug_msg_.integral_limit, lim_rate_int);
+		copyVector(debug_msg_.inertia_diagonal, Jv.diagonal());
+		copyVector(debug_msg_.gyro_torque, rate_cur.cross(Jv * rate_cur));
+		copyVector(debug_msg_.tau_from_rate_dot, (Jv * rate_dot_cur + rate_cur.cross(Jv * rate_cur)).eval());
+		copyVector(debug_msg_.tau_des, tau_des);
+		copyVector(debug_msg_.tau_sol, tau_sol);
+		copyVector(debug_msg_.tau_residual, (tau_des - tau_sol).eval());
+		copyVector(debug_msg_.saturation_positive, saturation_positive_);
+		copyVector(debug_msg_.saturation_negative, saturation_negative_);
+		copyVector(debug_msg_.velocity_world, state_data_.v_I);
+		copyVector(debug_msg_.wind_world, w_I);
+		copyVector(debug_msg_.va_b, va_B);
+		debug_msg_.attitude_wxyz = {state_data_.q.w(), state_data_.q.x(), state_data_.q.y(), state_data_.q.z()};
+		copyVector(debug_msg_.cts, cts);
+		copyVector(debug_msg_.cms, cms);
+		copyVector(debug_msg_.motor_thrust_sol, motor_thrust_sol);
+		for (size_t i = 0; i < 4; ++i) for (size_t j = 0; j < 4; ++j) {
+			debug_msg_.effectiveness[4*i+j] = effectiveness(i,j);
+			debug_msg_.mix[4*i+j] = mix(i,j);
+		}
+		debug_msg_.effectiveness_determinant = effectiveness.determinant();
+		debug_msg_.thrust_des = collective_thrust_des;
+		debug_msg_.thrust_sol = Ttau_sol[0];
+		debug_msg_.thrust_residual = collective_thrust_des - Ttau_sol[0];
+		debug_msg_.thrust_min = param.motor.u_min;
+		debug_msg_.thrust_max = param.motor.u_max;
+		debug_msg_.rc2speed_coefficients = {param.motor.rc2speed_a, param.motor.rc2speed_b, param.motor.rc2speed_c};
+		debug_msg_.calibration_voltage = calibration_voltage_;
+		debug_msg_.ct_coefficients = {param.motor.Ct_a, param.motor.Ct_b, param.motor.Ct_c};
+		debug_msg_.cq_coefficients = {param.motor.Cq_a, param.motor.Cq_b, param.motor.Cq_c};
+		debug_msg_.air_density = param.aero.rho;
+		debug_msg_.propeller_radius = param.uav.rp;
+		debug_msg_.arm_length = param.uav.l;
+		debug_msg_.arm_angle_rad = beta;
+		debug_msg_.nominal_rate_hz = param.ratectrl_freq_max;
+		debug_msg_.gyro_lpf_cutoff_hz = {param.filter.lpf_gyro_x_cutoff_hz,
+			param.filter.lpf_gyro_y_cutoff_hz, param.filter.lpf_gyro_z_cutoff_hz};
+		const auto & tvp = sw_tvr_solver_x.parameters();
+		debug_msg_.tvr_parameters = {double(tvp.window_size), tvp.lambda_tv, double(tvp.expend_n),
+			double(tvp.n_for_expoly), tvp.atten, double(tvp.order), tvp.weight_scale};
+		debug_msg_.control_result_finite = ome_dot_des.allFinite() && tau_des.allFinite() &&
+			tau_sol.allFinite() && motor_thrust_sol.allFinite() && thro_setpoint.isFinite().all();
 		debug_msg_.solve_time_ms = static_cast<float>(
 			std::chrono::duration<double, std::milli>(
 				std::chrono::steady_clock::now() - calculation_started).count());
-		debug_msg_.timestamp = now.nanoseconds() / 1000;
-		px4ratectrldebug_publisher_->publish(debug_msg_);
 
 		// std::cout << "Td_:" << Td_ << std::endl;
+	}
+	// A diagnostic sample is finalized only AFTER actuator fallback and publication.
+	void runControlCycle()
+	{
+		const auto started = std::chrono::steady_clock::now();
+		debug_msg_ = px4debug_msgs::msg::Px4ratectrlDebug{};
+		debug_msg_.previous_cycle_time_ms = previous_cycle_time_ms_;
+		const double cycle_start = std::chrono::duration<double>(started - steady_start_).count();
+		debug_msg_.cycle_interval_s = cycle_start - previous_cycle_start_s_;
+		previous_cycle_start_s_ = cycle_start;
+		debug_msg_.cycle_id = ++cycle_id_;
+		if (GetThrustDes() >= 0.0) {
+			Eigen::Array4d command;
+			calculateControl(command);
+			for (size_t i = 0; i < 4; ++i) {
+				if (std::isnan(command[i])) {
+					command[i] = last_command_[i];
+					debug_msg_.actuator_fallback[i] = true;
+				}
+			}
+			publish_actuator_motors_(command);
+			last_command_ = command;
+		} else {
+			publish_actuator_motors_(Eigen::Array4d::Constant(-1.0));
+		}
+		const double now = steadySeconds();
+		debug_msg_.timestamp = get_clock()->now().nanoseconds() / 1000;
+		debug_msg_.steady_elapsed_us = now * 1e6;
+		debug_msg_.fsm_state = state_data_.fsm_state;
+		debug_msg_.is_take_off = is_take_off_;
+		debug_msg_.gyro_integral_dt_us = gyro_integral_dt_us_;
+		debug_msg_.gyro_clipping = gyro_clipping_;
+		debug_msg_.gyro_calibration_count = gyro_calibration_count_;
+		debug_msg_.control_inputs_valid = true;
+		for (size_t i = 0; i < input_stamps_.size(); ++i) {
+			debug_msg_.input_timestamp[i] = input_stamps_[i].timestamp;
+			debug_msg_.input_sequence[i] = input_stamps_[i].sequence;
+			debug_msg_.input_age_s[i] = input_stamps_[i].age(now);
+			debug_msg_.input_valid[i] = input_stamps_[i].fresh(now, state_timeout_s_);
+			if (i < 4) debug_msg_.control_inputs_valid &= debug_msg_.input_valid[i];
+		}
+		const Eigen::Vector3d va_b = state_data_.Rbi.transpose() * state_data_.v_I;
+		auto feedback = feedback_.sample(now, param, va_b,
+			debug_msg_.input_valid[1] && debug_msg_.input_valid[2]);
+		feedback.timestamp = debug_msg_.timestamp;
+		feedback.cycle_id = debug_msg_.cycle_id;
+		feedback.actuator_timestamp = debug_msg_.actuator_timestamp;
+		feedback.steady_elapsed_us = debug_msg_.steady_elapsed_us;
+		feedback.actuator_control = debug_msg_.actuator_control;
+		feedback.calibration_voltage = calibration_voltage_;
+		feedback.position_timestamp = input_stamps_[1].timestamp;
+		feedback.attitude_timestamp = input_stamps_[2].timestamp;
+		feedback.position_age_s = input_stamps_[1].age(now);
+		feedback.attitude_age_s = input_stamps_[2].age(now);
+		feedback.state_timeout_s = state_timeout_s_;
+		if (debug_msg_.control_updated && debug_msg_.control_result_finite) {
+			for (size_t i = 0; i < 4; ++i) {
+				feedback.desired_motor_rpm[i] = debug_msg_.motor_rad_sol[i] * 60.0 / (2*pi);
+				if (feedback.rpm_valid[i]) feedback.rpm_error[i] =
+					feedback.motor_rpm[i] - feedback.desired_motor_rpm[i];
+			}
+		}
+		debug_msg_.work_time_ms = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - started).count();
+		debug_msg_.deadline_missed = debug_msg_.work_time_ms > 1000.0 / param.ratectrl_freq_max;
+		px4ratectrldebug_publisher_->publish(debug_msg_);
+		motor_feedback_publisher_->publish(feedback);
+		previous_cycle_time_ms_ = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - started).count();
 	}
 	double GetThrustDes()
 	{
@@ -417,6 +621,30 @@ public:
 	bool has_new_message = false;
 
 private:
+    template<typename T, size_t N, typename Vector>
+    static void copyVector(std::array<T, N> & destination, const Vector & source)
+    {
+        for (size_t i = 0; i < N; ++i) destination[i] = source[i];
+    }
+    double steadySeconds() const
+    {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - steady_start_).count();
+    }
+    const std::chrono::steady_clock::time_point steady_start_{std::chrono::steady_clock::now()};
+    std::array<rate_diagnostics::InputStamp, 5> input_stamps_;
+    uint64_t gyro_integral_dt_us_{0};
+    uint8_t gyro_clipping_{0};
+    uint8_t gyro_calibration_count_{0};
+    double previous_cycle_time_ms_{rate_diagnostics::nan};
+    double previous_cycle_start_s_{rate_diagnostics::nan};
+    uint64_t cycle_id_{0};
+    double state_timeout_s_{0.25};
+    double calibration_voltage_{16.0};
+    rate_diagnostics::MotorFeedback feedback_;
+    // Initial NaN used to fall back to itself. Start with the existing inactive command.
+    Eigen::Array4d last_command_{Eigen::Array4d::Constant(-1.0)};
+    rclcpp::Publisher<px4debug_msgs::msg::MotorFeedbackDebug>::SharedPtr motor_feedback_publisher_;
+    rclcpp::Subscription<px4_msgs::msg::EscStatus>::SharedPtr esc_status_subscription_;
     rclcpp::Service<std_srvs::srv::Empty>::SharedPtr handshake_server_;
 	bool handshake_received_{false};
     rclcpp::Time start_time_;
@@ -429,17 +657,17 @@ private:
         FSM_STATE(err),
     };
     struct State_Data_t{
-		Eigen::Vector3d sens_w; // [rad/s] ENU
-		Eigen::Vector3d v_I; // [m/s] ENU
-		Eigen::Quaterniond q; // q_e^b --> R_b^e
-		Eigen::Matrix3d Rbi;
-		state fsm_state;
-		state fsm_state_last;
+		Eigen::Vector3d sens_w{Eigen::Vector3d::Constant(rate_diagnostics::nan)};
+		Eigen::Vector3d v_I{Eigen::Vector3d::Constant(rate_diagnostics::nan)};
+		Eigen::Quaterniond q{Eigen::Quaterniond::Identity()};
+		Eigen::Matrix3d Rbi{Eigen::Matrix3d::Identity()};
+		state fsm_state{0};
+		state fsm_state_last{0};
 	};
     struct Desired_Data_t{
-		Eigen::Vector3d rate_des; // [rad/s] ENU
+		Eigen::Vector3d rate_des{Eigen::Vector3d::Constant(rate_diagnostics::nan)};
 		double thrust_des = -1.0; // [N]
-		Eigen::Vector3d rate_dot_ref; // [rad/s^2] ENU
+		Eigen::Vector3d rate_dot_ref{Eigen::Vector3d::Constant(rate_diagnostics::nan)};
 	};
     State_Data_t state_data_;
 	Desired_Data_t desired_data_;
@@ -464,7 +692,11 @@ private:
     rclcpp::Publisher<px4debug_msgs::msg::Px4ratectrlDebug>::SharedPtr px4ratectrldebug_publisher_;
 	rclcpp::Publisher<px4_msgs::msg::ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	// 订阅者
+#if PX4CTRL_USE_FILTERED_IMU
+	rclcpp::Subscription<px4_msgs::msg::VehicleAngularVelocity>::SharedPtr vehicle_angular_velocity_subscription_;
+#else
 	rclcpp::Subscription<px4_msgs::msg::SensorCombined>::SharedPtr sensor_combined_subscription_;
+#endif
     rclcpp::Subscription<ratectrl_msgs::msg::RatesThrustSetpoint>::SharedPtr rates_thrust_setpoint_subscription_;
 	rclcpp::Subscription<px4debug_msgs::msg::Px4ctrlDebug>::SharedPtr px4ctrldebug_subscription_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr vehicle_local_position_subscription_;
@@ -512,36 +744,11 @@ int main(int argc, char *argv[])
 
 	rclcpp::WallRate loop_rate(node->param.ratectrl_freq_max);
 	node->reset_start_time();
-	Eigen::Array4d thro_setpoint;
-    while (rclcpp::ok()) 
-	{
-		rclcpp::spin_some(node);
-		// if (node->has_new_message)
-		// {
-			if (node->GetThrustDes() >= 0.0)
-			{
-				node->calculateControl(thro_setpoint);
-				// thrust为nan处理
-				static Eigen::Array4d thro_setpoint_last = thro_setpoint;
-				for (int i = 0; i < 4; i++)
-				{
-					// sun: 单个通道出现 NaN 时沿用上一有效输出，避免坏值直接传入 PX4。
-					if (std::isnan(thro_setpoint[i])){
-						thro_setpoint[i] = thro_setpoint_last[i];
-					}
-				}
-				node->publish_actuator_motors_(thro_setpoint);
-				thro_setpoint_last = thro_setpoint;
-			}
-			else{
-				node->publish_actuator_motors_(Eigen::Array4d(-1.0,-1.0,-1.0,-1.0));
-			}
-		// }
-
-		
-
-		loop_rate.sleep();
-	}
+    while (rclcpp::ok()) {
+        rclcpp::spin_some(node);
+        node->runControlCycle();
+        loop_rate.sleep();
+    }
 
 
 	rclcpp::shutdown();

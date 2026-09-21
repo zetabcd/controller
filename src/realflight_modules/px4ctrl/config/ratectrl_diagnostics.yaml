@@ -1,0 +1,12 @@
+px4ctrlrate_node:
+  ros__parameters:
+    diagnostics:
+      esc_topic: /fmu/out/esc_status
+      esc_timeout_s: 0.25
+      state_timeout_s: 0.25
+      # Metadata: existing speed/throttle bench calibration was measured at 16 V.
+      calibration_voltage: 16.0
+      # In the controller's motor order. Default: motor 1..4.
+      motor_functions: [101, 102, 103, 104]
+      # Only for drivers without actuator_function: explicitly supply 4 distinct
+      # EscStatus.esc array indices, e.g. esc_slots: [0, 1, 2, 3]. Do not guess order.

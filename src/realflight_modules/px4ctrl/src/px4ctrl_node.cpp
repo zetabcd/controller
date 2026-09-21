@@ -53,7 +53,9 @@ PX4ControlNode::PX4ControlNode(std::string name) : Node(name), fsm(*this)
   ──────────────────────────────────  ───────────────────────────────────────  ───────────────────  ─────────────────────────────────────────────  ────────────────────────
    /fmu/out/battery_status             px4_msgs/msg/BatteryStatus               PX4                  px4ctrl_node                                   电池状态
   ──────────────────────────────────  ───────────────────────────────────────  ───────────────────  ─────────────────────────────────────────────  ────────────────────────
-   /fmu/out/sensor_combined            px4_msgs/msg/SensorCombined              PX4或quadsim_node    两个控制节点                                   IMU角速度、加速度
+   /fmu/out/sensor_combined            px4_msgs/msg/SensorCombined              PX4或quadsim_node    两个控制节点                                   原IMU源（宏=0）
+   /fmu/out/vehicle_angular_velocity   px4_msgs/msg/VehicleAngularVelocity      PX4                  两个控制节点                                   已滤波角速度（宏=1）
+   /fmu/out/vehicle_acceleration       px4_msgs/msg/VehicleAcceleration         PX4                  px4ctrl_node                                   已滤波比力（宏=1）
   ──────────────────────────────────  ───────────────────────────────────────  ───────────────────  ─────────────────────────────────────────────  ────────────────────────
    /fmu/out/vehicle_attitude           px4_msgs/msg/VehicleAttitude             PX4或quadsim_node    两个控制节点                                   当前姿态
   ──────────────────────────────────  ───────────────────────────────────────  ───────────────────  ─────────────────────────────────────────────  ────────────────────────
@@ -79,10 +81,23 @@ PX4ControlNode::PX4ControlNode(std::string name) : Node(name), fsm(*this)
 								   "/fmu/out/battery_status", 
 								   qos,
 								   std::bind(&Battery_Data_t::feed, &fsm.bat_data, std::placeholders::_1));	
+#if PX4CTRL_USE_FILTERED_IMU
+	// 独立传感器流使用 volatile/best-effort，兼容 PX4 DDS 实时发布。
+	const auto imu_qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort().durability_volatile();
+	vehicle_angular_velocity_subscription_ = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
+		"/fmu/out/vehicle_angular_velocity", imu_qos,
+		std::bind(&Sensor_Data_t::feed_angular_velocity, &fsm.sens_data, std::placeholders::_1));
+	vehicle_acceleration_subscription_ = this->create_subscription<px4_msgs::msg::VehicleAcceleration>(
+		"/fmu/out/vehicle_acceleration", imu_qos,
+		std::bind(&Sensor_Data_t::feed_acceleration, &fsm.sens_data, std::placeholders::_1));
+	RCLCPP_INFO(get_logger(), "IMU source: vehicle_angular_velocity + vehicle_acceleration");
+#else
 	sensor_combined_subscription_ = this->create_subscription<px4_msgs::msg::SensorCombined>(
 								   "/fmu/out/sensor_combined", 
 								   qos,
 								   std::bind(&Sensor_Data_t::feed, &fsm.sens_data, std::placeholders::_1));		
+	RCLCPP_INFO(get_logger(), "IMU source: sensor_combined");
+#endif
 	vehicle_attitude_subscription_ = this->create_subscription<px4_msgs::msg::VehicleAttitude>(
 								   "/fmu/out/vehicle_attitude", 
 								   qos,

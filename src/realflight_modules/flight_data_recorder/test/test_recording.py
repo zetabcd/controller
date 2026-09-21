@@ -52,8 +52,16 @@ def test_all_core_fields_and_fixed_arrays(tmp_path):
         for field, type_name in cls.get_fields_and_field_types().items():
             if type_name in ('float', 'double'):
                 setattr(message, field, -1.25)
-            elif type_name.startswith('float['):
+            elif type_name.startswith(('float[', 'double[')):
                 setattr(message, field, [float(i) - 2.5 for i in range(len(getattr(message, field)))])
+            elif type_name.startswith(('int', 'uint')) and '[' in type_name:
+                base = 2**63 + 123 if type_name.startswith('uint64[') else 1
+                values = [base + i for i in range(len(getattr(message, field)))]
+                if type_name.startswith('int'):
+                    values = [-value for value in values]
+                setattr(message, field, values)
+            elif type_name.startswith('boolean['):
+                setattr(message, field, [i % 2 == 0 for i in range(len(getattr(message, field)))])
             elif type_name == 'uint64':
                 setattr(message, field, 2**63 + 123)
             elif type_name == 'boolean':
@@ -67,11 +75,11 @@ def test_all_core_fields_and_fixed_arrays(tmp_path):
         data = log.get_dataset(name).data
         for field, type_name in message.get_fields_and_field_types().items():
             value = getattr(message, field)
-            if type_name in ('float', 'double', 'boolean') or type_name.startswith(('int', 'uint')):
-                assert data['msg_' + field][0] == value
-            elif type_name.startswith('float['):
+            if '[' in type_name and type_name.startswith(('float[', 'double[', 'boolean[', 'int', 'uint')):
                 for i, item in enumerate(value):
                     assert data[f'msg_{field}[{i}]'][0] == item
+            elif type_name in ('float', 'double', 'boolean') or type_name.startswith(('int', 'uint')):
+                assert data['msg_' + field][0] == value
     assert log.get_dataset('ros/debugPx4/ctrl').data['msg_thr2acc'][0] == -1.25
     assert 'msg_control[11]' in log.get_dataset('ros/fmu/in/actuator_motors').data
 
