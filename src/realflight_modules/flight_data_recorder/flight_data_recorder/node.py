@@ -1,6 +1,7 @@
 """ROS 2 entry point: ARM gating by default, continuous capture for simulation."""
 
 import hashlib
+import inspect
 import json
 import math
 import queue
@@ -43,6 +44,39 @@ CORE_TOPICS = {
     '/debugPx4/ctrl': 'px4debug_msgs/msg/Px4ctrlDebug',
     '/debugPx4/ratectrl': 'px4debug_msgs/msg/Px4ratectrlDebug',
 }
+
+
+class _OptionalSubscriptionEvents(SubscriptionEventCallbacks):
+    """Keep each supported monitor without making DDS events a recording prerequisite."""
+
+    def __init__(self, callbacks, warn):
+        super().__init__(use_default_callbacks=False)
+        self._callbacks = callbacks
+        self._warn = warn
+        self.status = {}
+
+    def create_event_handlers(self, *args, **kwargs):
+        # Foxy takes two arguments here, Humble takes three. Forward them intact
+        # and let the installed rclpy create its own event handlers.
+        handlers = []
+        supported = inspect.signature(SubscriptionEventCallbacks).parameters
+        for name, callback in self._callbacks.items():
+            if name not in supported:
+                reason = 'not exposed by this rclpy version'
+            else:
+                events = SubscriptionEventCallbacks(
+                    use_default_callbacks=False, **{name: callback})
+                try:
+                    handlers.extend(events.create_event_handlers(*args, **kwargs))
+                except UnsupportedEventTypeError:
+                    reason = 'not supported by this RMW implementation'
+                else:
+                    self.status[name] = {'enabled': True}
+                    continue
+            self.status[name] = {'enabled': False, 'reason': reason}
+            self._warn(f'Subscription event {name} unavailable ({reason}); '
+                       'recording continues without this event monitor')
+        return handlers
 
 
 class FlightDataRecorder(Node):
@@ -131,23 +165,31 @@ class FlightDataRecorder(Node):
                              durability=DurabilityPolicy.VOLATILE)
             def callback(raw):
                 self._receive(codec, raw)
-            events = SubscriptionEventCallbacks(
-                incompatible_qos=lambda event, t=topic: self._problem(
-                    f'Incompatible QoS on {t}: policy={event.last_policy_kind}'))
-            try:
-                subscription = self.create_subscription(cls, topic, callback, qos, raw=True,
-                                                        event_callbacks=events)
-            except UnsupportedEventTypeError:
-                self._problem(f'RMW lacks subscription loss events for {topic}; loss reporting unavailable')
-                subscription = self.create_subscription(cls, topic, callback, qos, raw=True,
-                                                        event_callbacks=SubscriptionEventCallbacks(use_default_callbacks=False))
+            events = _OptionalSubscriptionEvents({
+                'message_lost': lambda event, t=topic: self._problem(
+                    f'DDS reported loss on {t}: +{event.total_count_change}, total={event.total_count}'),
+                'incompatible_qos': lambda event, t=topic: self._problem(
+                    f'Incompatible QoS on {t}: policy={event.last_policy_kind}'),
+            }, self._warning)
+            subscription = self.create_subscription(cls, topic, callback, qos, raw=True,
+                                                    event_callbacks=events)
             self.sources[key] = (subscription, codec, reliable)
+            # Replace the mapping so a queued session-start snapshot stays stable.
+            monitoring = dict(self.capture.metadata.get('subscription_events', {}))
+            monitoring[topic + ' ' + type_name] = events.status
+            self.capture.metadata['subscription_events'] = monitoring
             self.unavailable.pop(topic + ' ' + type_name, None)
             self.get_logger().info(f'Recording source registered: {topic} [{type_name}]')
         except Exception as error:
             description = f'{type(error).__name__}: {error}'
             self.unavailable[topic + ' ' + type_name] = description
             self._problem(f'Cannot record {topic} [{type_name}]: {description}')
+
+    def _warning(self, text):
+        # An unavailable monitor is not evidence of lost samples.
+        if text not in self._reported:
+            self.get_logger().warning(text)
+            self._reported.add(text)
 
     def _problem(self, text):
         self.capture.problem(text)

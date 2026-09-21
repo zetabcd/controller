@@ -1,5 +1,7 @@
 #include <px4ctrl/fcu_reboot.h>
 
+#include <memory>
+
 namespace px4ctrl {
 namespace {
 constexpr uint8_t kSystem = 1;
@@ -13,7 +15,8 @@ FcuRebootClient::FcuRebootClient(rclcpp::Node &node) : node_(node)
         "/fmu/in/vehicle_command", rclcpp::QoS(10).reliable().durability_volatile());
     subscription_ = node.create_subscription<px4_msgs::msg::VehicleCommandAck>(
         "/fmu/out/vehicle_command_ack", rclcpp::SensorDataQoS(),
-        [this](const px4_msgs::msg::VehicleCommandAck &ack) { on_ack(ack); });
+        // Foxy supports shared-pointer callbacks, but not const Message & callbacks.
+        [this](std::shared_ptr<const px4_msgs::msg::VehicleCommandAck> ack) { on_ack(*ack); });
 }
 
 void FcuRebootClient::update(uint64_t aux5_changes, bool allowed)

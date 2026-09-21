@@ -17,7 +17,7 @@
 在工程根目录编译；下面同时安装新包和更新后的控制启动文件：
 
 ```bash
-source /opt/ros/humble/setup.bash
+source /opt/ros/foxy/setup.bash  # Humble 机器改为 /opt/ros/humble/setup.bash
 source install/setup.bash
 colcon build --packages-select uav_utils flight_data_recorder px4ctrl --symlink-install
 source install/setup.bash
@@ -160,6 +160,14 @@ ros2 run flight_data_recorder recover_ulog /path/to/flight_....ulg.pending
 默认队列字节上限 64 MiB、订阅深度 4096。超限时逐话题计数并标记不完整。DDS 使用 volatile，避免重放上锁前的保留样本；可确定全部发布者提供 reliable 时请求 reliable，其余使用兼容 PX4 的 best effort。DDS 事件只反映中间件能报告的丢失，无法证明网络中从未发生丢包。字段筛选在后台解码后执行，省略图像等变长字段不会消除其订阅、原始消息排队和解码开销；不需要的话题应加入排除列表。
 
 参数见 [config/recorder.yaml](config/recorder.yaml)：`output_directory`、`simulation_mode`、`status_topic`、`auto_discover`、`discovery_interval_s`、`subscription_depth`、`max_queue_bytes`、`sync_interval_s`、`excluded_topics`。
+
+## Foxy / Humble 订阅事件兼容
+
+- Foxy 的 `SubscriptionEventCallbacks` 没有 `message_lost` 参数。节点按当前接口检测能力，不向旧版传入这个参数；Humble 支持时继续启用丢包事件监测。
+- `message_lost` 和 `incompatible_qos` 分别尝试注册。若当前 RMW 不支持其中一个事件，只禁用该事件，其他监测和原始消息订阅继续工作。
+- 缺少监测能力输出一次 warning，不再输出 `Cannot record`，也不把它当作实际丢包而误标 `.incomplete.ulg`。真正收到丢包或 QoS 不兼容事件时，仍报告错误并标记记录期间的异常。
+- ULog 的 `recorder_metadata.subscription_events` 保存开始记录时各订阅的监测能力；`recorder_summary.subscription_events` 保存结束时的能力，包含飞行途中新增的话题。每项包含 `enabled`，禁用时还包含 `reason`。
+- `Recording source registered` 只表示订阅创建成功，不表示已经收到消息；无法监测 DDS 丢包也不代表没有丢包。
 
 ## 验证
 

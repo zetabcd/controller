@@ -26,6 +26,9 @@ VERSIONS = {
     "TrajectorySetpoint": 0,
     "VehicleCommand": 0,
     "VehicleCommandAck": 0,
+    "VehicleAngularVelocity": 0,
+    "VehicleAcceleration": None,
+    "EscStatus": None,
     "SensorCombined": None,
     "OffboardControlMode": None,
 }
@@ -34,13 +37,13 @@ VERSIONS = {
 class Px4CompatibilityTest(unittest.TestCase):
     def test_workspace_and_versions(self):
         prefix = Path(get_package_prefix("px4_msgs")).resolve()
-        self.assertTrue(prefix.is_relative_to(ROOT / "install"),
+        self.assertIn(ROOT / "install", prefix.parents,
                         f"Loaded another workspace: {prefix}; source install/local_setup.bash")
         for name, version in VERSIONS.items():
             with self.subTest(message=name):
                 cls = getattr(messages, name)
                 module_path = Path(inspect.getfile(cls)).resolve()
-                self.assertTrue(module_path.is_relative_to(ROOT),
+                self.assertIn(ROOT, module_path.parents,
                                 f"Python loaded another workspace: {module_path}")
                 self.assertEqual(getattr(cls, "MESSAGE_VERSION", None), version)
                 definition = (ROOT / "src/utils/px4_msgs/msg" / (name + ".msg")).read_text()

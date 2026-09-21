@@ -76,7 +76,8 @@ class Capture:
     def _end(self, reason, monotonic_ns):
         summary = {'reason': reason, 'end_monotonic_ns': monotonic_ns,
                    'received': dict(self.received), 'queue_dropped': dict(self.dropped),
-                   'problems': list(self.problems)}
+                   'problems': list(self.problems),
+                   'subscription_events': dict(self.metadata.get('subscription_events', {}))}
         self.queue.put(('end', summary))
         self.active = False
 
