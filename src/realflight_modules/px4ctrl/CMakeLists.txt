@@ -99,7 +99,7 @@ target_link_libraries(px4ctrl_casadi_nmpc_bridge PRIVATE casadi::casadi)
 # sun: 顶层目标包含输入转换、状态机、外环控制器、参数和坐标变换实现。
 add_executable(px4ctrl_node 
   src/px4ctrl_node.cpp
-  src/ekf_restart.cpp
+  src/fcu_reboot.cpp
 	src/input.cpp
   src/px4ctrlfsm.cpp
   src/controller.cpp

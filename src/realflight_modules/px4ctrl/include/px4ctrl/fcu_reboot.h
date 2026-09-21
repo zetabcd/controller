@@ -8,14 +8,11 @@
 
 namespace px4ctrl {
 
-// Project-private DDS command. Requires firmware/px4-v1.16-ekf-restart.patch.
-constexpr uint32_t kEkfRestartCommand = 100010;
-constexpr float kEkfRestartKey = 4541254.0F; // ASCII "EKF".
-
-class EkfRestartClient
+// Standard PX4 autopilot reboot command over DDS (MAV_CMD 246, param1 = 1).
+class FcuRebootClient
 {
 public:
-    explicit EkfRestartClient(rclcpp::Node &node);
+    explicit FcuRebootClient(rclcpp::Node &node);
     // Called from main(), before the arming/kill checks, including while disarmed.
     void update(uint64_t aux5_changes, bool allowed);
 
@@ -24,9 +21,10 @@ private:
     rclcpp::Node &node_;
     rclcpp::Publisher<px4_msgs::msg::VehicleCommand>::SharedPtr publisher_;
     rclcpp::Subscription<px4_msgs::msg::VehicleCommandAck>::SharedPtr subscription_;
-    uint64_t queued_{0};
-    uint32_t sequence_{0};
-    bool in_flight_{false};
+    // Keep the guard after an ACK: acceptance precedes the actual reboot.
+    // AUX5 changes during this interval are discarded, never queued/replayed.
+    bool request_active_{false};
+    bool ack_pending_{false};
     std::chrono::steady_clock::time_point sent_at_{};
 };
 

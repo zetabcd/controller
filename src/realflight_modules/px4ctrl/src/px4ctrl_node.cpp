@@ -1,6 +1,6 @@
 #include <px4ctrl/px4ctrl_node.h>
 #include <px4ctrl/ommpc.h>
-#include <px4ctrl/ekf_restart.h>
+#include <px4ctrl/fcu_reboot.h>
 #include <uav_utils/other_utils.h>
 #include <uav_utils/project_paths.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -637,7 +637,7 @@ int main(int argc, char *argv[])
 
 	node->fsm.reset_start_time(); // 握手完成后，重置状态机的起始时间
 #ifndef SIMULATION
-	px4ctrl::EkfRestartClient ekf_restart(*node);
+	px4ctrl::FcuRebootClient fcu_reboot(*node);
 	uint64_t last_aux5_change_count = node->fsm.rc_data.aux5_change_count;
 #endif
 	//最后一个while循环，程序会陷在这里面
@@ -647,14 +647,14 @@ int main(int argc, char *argv[])
 #ifdef SIMULATION
 		node->fsm.process();
 #else
-		// AUX5 restart belongs to the main loop, before both kill and arming
+		// AUX5 FCU reboot belongs to the main loop, before both kill and arming
 		// gates. No dependency on manual_on or on running the control FSM.
 		const uint64_t aux5_count = node->fsm.rc_data.aux5_change_count;
 		const auto status_age = (node->now() - node->fsm.sta_data.rcv_stamp).seconds();
-		const bool restart_allowed = node->fsm.rc_is_received(node->now()) &&
+		const bool reboot_allowed = node->fsm.rc_is_received(node->now()) &&
 			node->fsm.sta_data.timestamp != 0 && status_age >= 0.0 && status_age < 1.0 &&
 			node->fsm.sta_data.arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_DISARMED;
-		ekf_restart.update(aux5_count - last_aux5_change_count, restart_allowed);
+		fcu_reboot.update(aux5_count - last_aux5_change_count, reboot_allowed);
 		last_aux5_change_count = aux5_count; // Consume changes even while armed.
 		//判断是否解锁和紧急开关，
 		static bool flag_armed = false;
