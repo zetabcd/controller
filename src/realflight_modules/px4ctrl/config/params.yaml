@@ -48,7 +48,7 @@ px4ctrl_node:
       horizon: 8
       prediction_dt: 0.01
       body_rate_max: [14.0, 14.0, 14.0]
-      state_weight: [15000.0, 15000.0, 17000.0, 40.0, 40.0, 120.0, 200.0, 200.0, 80.0]
+      state_weight: [100.0, 100.0, 100.0, 40.0, 40.0, 10.0, 100.0, 100.0, 40.0]
       input_weight: [0.5, 0.6, 0.6, 0.6]
       terminal_weight_scale: 1.0
 
@@ -111,8 +111,8 @@ px4ctrl_node:
       gain_quat_x   : 12.0 # 7.0
       gain_quat_y   : 13.0 # 8.0
       gain_quat_z   : 2.0 # 2.0
-      gain_rate_p_x : 16.0 # 10.0
-      gain_rate_p_y : 18.0 # 12.0
+      gain_rate_p_x : 10.0 # 10.0
+      gain_rate_p_y : 12.0 # 12.0
       gain_rate_p_z : 4.0
       gain_rate_i_x : 3.0
       gain_rate_i_y : 3.0
