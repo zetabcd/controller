@@ -1,169 +1,40 @@
-# 第三方依赖：源码、本机编译与安装
+# 第三方依赖
 
-`3rdpart/` 现在只管理第三方源码和统一构建脚本，不再保存从某台电脑复制来的
-头文件、共享库或 Debian 安装目录。所有 C/C++ 库都在目标机上编译，并默认安装
-到 `/usr/local`。这样可避免 x86_64/aarch64、glibc 版本和 C++ ABI 不一致导致的
-链接错误。
+控制器只保留 QuadControl、OmMpcControl 和 acados NMPC。正常 C++ 构建依赖：
 
-## 目录布局
+| 依赖 | 用途 |
+| --- | --- |
+| Eigen 3.4.0 | 矩阵与几何 |
+| OSQP 1.0.0 / QDLDL 0.1.8 | OmMpc、轨迹优化 |
+| acados 4c23274e4 / HPIPM / BLASFEO | NMPC |
+| 系统 SuiteSparse/UMFPACK | 角速度内环 |
 
-```text
-3rdpart/
-├── build_all.sh       # 按固定顺序编译并安装依赖
-├── COLCON_IGNORE      # 阻止工作空间 colcon 重复扫描第三方工程
-├── build/             # 本机临时构建目录，已被 Git 忽略
-└── src/               # 固定提交的 Git 子模块，仅保存源码
-    ├── eigen
-    ├── qdldl
-    ├── osqp
-    ├── nlopt
-    ├── ipopt
-    ├── casadi
-    └── acados
-```
+`build_all.sh` 只构建 Eigen、OSQP 和 acados，不再构建 Ipopt、NLopt、CasADi C++。
+原有第三方源码子模块保留，但已不参与当前控制器构建，也不会卸载本机已有库。
+Python CasADi 只在重新生成 acados 模型时需要。
 
-主仓库通过 Git 子模块记录上述七个依赖的精确提交，不直接提交它们的源码文件
-或构建产物。`COLCON_IGNORE` 只隔离 colcon 的包发现，不影响 `build_all.sh`；
-第三方依赖由该脚本构建，工作空间的 colcon 只负责 `src/` 中的 ROS 包。
-
-acados 内部只需要再初始化 `external/blasfeo` 和 `external/hpipm`。工程专用的
-acados 生成代码不是第三方库，位于：
-
-```text
-src/realflight_modules/px4ctrl/generated/acados/px4ctrl_nmpc
-```
-
-这里提交的是 C/H/JSON 源文件；CMake 会在目标机上把它编译成静态目标，不提交
-生成的 `.o` 或 `.so`。
-
-## 固定版本与用途
-
-| 依赖 | 固定版本 | 用途 | 安装方式 |
-| --- | --- | --- | --- |
-| Eigen | 3.4.0 | 矩阵与几何运算 | 源码安装到 `/usr/local` |
-| QDLDL | 0.1.8 | OSQP 的内部线性求解器 | 源码交给 OSQP 构建 |
-| OSQP | 1.0.0 | `ommpc`、`omtraj` | 源码安装到 `/usr/local` |
-| NLopt | 2.7.1 | `nlopt+eigen` NMPC 后端 | 源码安装到 `/usr/local` |
-| Ipopt | 3.14.11 | `ipopt+eigen` 和 CasADi 后端 | 源码安装到 `/usr/local` |
-| CasADi | 3.7.2 | `ipopt+casadi` 后端 | 源码安装到 `/usr/local` |
-| acados | `4c23274e4` | acados NMPC 后端 | 源码安装到 `/usr/local` |
-| BLASFEO | acados 锁定提交 | acados 线性代数 | 随 acados 安装 |
-| HPIPM | acados 锁定提交 | acados QP 求解 | 随 acados 安装 |
-
-OSQP 的上游 `v1.0.0` 源码在直接使用 CMake 构建时不会从 Git 标签自动推导版本，
-其 `OSQP_VERSION` 缓存变量默认值反而是 `0.0.0`。因此 `build_all.sh` 会显式传入
-`-DOSQP_VERSION=1.0.0`，保证安装出的 `osqp-config-version.cmake` 与实际源码版本
-一致，并能通过工程中的 `find_package(osqp 1.0 CONFIG REQUIRED)` 检查。
-
-Ipopt 还使用发行版提供的 BLAS、LAPACK、顺序版 MUMPS 和 Scotch。UMFPACK 由
-`px4ctrlrate_node` 直接使用。这些基础数值库仍作为系统包安装，不复制进仓库。
-ROS 2、PX4 消息及工作空间内的消息/工具包也仍由 ROS 环境和当前工作空间提供。
-
-不需要单独安装 qpOASES：当前 px4ctrl 源码没有调用 qpOASES API。过去出现
-`qpOASES.hpp` 找不到，是历史遗留 include；CasADi 的 qpOASES 插件也不等价于
-qpOASES C++ 开发包。
-
-## 新机器首次安装
-
-以下命令适用于 Ubuntu/Debian。先安装编译工具和由系统维护的基础库：
+## 首次安装
 
 ```bash
-sudo apt update
-sudo apt install -y \
-  build-essential cmake pkg-config autoconf automake libtool \
-  gfortran libblas-dev liblapack-dev libmumps-seq-dev libscotch-dev \
-  libmetis-dev libsuitesparse-dev python3-colcon-common-extensions
-```
-
-克隆主仓库后初始化顶层源码子模块，再初始化 acados 实际使用的两个内部依赖：
-
-```bash
-git submodule update --init
-git -C 3rdpart/src/acados submodule update --init \
-  external/blasfeo external/hpipm
-```
-
-然后原生编译并安装到 `/usr/local`：
-
-```bash
+sudo apt install build-essential cmake pkg-config libsuitesparse-dev python3-colcon-common-extensions
+git submodule update --init 3rdpart/src/eigen 3rdpart/src/qdldl 3rdpart/src/osqp 3rdpart/src/acados
+git -C 3rdpart/src/acados submodule update --init external/blasfeo external/hpipm
 JOBS=2 ./3rdpart/build_all.sh
 ```
 
-无人机内存较小时建议 `JOBS=1` 或 `JOBS=2`。脚本会在安装阶段调用 `sudo`，最后
-执行 `ldconfig`。源码会一直保留在 `3rdpart/src`，构建中间文件保留在被忽略的
-`3rdpart/build`，所以失败后可以从断点继续。
+默认安装到 `/usr/local`，可用 `PREFIX=/opt/manycontroller` 覆盖。安装阶段在必要时
+调用 sudo；不在仓库提交二进制。新脚本还安装 acados 的 `link_libs.json` 和
+`git_commit_hash`，因为当前上游 CMake 不会把这些生成器需要的元数据安装到前缀。
 
-如确实需要别的安装前缀：
-
-```bash
-PREFIX=/opt/manycontroller JOBS=2 ./3rdpart/build_all.sh
-```
-
-随后配置工程时把该前缀传给 CMake：
-
-```bash
-colcon build --packages-up-to px4ctrl --cmake-clean-cache \
-  --cmake-args -DCMAKE_PREFIX_PATH=/opt/manycontroller
-```
-
-## CMake 如何找到库
-
-`src/realflight_modules/px4ctrl/CMakeLists.txt` 不再拼接 `3rdpart` 路径，也不再设置
-指向仓库二进制文件的 RPATH。它采用标准查找规则：
-
-- `find_package(Eigen3 CONFIG REQUIRED)` -> `Eigen3::Eigen`；
-- `find_package(casadi CONFIG REQUIRED)` -> `casadi::casadi`；
-- `find_package(osqp 1.0 CONFIG REQUIRED)` -> `osqp::osqp`；
-- `find_package(acados CONFIG REQUIRED)` -> `acados`、`hpipm`、`blasfeo`；
-- `find_package(NLopt CONFIG REQUIRED)` -> `NLopt::nlopt`；
-- `find_path`/`find_library` 查找 Ipopt 和 SuiteSparse/UMFPACK；
-- 将工程内的 acados 生成 C 源码编译为 `px4ctrl_acados_ocp_solver`。
-
-`/usr/local` 是 CMake 的标准系统前缀。安装脚本执行 `ldconfig` 后，编译和运行时
-都无需写死用户目录。若旧构建缓存还记录着
-`/home/.../manycontroller/3rdpart/...`，必须使用 `--cmake-clean-cache` 或删除工作
-空间的 `build/px4ctrl` 后重新配置。
-
-工程使用项目专用的 `PX4CTRL_IPOPT_INCLUDE_DIR` 和
-`PX4CTRL_IPOPT_LIBRARY` 缓存变量，避免过去的通用 `IPOPT_INCLUDE_DIR`、
-`IPOPT_LIBRARY` 继续指向已经删除的 `3rdpart/optimization`。如果编译命令仍出现
-旧目录，说明整个 px4ctrl 配置缓存尚未清理，应执行：
-
-```bash
-colcon build --packages-up-to px4ctrl --cmake-clean-cache
-```
-
-## 构建工作空间
+CMake 查找 `Eigen3`、`osqp`、`acados` 和 UMFPACK；工程自身的 generated C 源码
+编译为静态目标 `px4ctrl_acados_ocp_solver`，普通编译不用运行 Python。
 
 ```bash
 source /opt/ros/humble/setup.bash
-colcon build --packages-up-to px4ctrl --cmake-clean-cache
+colcon build --packages-up-to px4ctrl --symlink-install
 ```
 
-CMake 配置输出会打印最终使用的 Ipopt、NLopt 和 UMFPACK 路径。可以进一步检查：
-
-```bash
-ldconfig -p | grep -E 'casadi|acados|hpipm|blasfeo|osqp|ipopt|nlopt'
-find /usr/local/include -maxdepth 3 \
-  \( -name 'Eigen' -o -name 'osqp.h' -o -name 'IpIpoptApplication.hpp' \)
-```
-
-## 在另一台电脑同步更新
-
-主仓库更新后执行：
-
-```bash
-git pull --ff-only
-git submodule sync --recursive
-git submodule update --init
-git -C 3rdpart/src/acados submodule update --init \
-  external/blasfeo external/hpipm
-JOBS=2 ./3rdpart/build_all.sh
-```
-
-子模块记录的是精确提交，因此不会再出现 QDLDL 更新步骤把 `v0.1.8` 错当成
-`origin/v0.1.8` 分支进行 rebase 的问题。`build_all.sh` 还通过
-`FETCHCONTENT_SOURCE_DIR_QDLDL` 强制 OSQP 使用仓库中已锁定的 QDLDL 源码。
+若缓存仍指向历史依赖路径，追加 `--cmake-clean-cache`。
 
 ## 修复已安装 OSQP 显示为 0.0.0
 
@@ -208,20 +79,25 @@ source /opt/ros/humble/setup.bash
 colcon build --packages-up-to px4ctrl --cmake-clean-cache
 ```
 
-## 可选：重新生成 acados 模型代码
+## 重新生成 acados 模型代码
 
-只有模型、代价或约束发生变化时才需要执行。现有生成 C 源码足以正常编译。
-先准备 Python 环境并安装 acados_template：
+数值参数从 `px4ctrl/config/params.yaml` 启动时读取，修改后重启即可；包括预测步数、
+步长、重力、代价权重、输入边界、迭代数、容差和时间预算。只有模型、代价维度、
+约束结构或算法类型变化才需生成。
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install 'casadi==3.7.2' \
-  ./3rdpart/src/acados/interfaces/acados_template
+pip install 'casadi==3.7.2' ./3rdpart/src/acados/interfaces/acados_template
 ACADOS_SOURCE_DIR="$PWD/3rdpart/src/acados" \
 ACADOS_INSTALL_PREFIX=/usr/local \
 python3 script/generate_px4ctrl_acados_nmpc.py
 ```
 
-脚本的输出仍写入 px4ctrl 的 `generated/acados/px4ctrl_nmpc`。重新生成后应审查并
-提交 C/H/JSON 的变化，不提交生成的目标文件或共享库。
+模板渲染器默认在 `$ACADOS_SOURCE_DIR/bin/t_renderer`，也可用 `TERA_PATH` 指定已有
+兼容版本。`ACADOS_INSTALL_PREFIX` 必须含 libacados.so 和 lib/link_libs.json；旧安装
+缺少元数据时重新运行更新后的 build_all.sh，或指定一个完整、同版本的安装前缀。
+
+脚本只生成源码，不再额外编译 .so；然后正常 colcon build。提交生成 C/H/JSON 的
+变化，不提交生成目录中的 Makefile、对象或共享库。接口说明和测试见
+[ACADOS_NMPC.md](../src/realflight_modules/px4ctrl/ACADOS_NMPC.md)。

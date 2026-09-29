@@ -26,7 +26,7 @@ struct FigureEightTrajectoryOptions
   double gravity{9.805};
 };
 
-// 返回可直接传给 OmMpcControl/SolverNmpcControl::setTrajectory() 的状态和输入
+// 返回可直接传给 OmMpcControl/AcadosNmpcControl::setTrajectory() 的状态和输入
 // 参考。每个采样点均包含 p、v、姿态、质量归一化推力和机体系角速度。
 OmTrajectoryResult generateFigureEightTrajectory(
   const Eigen::Vector3d &start_position,

@@ -34,10 +34,10 @@
 #include "acados_c/sim_interface.h"
 #include "acados_c/external_function_interface.h"
 
-#define PX4CTRL_NMPC_NX     10
+#define PX4CTRL_NMPC_NX     13
 #define PX4CTRL_NMPC_NZ     0
 #define PX4CTRL_NMPC_NU     4
-#define PX4CTRL_NMPC_NP     0
+#define PX4CTRL_NMPC_NP     12
 
 #ifdef __cplusplus
 extern "C" {

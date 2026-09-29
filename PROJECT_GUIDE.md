@@ -1,6 +1,6 @@
 **工程模块与使用手册**
 
-核对日期：2026-09-28。基于 `trajectory-tracking` 分支、提交 `3a78c7f` 的源码、配置、launch 和本地 Git 历史整理。文中的“当前”指源码配置，不代表已经核实正在运行的节点或旧的 install 构建产物。本次整理没有启动飞行、仿真或修改控制参数。
+控制器架构更新：2026-09-29；其余内容核对日期：2026-09-28。基于 `trajectory-tracking` 分支、提交 `3a78c7f` 的源码、配置、launch 和本地 Git 历史整理。文中的“当前”指源码配置，不代表已经核实正在运行的节点或旧的 install 构建产物。本次整理没有启动飞行、仿真或修改控制参数。
 
 **1. 工程组成与数据流**
 
@@ -8,7 +8,7 @@
 
 | 模块 | 位置 | 功能与入口 |
 |---|---|---|
-| 自研飞行控制 | `src/realflight_modules/px4ctrl` | FSM、6 种顶层控制器、角速度内环、电机分配；`run_ctrl.launch.py` |
+| 自研飞行控制 | `src/realflight_modules/px4ctrl` | FSM、3 种顶层控制器、角速度内环、电机分配；`run_ctrl.launch.py` |
 | 轨迹生成 | `px4ctrl` 内的 `*_trajectory.*`、`omtraj.*` | 5 种 MPC/NMPC CMD 轨迹；离线优化入口 `omtraj_visualizer.launch.py` |
 | PX4 原生位置任务 | `px4ctrl` 内的 `px4_native_position_*` | 向 PX4 发位置航点，由 PX4 自己完成闭环控制 |
 | MuJoCo 仿真 | `src/uav_simulator/quadsim_mujoco` | 刚体、电机动态、桨与气动力、风场和传感器噪声；`mujoco.launch.py` |
@@ -18,7 +18,7 @@
 | 实时可视化 | `px4ctrl` 内的 `realflight_trajectory_visualizer_node.cpp` | 实际与参考轨迹、姿态显示 |
 | 实机通信辅助 | `script/start_onboard_terminals.sh`、`firmware/README.md` | DDS Agent、动捕桥接启动；AUX5 飞控重启与恢复监测 |
 | 消息和工具 | `src/utils` 下的 6 个包 | PX4 消息、调试消息、内环指令、遥控消息、状态机及数学/路径工具 |
-| 数值依赖 | `3rdpart` | Eigen、OSQP、NLopt、Ipopt、CasADi、acados 等源码与构建 |
+| 数值依赖 | `3rdpart` | Eigen、OSQP、acados；CasADi Python 仅用于模型生成 |
 | MINCO（未合入） | 仅 `minco` 分支 | 独立算法库、示例与可视化，不在当前源码树中 |
 
 自研控制链路：
@@ -42,8 +42,8 @@ PX4 原生位置任务是另一条链路：`px4_native_position_node → traject
 
 | 项目 | 当前值 | 位置 |
 |---|---|---|
-| 顶层控制器 | `PX4CTRL_PRIMARY_CONTROLLER=1`，OmMpcControl | [px4ctrlfsm.h](src/realflight_modules/px4ctrl/include/px4ctrl/px4ctrlfsm.h) |
-| CMD 轨迹 | `PX4CTRL_CMD_TRAJECTORY=1`，单圈 barrel roll | 同上 |
+| 顶层控制器 | `PX4CTRL_PRIMARY_CONTROLLER=2`，acados NMPC | [px4ctrlfsm.h](src/realflight_modules/px4ctrl/include/px4ctrl/px4ctrlfsm.h) |
+| CMD 轨迹 | `PX4CTRL_CMD_TRAJECTORY=2`，水平八字 | 同上 |
 | 仿真编译模式 | `SIMULATION` 已定义 | [input.h](src/realflight_modules/px4ctrl/include/px4ctrl/input.h) |
 | 无遥控自动流程 | `USE_WITHOUT_RC` 已定义 | 同上 |
 | IMU 来源 | `PX4CTRL_USE_FILTERED_IMU=0`，sensor_combined | 同上 |
@@ -55,7 +55,7 @@ PX4 原生位置任务是另一条链路：`px4_native_position_node → traject
 
 无遥控流程按控制循环的启动相对时间合成挡位：约 0.1 s 后请求 AUTO_HOVER，约 2.1 s 后请求 CMD；状态转移仍取决于输入是否就绪。启用调参开关时延后悬停请求且不自动进入 CMD。
 
-注意：`px4ctrlfsm.h` 的轨迹注释仍写着“危险机动不作为默认项”，但实际宏值是 `1`，应以宏值为准。`params.yaml` 中八字起飞高度实际是 `0.1 m`，旁边“到达 1 m”的注释也没有同步。
+控制器默认值已更新为 acados（3），CMD 默认为八字（2）；实际轨迹参数以当前 YAML 为准。
 
 **3. 编译、环境与最短仿真流程**
 
@@ -69,7 +69,7 @@ colcon build --packages-up-to px4ctrl flight_data_recorder quadsim_mujoco --syml
 source install/setup.bash
 ```
 
-第三方库首次安装见 [3rdpart/README.md](3rdpart/README.md)。关键流程为初始化子模块，然后运行 `JOBS=2 ./3rdpart/build_all.sh`；脚本会安装到 `/usr/local` 并在安装时使用 sudo。当前 CMake 同时查找多个求解器依赖，单纯把控制器宏改成 0 并不会自动免除其他后端的构建依赖。
+第三方库首次安装见 [3rdpart/README.md](3rdpart/README.md)。关键流程为初始化子模块，然后运行 `JOBS=2 ./3rdpart/build_all.sh`；脚本会安装到 `/usr/local` 并在安装时使用 sudo。当前 CMake 只需要 Eigen、OSQP、acados 和 SuiteSparse/UMFPACK；旧 Ipopt/NLopt 控制器已移除，当前编号为 0、1、2（acados）。
 
 MuJoCo 节点还导入 `mujoco`、`glfw`、NumPy、SciPy、`cv_bridge` 等；源码注释记录 MuJoCo 3.2.3。其 package.xml 还声明了本源码树中没有的 `stservo_msgs`，尽管当前仿真节点没有导入该消息包；新机器依赖解析若在这里失败，需要核查已有外部工作区或清理该遗留声明，不能认为当前包清单已完整覆盖所有环境依赖。
 
@@ -90,7 +90,7 @@ ros2 launch px4ctrl realflight_trajectory_visualizer.launch.py
 
 有 GNOME 桌面时，`bash script/start_px4ctrl_terminals.sh` 会打开控制和轨迹显示两个标签页，仍需另行启动 MuJoCo。关闭仿真器不会自动结束记录器，应正常退出记录器以完成日志收尾。
 
-**4. 6 种顶层控制器与内环**
+**4. 3 种顶层控制器与内环**
 
 修改 [px4ctrlfsm.h](src/realflight_modules/px4ctrl/include/px4ctrl/px4ctrlfsm.h) 的 `PX4CTRL_PRIMARY_CONTROLLER`，然后编译 `px4ctrl` 并重启：
 
@@ -98,10 +98,7 @@ ros2 launch px4ctrl realflight_trajectory_visualizer.launch.py
 |---|---|---|---|
 | 0 | 原 QuadControl 串级控制 | `src/controller.cpp` | `gain`、`filter`、`tuning`；含推力映射 RLS |
 | 1 | OmMpcControl，流形误差线性 MPC / OSQP | `src/ommpc.cpp` | `mpc.*` |
-| 2 | Ipopt + Eigen NMPC | `src/solver_nmpc_ipopt_eigen.cpp` | `nmpc.*` |
-| 3 | acados NMPC | `src/solver_nmpc_acados.cpp`、`generated/acados` | `nmpc.*`，预测长度需与生成代码一致 |
-| 4 | NLopt + Eigen NMPC | `src/solver_nmpc_nlopt_eigen.cpp` | `nmpc.*` |
-| 5 | Ipopt + CasADi NMPC | `src/solver_nmpc_casadi.cpp`、bridge | `nmpc.*` |
+| 2 | acados NMPC | `src/acados_nmpc.cpp`、`src/acados_nmpc_solver.cpp`、`generated/acados` | `nmpc.*`，数值参数运行时配置 |
 
 这些控制器共用 `px4ctrlrate_node` 的角速度内环和电机分配。内环包含角速度 PID、TVR 角加速度估计、刚体力矩补偿、推力/力矩分配、转速到归一化油门反解，以及限幅与输出回退诊断。
 
@@ -112,11 +109,11 @@ source install/setup.bash
 
 宏是 C++ 编译开关，不是 `ros2 param set` 参数，也不是现成的 `-D...` CMake 选项。MPC 的预测步长不同于节点调度周期；NMPC 的代价实现也不能直接当作 `mpc.state_weight` 的另一种求解方式。比较后端时需核对各自模型、代价、预测长度和步长。
 
-改 acados 模型、代价或生成时配置时，使用 [生成脚本](script/generate_px4ctrl_acados_nmpc.py)，再重新编译；普通构建直接使用仓库已有的生成 C 源码即可。Python 生成环境配置见第三方 README。
+acados 的 `nmpc.*` 数值参数从 YAML 在启动时读取，修改后重启即可；`ros2 param set` 不会即时重配求解器。接口与配置说明见 [ACADOS_NMPC.md](src/realflight_modules/px4ctrl/ACADOS_NMPC.md)。只在改变模型、代价维度、约束结构或算法类型时，使用 [生成脚本](script/generate_px4ctrl_acados_nmpc.py)，再重新编译；普通构建直接使用仓库已有的生成 C 源码即可。Python 生成环境配置见第三方 README。
 
 **5. 轨迹生成：5 个现成入口**
 
-对控制器 1–5，修改 `PX4CTRL_CMD_TRAJECTORY` 后编译并重启。控制器 0 的 CMD 走旧的 `set_2D8_ref()` 路径，这个宏不会为它切换到新轨迹框架。
+对控制器 1、3，修改 `PX4CTRL_CMD_TRAJECTORY` 后编译并重启。控制器 0 的 CMD 走旧的 `set_2D8_ref()` 路径，这个宏不会为它切换到新轨迹框架。
 
 | 值 | 轨迹 | 修改入口与生效方式 |
 |---|---|---|
@@ -132,7 +129,7 @@ Minimum-snap 当前设置 10 个相对航点，名义分段速度 0.65 m/s，七
 
 Barrel roll 当前为上升 1 m / 2.5 s、稳定 0.5 s、半径 1 m、轴向速度 0.5 m/s、进入 1.5 s、翻滚 3.5 s、退出 1.5 s、1 圈。其参数尚未暴露为 YAML。
 
-八字可调高度、起飞时长、稳定时长、全长、全宽、最大路径速度、圈数。当前 YAML 为长 3 m、宽 1.8 m、速度 1 m/s、2 圈，起飞相对高度 0.1 m。支持在进入或重新进入 CMD 前设置：
+八字可调高度、起飞时长、稳定时长、全长、全宽、最大路径速度、圈数。当前 YAML 为长 6 m、宽 4 m、速度 3 m/s、2 圈，起飞相对高度 0.5 m。支持在进入或重新进入 CMD 前设置：
 
 ```bash
 ros2 param set /px4ctrl_node trajectory.figure_eight.speed 0.5

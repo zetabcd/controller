@@ -88,6 +88,8 @@
 #define NSPHIN PX4CTRL_NMPC_NSPHIN
 #define NSGN   PX4CTRL_NMPC_NSGN
 #define NSBXN  PX4CTRL_NMPC_NSBXN
+// initial value of stagewise parameters
+static const double p_init[] = {9.805,9.805,0,0,0,0.1,0.083,0.25,0,0,0,0,};
 
 
 
@@ -245,9 +247,9 @@ static ocp_nlp_dims* px4ctrl_nmpc_acados_create_setup_dimensions(px4ctrl_nmpc_so
     nbx[0] = NBX0;
     nsbx[0] = 0;
     ns[0] = NS0;
-    
-    nbxe[0] = 10;
-    
+
+    nbxe[0] = 13;
+
     ny[0] = NY0;
     nh[0] = NH0;
     nsh[0] = NSH0;
@@ -351,14 +353,14 @@ void px4ctrl_nmpc_acados_create_setup_functions(px4ctrl_nmpc_solver_capsule* cap
 
 
 
-    
+
         // explicit ode
         capsule->expl_vde_forw = (external_function_external_param_casadi *) malloc(sizeof(external_function_external_param_casadi)*N);
         for (int i = 0; i < N; i++) {
             MAP_CASADI_FNC(expl_vde_forw[i], px4ctrl_nmpc_expl_vde_forw);
         }
 
-        
+
 
         capsule->expl_ode_fun = (external_function_external_param_casadi *) malloc(sizeof(external_function_external_param_casadi)*N);
         for (int i = 0; i < N; i++) {
@@ -370,7 +372,7 @@ void px4ctrl_nmpc_acados_create_setup_functions(px4ctrl_nmpc_solver_capsule* cap
             MAP_CASADI_FNC(expl_vde_adj[i], px4ctrl_nmpc_expl_vde_adj);
         }
 
-    
+
         // nonlinear least squares cost
         capsule->cost_y_fun = (external_function_external_param_casadi *) malloc(sizeof(external_function_external_param_casadi)*(N-1));
         for (int i = 0; i < N-1; i++)
@@ -398,7 +400,17 @@ void px4ctrl_nmpc_acados_create_setup_functions(px4ctrl_nmpc_solver_capsule* cap
 void px4ctrl_nmpc_acados_create_set_default_parameters(px4ctrl_nmpc_solver_capsule* capsule)
 {
 
-    // no parameters defined
+    const int N = capsule->nlp_solver_plan->N;
+
+    // initialize parameters to initial value
+
+    double* p = malloc(NP*sizeof(double));
+    memcpy(p, p_init, NP*sizeof(double));
+
+    for (int i = 0; i <= N; i++) {
+        px4ctrl_nmpc_acados_update_params(capsule, i, p, NP);
+    }
+    free(p);
 
 
     // no global parameters defined
@@ -435,7 +447,7 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in_numerical_values(px4ctrl_nmpc_solve
     else
     {
         // set time_steps
-    
+
         double time_step = 0.04;
         for (int i = 0; i < N; i++)
         {
@@ -443,18 +455,18 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in_numerical_values(px4ctrl_nmpc_solve
         }
         // set cost scaling
         double* cost_scaling = malloc((N+1)*sizeof(double));
-        cost_scaling[0] = 0.04;
-        cost_scaling[1] = 0.04;
-        cost_scaling[2] = 0.04;
-        cost_scaling[3] = 0.04;
-        cost_scaling[4] = 0.04;
-        cost_scaling[5] = 0.04;
-        cost_scaling[6] = 0.04;
-        cost_scaling[7] = 0.04;
-        cost_scaling[8] = 0.04;
-        cost_scaling[9] = 0.04;
-        cost_scaling[10] = 0.04;
-        cost_scaling[11] = 0.04;
+        cost_scaling[0] = 1;
+        cost_scaling[1] = 1;
+        cost_scaling[2] = 1;
+        cost_scaling[3] = 1;
+        cost_scaling[4] = 1;
+        cost_scaling[5] = 1;
+        cost_scaling[6] = 1;
+        cost_scaling[7] = 1;
+        cost_scaling[8] = 1;
+        cost_scaling[9] = 1;
+        cost_scaling[10] = 1;
+        cost_scaling[11] = 1;
         cost_scaling[12] = 1;
         for (int i = 0; i <= N; i++)
         {
@@ -475,20 +487,24 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in_numerical_values(px4ctrl_nmpc_solve
 
    double* W_0 = calloc(NY0*NY0, sizeof(double));
     // change only the non-zero elements:
-    W_0[0+(NY0) * 0] = 36;
-    W_0[1+(NY0) * 1] = 36;
-    W_0[2+(NY0) * 2] = 36;
-    W_0[3+(NY0) * 3] = 6;
-    W_0[4+(NY0) * 4] = 6;
-    W_0[5+(NY0) * 5] = 6;
-    W_0[6+(NY0) * 6] = 10;
-    W_0[7+(NY0) * 7] = 10;
-    W_0[8+(NY0) * 8] = 10;
-    W_0[9+(NY0) * 9] = 10;
-    W_0[10+(NY0) * 10] = 0.2;
-    W_0[11+(NY0) * 11] = 0.24;
-    W_0[12+(NY0) * 12] = 0.24;
-    W_0[13+(NY0) * 13] = 0.24;
+    W_0[0+(NY0) * 0] = 1;
+    W_0[1+(NY0) * 1] = 1;
+    W_0[2+(NY0) * 2] = 1;
+    W_0[3+(NY0) * 3] = 1;
+    W_0[4+(NY0) * 4] = 1;
+    W_0[5+(NY0) * 5] = 1;
+    W_0[6+(NY0) * 6] = 1;
+    W_0[7+(NY0) * 7] = 1;
+    W_0[8+(NY0) * 8] = 1;
+    W_0[9+(NY0) * 9] = 1;
+    W_0[10+(NY0) * 10] = 1;
+    W_0[11+(NY0) * 11] = 1;
+    W_0[12+(NY0) * 12] = 1;
+    W_0[13+(NY0) * 13] = 1;
+    W_0[14+(NY0) * 14] = 1;
+    W_0[15+(NY0) * 15] = 1;
+    W_0[16+(NY0) * 16] = 1;
+    W_0[17+(NY0) * 17] = 1;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
     free(W_0);
     double* yref = calloc(NY, sizeof(double));
@@ -503,20 +519,20 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in_numerical_values(px4ctrl_nmpc_solve
     free(yref);
     double* W = calloc(NY*NY, sizeof(double));
     // change only the non-zero elements:
-    W[0+(NY) * 0] = 36;
-    W[1+(NY) * 1] = 36;
-    W[2+(NY) * 2] = 36;
-    W[3+(NY) * 3] = 6;
-    W[4+(NY) * 4] = 6;
-    W[5+(NY) * 5] = 6;
-    W[6+(NY) * 6] = 10;
-    W[7+(NY) * 7] = 10;
-    W[8+(NY) * 8] = 10;
-    W[9+(NY) * 9] = 10;
-    W[10+(NY) * 10] = 0.2;
-    W[11+(NY) * 11] = 0.24;
-    W[12+(NY) * 12] = 0.24;
-    W[13+(NY) * 13] = 0.24;
+    W[0+(NY) * 0] = 1;
+    W[1+(NY) * 1] = 1;
+    W[2+(NY) * 2] = 1;
+    W[3+(NY) * 3] = 1;
+    W[4+(NY) * 4] = 1;
+    W[5+(NY) * 5] = 1;
+    W[6+(NY) * 6] = 1;
+    W[7+(NY) * 7] = 1;
+    W[8+(NY) * 8] = 1;
+    W[9+(NY) * 9] = 1;
+    W[10+(NY) * 10] = 1;
+    W[11+(NY) * 11] = 1;
+    W[12+(NY) * 12] = 1;
+    W[13+(NY) * 13] = 1;
 
     for (int i = 1; i < N; i++)
     {
@@ -531,16 +547,16 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in_numerical_values(px4ctrl_nmpc_solve
 
     double* W_e = calloc(NYN*NYN, sizeof(double));
     // change only the non-zero elements:
-    W_e[0+(NYN) * 0] = 70;
-    W_e[1+(NYN) * 1] = 70;
-    W_e[2+(NYN) * 2] = 70;
-    W_e[3+(NYN) * 3] = 12;
-    W_e[4+(NYN) * 4] = 12;
-    W_e[5+(NYN) * 5] = 12;
-    W_e[6+(NYN) * 6] = 20;
-    W_e[7+(NYN) * 7] = 20;
-    W_e[8+(NYN) * 8] = 20;
-    W_e[9+(NYN) * 9] = 20;
+    W_e[0+(NYN) * 0] = 1;
+    W_e[1+(NYN) * 1] = 1;
+    W_e[2+(NYN) * 2] = 1;
+    W_e[3+(NYN) * 3] = 1;
+    W_e[4+(NYN) * 4] = 1;
+    W_e[5+(NYN) * 5] = 1;
+    W_e[6+(NYN) * 6] = 1;
+    W_e[7+(NYN) * 7] = 1;
+    W_e[8+(NYN) * 8] = 1;
+    W_e[9+(NYN) * 9] = 1;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
     free(W_e);
 
@@ -564,6 +580,9 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in_numerical_values(px4ctrl_nmpc_solve
     idxbx0[7] = 7;
     idxbx0[8] = 8;
     idxbx0[9] = 9;
+    idxbx0[10] = 10;
+    idxbx0[11] = 11;
+    idxbx0[12] = 12;
 
     double* lubx0 = calloc(2*NBX0, sizeof(double));
     double* lbx0 = lubx0;
@@ -578,7 +597,7 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in_numerical_values(px4ctrl_nmpc_solve
     free(idxbx0);
     free(lubx0);
     // idxbxe_0
-    int* idxbxe_0 = malloc(10 * sizeof(int));
+    int* idxbxe_0 = malloc(13 * sizeof(int));
     idxbxe_0[0] = 0;
     idxbxe_0[1] = 1;
     idxbxe_0[2] = 2;
@@ -589,6 +608,9 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in_numerical_values(px4ctrl_nmpc_solve
     idxbxe_0[7] = 7;
     idxbxe_0[8] = 8;
     idxbxe_0[9] = 9;
+    idxbxe_0[10] = 10;
+    idxbxe_0[11] = 11;
+    idxbxe_0[12] = 12;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, nlp_out, 0, "idxbxe", idxbxe_0);
     free(idxbxe_0);
 
@@ -695,7 +717,7 @@ void px4ctrl_nmpc_acados_create_setup_nlp_in(px4ctrl_nmpc_solver_capsule* capsul
     for (int i = 0; i < N; i++)
     {
         ocp_nlp_dynamics_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "expl_vde_forw", &capsule->expl_vde_forw[i]);
-        
+
         ocp_nlp_dynamics_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "expl_ode_fun", &capsule->expl_ode_fun[i]);
         ocp_nlp_dynamics_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "expl_vde_adj", &capsule->expl_vde_adj[i]);
     }
@@ -845,7 +867,7 @@ static void px4ctrl_nmpc_acados_create_set_opts(px4ctrl_nmpc_solver_capsule* cap
     double nlp_solver_tol_comp = 0.00001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
 
-    int nlp_solver_max_iter = 30;
+    int nlp_solver_max_iter = 60;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
 
     // set options for adaptive Levenberg-Marquardt Update
@@ -864,7 +886,7 @@ static void px4ctrl_nmpc_acados_create_set_opts(px4ctrl_nmpc_solver_capsule* cap
     double adaptive_levenberg_marquardt_obj_scalar = 2;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_obj_scalar", &adaptive_levenberg_marquardt_obj_scalar);
 
-    bool eval_residual_at_max_iter = false;
+    bool eval_residual_at_max_iter = true;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "eval_residual_at_max_iter", &eval_residual_at_max_iter);
 
     // QP scaling
@@ -1108,7 +1130,7 @@ int px4ctrl_nmpc_acados_update_params(px4ctrl_nmpc_solver_capsule* capsule, int 
 {
     int solver_status = 0;
 
-    int casadi_np = 0;
+    int casadi_np = 12;
     if (casadi_np != np) {
         printf("acados_update_params: trying to set %i parameters for external functions."
             " External function has %i parameters. Exiting.\n", np, casadi_np);
@@ -1179,13 +1201,13 @@ int px4ctrl_nmpc_acados_free(px4ctrl_nmpc_solver_capsule* capsule)
     for (int i = 0; i < N; i++)
     {
         external_function_external_param_casadi_free(&capsule->expl_vde_forw[i]);
-        
+
         external_function_external_param_casadi_free(&capsule->expl_ode_fun[i]);
         external_function_external_param_casadi_free(&capsule->expl_vde_adj[i]);
     }
     free(capsule->expl_vde_adj);
     free(capsule->expl_vde_forw);
-    
+
     free(capsule->expl_ode_fun);
 
     // cost
@@ -1223,7 +1245,7 @@ void px4ctrl_nmpc_acados_print_stats(px4ctrl_nmpc_solver_capsule* capsule)
         printf("stat_n_max = %d is too small, increase it in the template!\n", stat_n_max);
         exit(1);
     }
-    double stat[496];
+    double stat[976];
     ocp_nlp_get(capsule->nlp_solver, "statistics", stat);
 
     int nrow = nlp_iter+1 < stat_m ? nlp_iter+1 : stat_m;

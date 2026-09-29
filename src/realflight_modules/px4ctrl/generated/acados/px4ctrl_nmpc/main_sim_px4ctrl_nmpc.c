@@ -73,8 +73,11 @@ int main()
     x_current[7] = 0.0;
     x_current[8] = 0.0;
     x_current[9] = 0.0;
+    x_current[10] = 0.0;
+    x_current[11] = 0.0;
+    x_current[12] = 0.0;
 
-  
+
     x_current[0] = 0;
     x_current[1] = 0;
     x_current[2] = 0;
@@ -85,8 +88,11 @@ int main()
     x_current[7] = 0;
     x_current[8] = 0;
     x_current[9] = 0;
-    
-  
+    x_current[10] = 0;
+    x_current[11] = 0;
+    x_current[12] = 0;
+
+
 
 
     // initial value for control input
@@ -95,8 +101,25 @@ int main()
     u0[1] = 0.0;
     u0[2] = 0.0;
     u0[3] = 0.0;
+    // set parameters
+    double p[NP];
+    p[0] = 9.805;
+    p[1] = 9.805;
+    p[2] = 0;
+    p[3] = 0;
+    p[4] = 0;
+    p[5] = 0.1;
+    p[6] = 0.083;
+    p[7] = 0.25;
+    p[8] = 0;
+    p[9] = 0;
+    p[10] = 0;
+    p[11] = 0;
 
-  
+    px4ctrl_nmpc_acados_sim_update_params(capsule, p, NP);
+
+
+
 
 
     int n_sim_steps = 3;
@@ -120,7 +143,7 @@ int main()
         sim_out_get(acados_sim_config, acados_sim_dims,
                acados_sim_out, "x", x_current);
 
-    
+
 
         // print solution
         printf("\nx_current, %d\n", ii);

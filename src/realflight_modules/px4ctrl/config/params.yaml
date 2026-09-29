@@ -52,12 +52,27 @@ px4ctrl_node:
       input_weight: [0.5, 0.6, 0.6, 0.6]
       terminal_weight_scale: 1.0
 
-    # 四种 NMPC 后端共享参数；acados 的 horizon 必须与生成代码一致。
+    # acados 运行时参数：修改后重启节点即可，不需要生成代码或重新编译。
     nmpc:
-      horizon: 12
-      prediction_dt: 0.04
+      horizon: 12                 # 预测步数，可运行时配置（1..200）
+      prediction_dt: 0.04          # 预测间隔 [s]，独立于外环周期
+      # 角速度闭环响应的近似时间常数 [s]；不是纯延迟，须 >= prediction_dt。
+      # 改内环增益/滤波/电机后应重新辨识，不要用调大 Qp 来弥补模型误差。
+      rate_time_constant: [0.10, 0.083, 0.25]
+      drag_compensation: true      # 预测/参考补偿共用 aero.kd*/kh 与 uav.mass，假定无风
       maximum_iterations: 60
+      tolerance: 1.0e-5
+      solve_time_budget_ms: 8.0    # SQP 迭代间检查，不是硬实时抢占
       body_rate_max: [14.0, 14.0, 14.0]
+      # 离散累加代价，不额外乘 dt；顺序 p(3), v(3), q_wxyz(4)
+      state_weight: [18.0, 18.0, 18.0, 3.0, 3.0, 3.0, 5.0, 5.0, 5.0, 5.0]
+      terminal_weight: [35.0, 35.0, 35.0, 6.0, 6.0, 6.0, 10.0, 10.0, 10.0, 10.0]
+      input_weight: [0.10, 0.12, 0.12, 0.12]  # a_T, omega_xyz
+      command_change_weight: [0.02, 0.12, 0.12, 0.12]  # u0 与上周期实际命令的差
+      # 求解失败当帧启用反馈回退；不保持旧角速度。重力沿用 gra，推力界限由电机/质量计算。
+      fallback_position_gain: [2.5, 2.5, 2.5]
+      fallback_velocity_gain: [3.0, 3.0, 3.0]
+      fallback_attitude_gain: 4.0
 
     # sun: 刚体参数使用 SI 单位；惯量是机体系主轴对角项，机臂角从 +x 轴量起。
     uav:

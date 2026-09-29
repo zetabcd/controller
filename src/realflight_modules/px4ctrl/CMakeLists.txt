@@ -41,17 +41,8 @@ find_package(visualization_msgs REQUIRED)
 # prefix (the provided script uses /usr/local).  3rdpart/src contains source
 # checkouts only and is deliberately not part of CMake's dependency search.
 find_package(Eigen3 3.3 CONFIG REQUIRED)
-find_package(casadi CONFIG REQUIRED)
 find_package(osqp 1.0 CONFIG REQUIRED)
 find_package(acados CONFIG REQUIRED)
-find_package(NLopt 2.7 CONFIG REQUIRED)
-
-# Use project-specific cache names. Older builds cached IPOPT_INCLUDE_DIR and
-# IPOPT_LIBRARY under the removed 3rdpart/optimization tree; reusing those
-# generic names can silently preserve a dead path after dependency migration.
-find_path(PX4CTRL_IPOPT_INCLUDE_DIR NAMES IpIpoptApplication.hpp
-  PATH_SUFFIXES coin-or coin REQUIRED)
-find_library(PX4CTRL_IPOPT_LIBRARY NAMES ipopt REQUIRED)
 
 set(PX4CTRL_ACADOS_GENERATED
   "${CMAKE_CURRENT_SOURCE_DIR}/generated/acados/px4ctrl_nmpc")
@@ -62,9 +53,6 @@ find_library(UMFPACK_LIBRARY NAMES umfpack REQUIRED)
 
 message(STATUS "px4ctrl Eigen: Eigen3::Eigen")
 message(STATUS "px4ctrl OSQP: osqp::osqp")
-message(STATUS "px4ctrl Ipopt include: ${PX4CTRL_IPOPT_INCLUDE_DIR}")
-message(STATUS "px4ctrl Ipopt library: ${PX4CTRL_IPOPT_LIBRARY}")
-message(STATUS "px4ctrl NLopt: NLopt::nlopt")
 message(STATUS "px4ctrl acados: acados")
 message(STATUS "px4ctrl UMFPACK: ${UMFPACK_LIBRARY}")
 
@@ -88,13 +76,10 @@ target_include_directories(px4ctrl_acados_ocp_solver PUBLIC
   "${PX4CTRL_ACADOS_GENERATED}")
 target_link_libraries(px4ctrl_acados_ocp_solver PUBLIC acados hpipm blasfeo m)
 
-# CasADi is isolated behind a plain-C bridge so no CasADi C++ type enters the
-# public controller interface.
-add_library(px4ctrl_casadi_nmpc_bridge STATIC
-  src/solver_nmpc_casadi_bridge.cpp)
-target_include_directories(px4ctrl_casadi_nmpc_bridge PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(px4ctrl_casadi_nmpc_bridge PRIVATE casadi::casadi)
+# ROS-independent acados solver, also exercised directly by regression tests.
+add_library(px4ctrl_acados_nmpc STATIC src/acados_nmpc_solver.cpp)
+target_include_directories(px4ctrl_acados_nmpc PUBLIC include)
+target_link_libraries(px4ctrl_acados_nmpc PUBLIC Eigen3::Eigen px4ctrl_acados_ocp_solver)
 
 # sun: 顶层目标包含输入转换、状态机、外环控制器、参数和坐标变换实现。
 add_executable(px4ctrl_node 
@@ -111,11 +96,7 @@ add_executable(px4ctrl_node
   src/barrel_roll_trajectory.cpp
   src/five_turn_trajectory.cpp
   src/figure_eight_trajectory.cpp
-  src/solver_nmpc_common.cpp
-  src/solver_nmpc_ipopt_eigen.cpp
-  src/solver_nmpc_nlopt_eigen.cpp
-  src/solver_nmpc_casadi.cpp
-  src/solver_nmpc_acados.cpp
+  src/acados_nmpc.cpp
 )
 ament_target_dependencies(px4ctrl_node 
   rclcpp 
@@ -130,17 +111,11 @@ ament_target_dependencies(px4ctrl_node
   ratectrl_msgs
   std_srvs
 )
-target_include_directories(px4ctrl_node SYSTEM PRIVATE
-  "${PX4CTRL_IPOPT_INCLUDE_DIR}")
 target_include_directories(px4ctrl_node PRIVATE include)
-target_compile_definitions(px4ctrl_node PRIVATE HAVE_CSTDDEF)
 target_link_libraries(px4ctrl_node
   Eigen3::Eigen
   osqp::osqp
-  ${PX4CTRL_IPOPT_LIBRARY}
-  NLopt::nlopt
-  px4ctrl_casadi_nmpc_bridge
-  px4ctrl_acados_ocp_solver
+  px4ctrl_acados_nmpc
   m)
 
 add_executable(omtraj_visualizer_node
@@ -215,6 +190,9 @@ install(DIRECTORY launch DESTINATION share/${PROJECT_NAME}/)
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME}/)
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(acados_nmpc_test test/acados_nmpc_test.cpp)
+  target_link_libraries(acados_nmpc_test px4ctrl_acados_nmpc)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # uncomment the line when a copyright and license is not present in all source files

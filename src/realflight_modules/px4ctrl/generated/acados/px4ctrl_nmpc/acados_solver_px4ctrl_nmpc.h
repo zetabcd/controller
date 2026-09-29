@@ -36,13 +36,13 @@
 #include "acados_c/ocp_nlp_interface.h"
 #include "acados_c/external_function_interface.h"
 
-#define PX4CTRL_NMPC_NX     10
+#define PX4CTRL_NMPC_NX     13
 #define PX4CTRL_NMPC_NZ     0
 #define PX4CTRL_NMPC_NU     4
-#define PX4CTRL_NMPC_NP     0
+#define PX4CTRL_NMPC_NP     12
 #define PX4CTRL_NMPC_NP_GLOBAL     0
 #define PX4CTRL_NMPC_NBX    0
-#define PX4CTRL_NMPC_NBX0   10
+#define PX4CTRL_NMPC_NBX0   13
 #define PX4CTRL_NMPC_NBU    4
 #define PX4CTRL_NMPC_NSBX   0
 #define PX4CTRL_NMPC_NSBU   0
@@ -61,7 +61,7 @@
 #define PX4CTRL_NMPC_NG     0
 #define PX4CTRL_NMPC_NBXN   0
 #define PX4CTRL_NMPC_NGN    0
-#define PX4CTRL_NMPC_NY0    14
+#define PX4CTRL_NMPC_NY0    18
 #define PX4CTRL_NMPC_NY     14
 #define PX4CTRL_NMPC_NYN    10
 #define PX4CTRL_NMPC_N      12

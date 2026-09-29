@@ -24,26 +24,28 @@
 #include <px4ctrl/input.h>
 #include <px4ctrl/minimum_snap_trajectory.h>
 #include <px4ctrl/five_turn_trajectory.h>
-#include <px4ctrl/solver_nmpc.h>
+#include <px4ctrl/acados_nmpc.h>
 
 class PX4ControlNode;
 
-// 顶层控制器唯一切换开关。所有实现都保留，修改一个数字即可切换：
-// 0=QuadControl, 1=OmMpcControl, 2=Ipopt+Eigen, 3=acados,
-// 4=NLopt+Eigen, 5=Ipopt+CasADi。
+// 顶层控制器编译开关；连续编号 0、1、2：
+// 0=QuadControl, 1=OmMpcControl, 2=acados NMPC。
 #ifndef PX4CTRL_PRIMARY_CONTROLLER
-#define PX4CTRL_PRIMARY_CONTROLLER 3
+#define PX4CTRL_PRIMARY_CONTROLLER 2
 #endif
 
 // 旧条件宏现在表示“使用可接收 OmTrajectoryResult 的轨迹控制器”。保留名称
 // 是为了避免扰动已经严格隔离的 FSM 安全/轨迹逻辑；只有 0=QuadControl 为假。
+#if PX4CTRL_PRIMARY_CONTROLLER != 0 && PX4CTRL_PRIMARY_CONTROLLER != 1 && PX4CTRL_PRIMARY_CONTROLLER != 2
+#error "Supported controllers: 0=QuadControl, 1=OmMpcControl, 2=acados NMPC"
+#endif
 #define PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER (PX4CTRL_PRIMARY_CONTROLLER != 0)
 
 // MPC 的 CMD 轨迹唯一切换开关：0=minimum-snap，1=barrel roll，
 // 2=figure eight，3=论文最小-jerk多圈翻滚，4=本项目 OmTrajectoryOptimizer。
 // 危险机动不作为默认项自动启用。
 #ifndef PX4CTRL_CMD_TRAJECTORY
-#define PX4CTRL_CMD_TRAJECTORY 2
+#define PX4CTRL_CMD_TRAJECTORY 3
 #endif
 
 class PX4CtrlFSM
@@ -67,17 +69,7 @@ public:
     // [ACTIVE] 流形 MPC；保持同名 controller 使 FSM 公共调用接口无需改写。
     OmMpcControl controller;
 #elif PX4CTRL_PRIMARY_CONTROLLER == 2
-    // [ALTERNATIVE] Ipopt + Eigen，直接单重射并使用 L-BFGS Hessian。
-    IpoptEigenNmpcControl controller;
-#elif PX4CTRL_PRIMARY_CONTROLLER == 3
-    // [ALTERNATIVE] acados 生成式 SQP + HPIPM 后端。
     AcadosNmpcControl controller;
-#elif PX4CTRL_PRIMARY_CONTROLLER == 4
-    // [ALTERNATIVE] NLopt + Eigen，边界约束 L-BFGS 后端。
-    NloptEigenNmpcControl controller;
-#elif PX4CTRL_PRIMARY_CONTROLLER == 5
-    // [ALTERNATIVE] CasADi 自动微分建模 + Ipopt 后端。
-    IpoptCasadiNmpcControl controller;
 #else
     // [LEGACY ACTIVE] 将上面的宏改为 0 即恢复原串级控制器。
     QuadControl controller;
@@ -128,6 +120,8 @@ public:
     rclcpp::Client<px4_msgs::srv::VehicleCommand>::SharedPtr vehicle_command_client;
 
 private:
+    void calculate_control_();
+    void reset_controller_();
     // 遥控器边沿只持续一个回调周期，因此将模式切换意图锁存到服务确认返回。
     enum class ModeSwitchTarget {
         NONE,

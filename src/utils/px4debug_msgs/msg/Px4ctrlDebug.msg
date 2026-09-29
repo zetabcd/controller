@@ -50,3 +50,14 @@ float32 voltage
 # sun: 在线辨识得到的推力信号到竖直加速度比例，用于观察模型收敛。
 float32 thr2acc
 
+
+# acados diagnostics, valid only when nmpc_active is true. Status 0 is success.
+bool nmpc_active
+bool nmpc_solved
+bool nmpc_fallback
+int32 nmpc_status
+int32 nmpc_iterations
+int32 nmpc_consecutive_failures
+float64 nmpc_solve_time_ms
+float64 nmpc_objective
+float64 nmpc_residual

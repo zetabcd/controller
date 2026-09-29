@@ -45,6 +45,8 @@
 // example specific
 #include "px4ctrl_nmpc_model/px4ctrl_nmpc_model.h"
 #include "acados_sim_solver_px4ctrl_nmpc.h"
+// initial value of stagewise parameters
+static const double p_init[] = {9.805,9.805,0,0,0,0.1,0.083,0.25,0,0,0,0,};
 
 // ** solver data **
 
@@ -81,14 +83,14 @@ int px4ctrl_nmpc_acados_sim_create(px4ctrl_nmpc_sim_solver_capsule * capsule)
     external_function_opts_set_to_default(&ext_fun_opts);
     ext_fun_opts.external_workspace = false;
 
-    
+
     // explicit ode
     capsule->sim_expl_vde_forw = (external_function_param_casadi *) malloc(sizeof(external_function_param_casadi));
     capsule->sim_vde_adj_casadi = (external_function_param_casadi *) malloc(sizeof(external_function_param_casadi));
     capsule->sim_expl_ode_fun_casadi = (external_function_param_casadi *) malloc(sizeof(external_function_param_casadi));
-    
+
         capsule->sim_expl_vde_forw_p = NULL;
-    
+
 
     capsule->sim_expl_vde_forw->casadi_fun = &px4ctrl_nmpc_expl_vde_forw;
     capsule->sim_expl_vde_forw->casadi_n_in = &px4ctrl_nmpc_expl_vde_forw_n_in;
@@ -114,9 +116,9 @@ int px4ctrl_nmpc_acados_sim_create(px4ctrl_nmpc_sim_solver_capsule * capsule)
     capsule->sim_expl_ode_fun_casadi->casadi_work = &px4ctrl_nmpc_expl_ode_fun_work;
     external_function_param_casadi_create(capsule->sim_expl_ode_fun_casadi, np, &ext_fun_opts);
 
-    
 
-    
+
+
 
     // sim plan & config
     sim_solver_plan_t plan;
@@ -145,7 +147,7 @@ int px4ctrl_nmpc_acados_sim_create(px4ctrl_nmpc_sim_solver_capsule * capsule)
     sim_collocation_type collocation_type = GAUSS_LEGENDRE;
     sim_opts_set(px4ctrl_nmpc_sim_config, px4ctrl_nmpc_sim_opts, "collocation_type", &collocation_type);
 
- 
+
     tmp_int = 4;
     sim_opts_set(px4ctrl_nmpc_sim_config, px4ctrl_nmpc_sim_opts, "num_stages", &tmp_int);
     tmp_int = 1;
@@ -170,7 +172,7 @@ int px4ctrl_nmpc_acados_sim_create(px4ctrl_nmpc_sim_solver_capsule * capsule)
                  "expl_vde_adj", capsule->sim_vde_adj_casadi);
     px4ctrl_nmpc_sim_config->model_set(px4ctrl_nmpc_sim_in->model,
                  "expl_ode_fun", capsule->sim_expl_ode_fun_casadi);
-    
+
 
     // sim solver
     sim_solver *px4ctrl_nmpc_sim_solver = sim_solver_create(px4ctrl_nmpc_sim_config,
@@ -180,11 +182,18 @@ int px4ctrl_nmpc_acados_sim_create(px4ctrl_nmpc_sim_solver_capsule * capsule)
     capsule->acados_sim_mem = px4ctrl_nmpc_sim_solver->mem;
 
 
+    /* initialize parameter values */
+
+    double* p = malloc(np*sizeof(double));
+    memcpy(p, p_init, np*sizeof(double));
+    px4ctrl_nmpc_acados_sim_update_params(capsule, p, np);
+    free(p);
+
 
     /* initialize input */
     // x
-    double x0[10];
-    for (int ii = 0; ii < 10; ii++)
+    double x0[13];
+    for (int ii = 0; ii < 13; ii++)
         x0[ii] = 0.0;
 
     sim_in_set(px4ctrl_nmpc_sim_config, px4ctrl_nmpc_sim_dims,
@@ -200,11 +209,11 @@ int px4ctrl_nmpc_acados_sim_create(px4ctrl_nmpc_sim_solver_capsule * capsule)
                px4ctrl_nmpc_sim_in, "u", u0);
 
     // S_forw
-    double S_forw[140];
-    for (int ii = 0; ii < 140; ii++)
+    double S_forw[221];
+    for (int ii = 0; ii < 221; ii++)
         S_forw[ii] = 0.0;
-    for (int ii = 0; ii < 10; ii++)
-        S_forw[ii + ii * 10 ] = 1.0;
+    for (int ii = 0; ii < 13; ii++)
+        S_forw[ii + ii * 13 ] = 1.0;
 
 
     sim_in_set(px4ctrl_nmpc_sim_config, px4ctrl_nmpc_sim_dims,
@@ -244,11 +253,11 @@ int px4ctrl_nmpc_acados_sim_free(px4ctrl_nmpc_sim_solver_capsule *capsule)
     external_function_param_casadi_free(capsule->sim_expl_vde_forw);
     external_function_param_casadi_free(capsule->sim_vde_adj_casadi);
     external_function_param_casadi_free(capsule->sim_expl_ode_fun_casadi);
-    
+
     free(capsule->sim_expl_vde_forw);
     free(capsule->sim_vde_adj_casadi);
     free(capsule->sim_expl_ode_fun_casadi);
-    
+
 
     return 0;
 }
@@ -267,7 +276,7 @@ int px4ctrl_nmpc_acados_sim_update_params(px4ctrl_nmpc_sim_solver_capsule *capsu
     capsule->sim_expl_vde_forw[0].set_param(capsule->sim_expl_vde_forw, p);
     capsule->sim_vde_adj_casadi[0].set_param(capsule->sim_vde_adj_casadi, p);
     capsule->sim_expl_ode_fun_casadi[0].set_param(capsule->sim_expl_ode_fun_casadi, p);
-    
+
 
     return status;
 }

@@ -19,7 +19,10 @@ using namespace uav_utils;
 PX4CtrlFSM::PX4CtrlFSM(PX4ControlNode& px4controlnode) : 
     rc_data(px4controlnode), sta_data(px4controlnode), bat_data(px4controlnode),
     sens_data(px4controlnode), att_data(px4controlnode), pose_data(px4controlnode),
-    controller(px4controlnode), px4controlnode_(px4controlnode) 
+#if PX4CTRL_PRIMARY_CONTROLLER != 2
+    controller(px4controlnode),
+#endif
+    px4controlnode_(px4controlnode)
 {
     // sun: procedure_list_ 的顺序必须与头文件 procedure_id_ 枚举一致，否则状态号会调用错误处理函数。
     start_time_ = px4controlnode_.get_clock()->now();
@@ -206,7 +209,7 @@ void* PX4CtrlFSM::FSM_FUNCT(manual)(void * this_fsm)
 #endif
         set_init_ref();
         record_position();
-        controller.resetControlParams();
+        reset_controller_();
 #ifndef USE_WITHOUT_RC
         set_manual_ref(dt_, true);
 #endif
@@ -290,14 +293,7 @@ void* PX4CtrlFSM::FSM_FUNCT(manual)(void * this_fsm)
     control_sp_.bodyrates = Eigen::Vector3d::Zero();
 #else
     set_manual_ref(dt_,false);
-    debug_msg = controller.calculateControl(
-        ref_, 
-        pose_data, 
-        att_data, 
-        sens_data, 
-        dt_,
-        control_sp_,  
-        px4controlnode_.param);
+    calculate_control_();
 #endif
     publish_rates_thrust_setpoint();
     return NULL;
@@ -317,7 +313,7 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
         set_init_ref();
         record_position();
         reset_point_reference_(record_state_data.p + record_state_data.v * 0.3);
-        controller.resetControlParams();
+        reset_controller_();
 #if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
         // [LEGACY QuadControl] 悬停阶段复位推力映射。
         controller.resetThrustMapping(px4controlnode_.param);
@@ -404,14 +400,7 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
 #if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
     controller.estimateThrustModel(sens_data.a);
 #endif
-    debug_msg = controller.calculateControl(
-        ref_, 
-        pose_data, 
-        att_data, 
-        sens_data, 
-        dt_,
-        control_sp_,
-        px4controlnode_.param);
+    calculate_control_();
 
     // RCLCPP_INFO(px4controlnode_.get_logger(),"\033[31mJust for debug!!!\033[0m");
 
@@ -435,7 +424,7 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
         // OmMpcControl 内部缓存的 OmTrajectoryResult。
         set_hover_ref();
 #endif
-        controller.resetControlParams();
+        reset_controller_();
 #if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
 #if PX4CTRL_CMD_TRAJECTORY == 2
         if (!load_figure_eight_cmd_trajectory_()) {
@@ -540,14 +529,7 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
     px4controlnode_.init_param();
     set_2D8_ref();
 #endif
-    debug_msg = controller.calculateControl(
-        ref_, 
-        pose_data, 
-        att_data, 
-        sens_data, 
-        dt_,
-        control_sp_, 
-        px4controlnode_.param);
+    calculate_control_();
     publish_rates_thrust_setpoint();
     return NULL;
 }
@@ -566,7 +548,7 @@ void* PX4CtrlFSM::FSM_FUNCT(safe)(void* this_fsm)
         controller.clearTrajectory();
 #endif
         record_position();
-        controller.resetControlParams();
+        reset_controller_();
 #if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
         // [LEGACY QuadControl] 安全模式恢复推力映射。
         controller.resetThrustMapping(px4controlnode_.param);
@@ -595,14 +577,7 @@ void* PX4CtrlFSM::FSM_FUNCT(safe)(void* this_fsm)
         }
         set_land_ref();
     }
-    debug_msg = controller.calculateControl(
-        ref_, 
-        pose_data, 
-        att_data, 
-        sens_data, 
-        dt_,
-        control_sp_, 
-        px4controlnode_.param);
+    calculate_control_();
     publish_rates_thrust_setpoint();
 
     return NULL;
@@ -1501,4 +1476,31 @@ void PX4CtrlFSM::publish_rates_thrust_setpoint()
     msg.rate_dot_ref[2] = control_sp_.rate_dot_ref[2];
 	msg.timestamp = this->px4controlnode_.get_clock()->now().nanoseconds() / 1000;
 	rates_thrust_setpoint_publisher->publish(msg);
+}
+
+// Keep legacy-controller adaptation at the FSM boundary, outside acados itself.
+void PX4CtrlFSM::calculate_control_()
+{
+#if PX4CTRL_PRIMARY_CONTROLLER == 2
+    debug_msg = controller.calculate(ref_, pose_data, att_data, sens_data.w,
+        px4controlnode_.get_clock()->now().seconds(), dt_, control_sp_);
+    const auto &d = controller.diagnostics();
+    if (d.fallback) {
+        RCLCPP_WARN_THROTTLE(px4controlnode_.get_logger(), *px4controlnode_.get_clock(),
+            1000, "[acados] Feedback fallback: status=%d, failures=%d, iter=%d, time=%.3f ms",
+            d.status, d.consecutive_failures, d.iterations, d.solve_time_ms);
+    }
+#else
+    debug_msg = controller.calculateControl(ref_, pose_data, att_data,
+        sens_data, dt_, control_sp_, px4controlnode_.param);
+#endif
+}
+
+void PX4CtrlFSM::reset_controller_()
+{
+#if PX4CTRL_PRIMARY_CONTROLLER == 2
+    controller.reset();
+#else
+    controller.resetControlParams();
+#endif
 }

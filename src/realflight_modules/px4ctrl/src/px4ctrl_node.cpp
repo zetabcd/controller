@@ -290,11 +290,32 @@ void PX4ControlNode::config_from_ros_handle()
         "mpc.input_weight", {0.5, 0.6, 0.6, 0.6});
     this->declare_parameter<double>("mpc.terminal_weight_scale", 1.0);
 
-    this->declare_parameter<int>("nmpc.horizon", 12);
-    this->declare_parameter<double>("nmpc.prediction_dt", 0.04);
-    this->declare_parameter<int>("nmpc.maximum_iterations", 60);
+    rcl_interfaces::msg::ParameterDescriptor nmpc_descriptor;
+    nmpc_descriptor.read_only = true;
+    nmpc_descriptor.description = "acados numerical settings; edit YAML and restart the node";
     this->declare_parameter<std::vector<double>>(
-        "nmpc.body_rate_max", {14.0, 14.0, 14.0});
+        "nmpc.rate_time_constant", {0.10,0.083,0.25}, nmpc_descriptor);
+    this->declare_parameter<bool>("nmpc.drag_compensation", true, nmpc_descriptor);
+    this->declare_parameter<int>("nmpc.horizon", 12, nmpc_descriptor);
+    this->declare_parameter<double>("nmpc.prediction_dt", 0.04, nmpc_descriptor);
+    this->declare_parameter<int>("nmpc.maximum_iterations", 60, nmpc_descriptor);
+    this->declare_parameter<double>("nmpc.tolerance", 1.0e-5, nmpc_descriptor);
+    this->declare_parameter<double>("nmpc.solve_time_budget_ms", 8.0, nmpc_descriptor);
+    this->declare_parameter<std::vector<double>>(
+        "nmpc.state_weight", {18,18,18,3,3,3,5,5,5,5}, nmpc_descriptor);
+    this->declare_parameter<std::vector<double>>(
+        "nmpc.terminal_weight", {35,35,35,6,6,6,10,10,10,10}, nmpc_descriptor);
+    this->declare_parameter<std::vector<double>>(
+        "nmpc.input_weight", {0.10,0.12,0.12,0.12}, nmpc_descriptor);
+    this->declare_parameter<std::vector<double>>(
+        "nmpc.command_change_weight", {0.02,0.12,0.12,0.12}, nmpc_descriptor);
+    this->declare_parameter<std::vector<double>>(
+        "nmpc.fallback_position_gain", {2.5,2.5,2.5}, nmpc_descriptor);
+    this->declare_parameter<std::vector<double>>(
+        "nmpc.fallback_velocity_gain", {3.0,3.0,3.0}, nmpc_descriptor);
+    this->declare_parameter<double>("nmpc.fallback_attitude_gain", 4.0, nmpc_descriptor);
+    this->declare_parameter<std::vector<double>>(
+        "nmpc.body_rate_max", {14.0, 14.0, 14.0}, nmpc_descriptor);
 
     // 获取参数
     this->get_parameter("ctrl_freq_max", param.ctrl_freq_max);
@@ -439,7 +460,7 @@ int main(int argc, char *argv[])
 #endif
 
 	// ---------------------------------------------------------------------
-	// [ACTIVE] OmMpcControl 参数初始化
+	// 轨迹控制器参数初始化（OmMpc / acados）
 	// ---------------------------------------------------------------------
 	// PX4ControlNode 的成员构造顺序使 FSM 早于 ROS 参数读取，因此必须在
 	// config_from_ros_handle() 之后把真实重力、频率和执行器边界写入 MPC。
@@ -483,18 +504,36 @@ int main(int argc, char *argv[])
 	controller_options.terminal_weight_scale =
 		node->get_parameter("mpc.terminal_weight_scale").as_double();
 #else
-	SolverNmpcOptions controller_options = node->fsm.controller.options();
+	AcadosNmpcOptions controller_options;
 	controller_options.horizon = static_cast<int>(
 		node->get_parameter("nmpc.horizon").as_int());
 	controller_options.prediction_dt =
 		node->get_parameter("nmpc.prediction_dt").as_double();
 	controller_options.maximum_iterations = static_cast<int>(
 		node->get_parameter("nmpc.maximum_iterations").as_int());
-	const auto body_rate_max =
-		node->get_parameter("nmpc.body_rate_max").as_double_array();
-	if (body_rate_max.size() == 3) {
-		controller_options.body_rate_max =
-			Eigen::Map<const Eigen::Vector3d>(body_rate_max.data());
+	controller_options.tolerance = node->get_parameter("nmpc.tolerance").as_double();
+	controller_options.solve_time_budget_ms = node->get_parameter("nmpc.solve_time_budget_ms").as_double();
+	controller_options.fallback_attitude_gain = node->get_parameter("nmpc.fallback_attitude_gain").as_double();
+	const auto read_vector = [&](const char *name, auto &target) {
+		const auto values = node->get_parameter(name).as_double_array();
+		if (values.size() != static_cast<std::size_t>(target.size())) {
+			RCLCPP_FATAL(node->get_logger(), "%s requires %ld values", name, static_cast<long>(target.size()));
+			return false;
+		}
+		for (int i=0; i<target.size(); ++i) {target[i]=values[i];}
+		return true;
+	};
+	if (!read_vector("nmpc.body_rate_max", controller_options.body_rate_max) ||
+		!read_vector("nmpc.rate_time_constant", controller_options.rate_time_constant) ||
+		!read_vector("nmpc.state_weight", controller_options.state_weight) ||
+		!read_vector("nmpc.terminal_weight", controller_options.terminal_weight) ||
+		!read_vector("nmpc.input_weight", controller_options.input_weight) ||
+		!read_vector("nmpc.command_change_weight", controller_options.command_change_weight) ||
+		!read_vector("nmpc.fallback_position_gain", controller_options.fallback_position_gain) ||
+		!read_vector("nmpc.fallback_velocity_gain", controller_options.fallback_velocity_gain))
+	{
+		rclcpp::shutdown();
+		return 1;
 	}
 #endif
 	controller_options.gravity = node->param.gra;
@@ -502,7 +541,28 @@ int main(int argc, char *argv[])
 		4.0 * node->param.motor.u_min / node->param.uav.mass;
 	controller_options.thrust_acceleration_max =
 		4.0 * node->param.motor.u_max / node->param.uav.mass;
+#if PX4CTRL_PRIMARY_CONTROLLER == 2
+	if (node->get_parameter("nmpc.drag_compensation").as_bool()) {
+		controller_options.linear_drag = Eigen::Vector3d(
+			node->param.aero.kdx, node->param.aero.kdy, node->param.aero.kdz) / node->param.uav.mass;
+		controller_options.horizontal_lift = node->param.aero.kh / node->param.uav.mass;
+	}
+	try {
+		node->fsm.controller.configure(controller_options, node->param.uav.mass);
+		RCLCPP_INFO(node->get_logger(),
+			"[acados] N=%d, dt=%.3f s, Qp=[%.1f %.1f %.1f], rate_tau=[%.3f %.3f %.3f] s, drag=%s",
+			controller_options.horizon, controller_options.prediction_dt,
+			controller_options.state_weight[0], controller_options.state_weight[1], controller_options.state_weight[2],
+			controller_options.rate_time_constant.x(), controller_options.rate_time_constant.y(), controller_options.rate_time_constant.z(),
+			node->get_parameter("nmpc.drag_compensation").as_bool() ? "on" : "off");
+	} catch (const std::exception &e) {
+		RCLCPP_FATAL(node->get_logger(), "[acados] Configuration failed: %s", e.what());
+		rclcpp::shutdown();
+		return 1;
+	}
+#else
 	node->fsm.controller.setOptions(controller_options);
+#endif
 #if PX4CTRL_CMD_TRAJECTORY == 3
 	// 稠密最小-jerk QP 在启动阶段完成；此时控制循环尚未运行，约 1 s 的
 	// 计算不会中断 PX4 Offboard 心跳。生成失败则禁止带病进入飞行流程。
