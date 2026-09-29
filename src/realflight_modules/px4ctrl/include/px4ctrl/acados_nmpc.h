@@ -14,7 +14,7 @@ public:
   const AcadosNmpcDiagnostics & diagnostics() const;
   void reset();
   px4debug_msgs::msg::Px4ctrlDebug calculate(
-    const px4ctrl::ReferenceWindow & window, const Ref_State_t & reference,
+    const px4ctrl::ReferenceWindow & window, const px4ctrl::ControlModeReference & reference,
     const AcadosNmpcState & state,
     double now_seconds, double elapsed_seconds,
     Control_Setpoint_t & output);

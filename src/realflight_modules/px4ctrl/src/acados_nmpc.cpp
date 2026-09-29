@@ -5,20 +5,6 @@
 #include <stdexcept>
 #include <utility>
 
-namespace
-{
-Eigen::Quaterniond attitudeFromForce(const Eigen::Vector3d & force, double yaw)
-{
-  const Eigen::Vector3d z = force.norm() > 1.0e-8 ? force.normalized() : Eigen::Vector3d::UnitZ();
-  Eigen::Vector3d y = z.cross(Eigen::Vector3d(std::cos(yaw), std::sin(yaw), 0));
-  if (y.norm() < 1.0e-8) {y = z.unitOrthogonal();}
-  y.normalize();
-  Eigen::Matrix3d r;
-  r.col(0) = y.cross(z);r.col(1) = y;r.col(2) = z;
-  return Eigen::Quaterniond(r);
-}
-}
-
 void AcadosNmpcControl::configure(const AcadosNmpcOptions & options, double mass)
 {
   if (!std::isfinite(mass) || mass <= 0) {
@@ -48,29 +34,27 @@ void AcadosNmpcControl::prepareReferences(
   auto nominal = window;
   const bool compensate_drag = o.linear_drag.squaredNorm() > 0 || o.horizontal_lift > 0;
   if (compensate_drag) {
+    bool analytic = true;
     for (auto & r : nominal.points) {
-      const auto rotation = r.attitude.toRotationMatrix();
-      const Eigen::Vector3d vb = rotation.transpose() * r.velocity;
-      Eigen::Vector3d aero = -o.linear_drag.cwiseProduct(vb);
-      aero.z() += o.horizontal_lift * vb.head<2>().squaredNorm();
-      const Eigen::Vector3d force = rotation *
-        (Eigen::Vector3d(0, 0, r.thrust_acceleration) - aero);
-      r.attitude = attitudeFromForce(force, r.yaw);
-      r.thrust_acceleration = force.norm();
+      r = px4ctrl::compensateReferenceAerodynamics(r, o.gravity, o.linear_drag, o.horizontal_lift);
+      analytic = analytic && r.angular_acceleration_valid;
     }
-    // The old source has no aerodynamic derivatives. Reconstruct derivatives
-    // of the adjusted attitude explicitly; do not reuse incompatible old FF.
-    for (int k = 0; k < o.horizon; ++k) {
-      const Eigen::AngleAxisd delta(nominal.points[k].attitude.conjugate() *
-        nominal.points[k + 1].attitude);
-      nominal.points[k].body_rate = delta.angle() * delta.axis() / o.prediction_dt;
+    if (!analytic) {
+      // CSV has no analytic jerk/snap. Only this sampled branch differentiates.
+      for (int k = 0; k < o.horizon; ++k) {
+        const Eigen::AngleAxisd delta(nominal.points[k].attitude.conjugate() * nominal.points[k+1].attitude);
+        nominal.points[k].body_rate = delta.angle() * delta.axis() / o.prediction_dt;
+      }
+      nominal.points.back().body_rate = nominal.points[o.horizon-1].body_rate;
+      px4ctrl::differentiateAngularRate(nominal);
     }
-    nominal.points.back().body_rate = nominal.points[o.horizon - 1].body_rate;
-    px4ctrl::differentiateAngularRate(nominal);
   }
   feedforward_valid_ = nominal.points.front().angular_acceleration_valid;
   auto differentiated = nominal;
-  px4ctrl::differentiateAngularRate(differentiated);
+  if (std::any_of(nominal.points.begin(), nominal.points.end(),
+      [](const auto &r) {return !r.angular_acceleration_valid;})) {
+    px4ctrl::differentiateAngularRate(differentiated);
+  }
   for (int k = 0; k <= o.horizon; ++k) {
     const auto & r = nominal.points[k];
     auto & out = references_[k];
@@ -91,7 +75,7 @@ void AcadosNmpcControl::prepareReferences(
 
 px4debug_msgs::msg::Px4ctrlDebug AcadosNmpcControl::calculate(
   const px4ctrl::ReferenceWindow & window,
-  const Ref_State_t & ref, const AcadosNmpcState & current,
+  const px4ctrl::ControlModeReference & ref, const AcadosNmpcState & current,
   double now, double elapsed, Control_Setpoint_t & out)
 {
   const auto & o = options();
@@ -99,7 +83,7 @@ px4debug_msgs::msg::Px4ctrlDebug AcadosNmpcControl::calculate(
   out.rate_dot_ref_valid = false;
   if (ref.fsm_state == 1) {
     reset();
-    auto error = current.attitude.normalized().conjugate() * ref.q.normalized();
+    auto error = current.attitude.normalized().conjugate() * ref.attitude.normalized();
     if (error.w() < 0) {error.coeffs() *= -1.0;}
     out.bodyrates = 8.0 * error.vec();
     out.bodyrates.z() += ref.yaw_rate;
@@ -108,7 +92,7 @@ px4debug_msgs::msg::Px4ctrlDebug AcadosNmpcControl::calculate(
     const double throttle = std::isfinite(ref.throttle) ? std::clamp(ref.throttle, 0.0, 1.0) : 0.0;
     out.thrust = mass_ * (o.thrust_acceleration_min +
       throttle * (o.thrust_acceleration_max - o.thrust_acceleration_min));
-    out.q = ref.q;
+    out.q = ref.attitude;
   } else {
     if (!std::isfinite(now) || std::abs(window.stamp - now) > 1e-6) {
       throw std::invalid_argument("Stale NMPC reference window");
@@ -127,8 +111,8 @@ px4debug_msgs::msg::Px4ctrlDebug AcadosNmpcControl::calculate(
     out.q.normalize();
   }
   px4debug_msgs::msg::Px4ctrlDebug debug;
-  const Eigen::Vector3d p = ref.fsm_state == 1 ? ref.p : references_.front().state.position;
-  const Eigen::Vector3d v = ref.fsm_state == 1 ? ref.v : references_.front().state.velocity;
+  const Eigen::Vector3d p = ref.fsm_state == 1 ? current.position : references_.front().state.position;
+  const Eigen::Vector3d v = ref.fsm_state == 1 ? current.velocity : references_.front().state.velocity;
   debug.ref_p_x = p.x();debug.ref_p_y = -p.y();debug.ref_p_z = -p.z();
   debug.ref_v_x = v.x();debug.ref_v_y = -v.y();debug.ref_v_z = -v.z();
   debug.des_q_w = out.q.w();debug.des_q_x = out.q.x();

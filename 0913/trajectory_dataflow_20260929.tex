@@ -1,0 +1,15 @@
+% Run in 0913: xelatex -interaction=nonstopmode -halt-on-error trajectory_dataflow_20260929.tex
+\documentclass[UTF8,fontset=fandol]{ctexart}
+\usepackage[paperwidth=340mm,paperheight=250mm,margin=7mm]{geometry}
+\usepackage{amsmath,graphicx,tikz,xcolor}
+\usetikzlibrary{arrows.meta,calc,positioning}
+\definecolor{ink}{HTML}{203B51}
+\definecolor{teal}{HTML}{087F8C}
+\definecolor{amber}{HTML}{B97923}
+\pagestyle{empty}
+\begin{document}
+\begin{center}
+{\Large\bfseries 当前轨迹与控制数据传输架构}\quad{\small 2026-09-29 工作区实现}\\[3mm]
+\resizebox{\linewidth}{!}{\input{trajectory_dataflow_20260929.tikz.tex}}
+\end{center}
+\end{document}

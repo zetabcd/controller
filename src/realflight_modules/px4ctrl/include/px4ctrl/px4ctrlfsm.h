@@ -17,37 +17,26 @@
 #include <px4debug_msgs/msg/px4ctrl_debug.hpp>
 
 #include <fms_utils/openfsm.h>
-#include <px4ctrl/barrel_roll_trajectory.h>
 #include <px4ctrl/controller.h>
-#include <px4ctrl/figure_eight_trajectory.h>
 #include <px4ctrl/ommpc.h>
 #include <px4ctrl/input.h>
-#include <px4ctrl/minimum_snap_trajectory.h>
-#include <px4ctrl/five_turn_trajectory.h>
 #include <px4ctrl/acados_nmpc.h>
-#include <px4ctrl/legacy_trajectory_reference.h>
+#include <px4ctrl/trajectory.h>
 
 class PX4ControlNode;
 
 // 顶层控制器编译开关；连续编号 0、1、2：
 // 0=QuadControl, 1=OmMpcControl, 2=acados NMPC。
 #ifndef PX4CTRL_PRIMARY_CONTROLLER
-#define PX4CTRL_PRIMARY_CONTROLLER 2
+#define PX4CTRL_PRIMARY_CONTROLLER 1
 #endif
 
-// 旧条件宏现在表示“使用可接收 OmTrajectoryResult 的轨迹控制器”。保留名称
-// 是为了避免扰动已经严格隔离的 FSM 安全/轨迹逻辑；只有 0=QuadControl 为假。
+// Only controller setup and thrust-estimation behavior depend on this flag.
+// Trajectory selection and reference generation are common to all controllers.
 #if PX4CTRL_PRIMARY_CONTROLLER != 0 && PX4CTRL_PRIMARY_CONTROLLER != 1 && PX4CTRL_PRIMARY_CONTROLLER != 2
 #error "Supported controllers: 0=QuadControl, 1=OmMpcControl, 2=acados NMPC"
 #endif
-#define PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER (PX4CTRL_PRIMARY_CONTROLLER != 0)
-
-// MPC 的 CMD 轨迹唯一切换开关：0=minimum-snap，1=barrel roll，
-// 2=figure eight，3=论文最小-jerk多圈翻滚，4=本项目 OmTrajectoryOptimizer。
-// 危险机动不作为默认项自动启用。
-#ifndef PX4CTRL_CMD_TRAJECTORY
-#define PX4CTRL_CMD_TRAJECTORY 3
-#endif
+#define PX4CTRL_USES_PREDICTIVE_CONTROLLER (PX4CTRL_PRIMARY_CONTROLLER != 0)
 
 class PX4CtrlFSM
 {
@@ -85,7 +74,6 @@ public:
     void set_point_hover(const double &x, const double &y, const double &z);
     void set_manual_ref(const double &dt, bool reset_yaw_des=false);
     void set_manual_postion_ref(const double &dt, bool reset_yaw_des=false);
-    void set_2D8_ref();
     void set_land_ref();
     void set_fixed_wing_ref(const Attitude_Data_t &att, const Sensor_Data_t &sens);
     
@@ -103,13 +91,7 @@ public:
     bool recv_new_pose();
     bool arm();
     void publish_rates_thrust_setpoint();
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
-    // 多圈论文轨迹包含一次较大的稠密 QP 求解；必须在控制循环启动前缓存，
-    // 进入 CMD 时只做刚体坐标变换，避免中断 Offboard 心跳。
-    bool prepare_five_turn_cmd_trajectory();
-    // 只读取离线优化器保存的最终状态序列，不在控制进程中求解。
-    bool load_offline_omtraj_template();
-#endif
+    bool prepare_cmd_trajectory();
 
     // sun: 这些发布器分别负责外部模式心跳、飞行器命令、控制设定值和调试信息。
 	rclcpp::Publisher<px4_msgs::msg::OffboardControlMode>::SharedPtr offboard_control_mode_publisher;
@@ -139,7 +121,7 @@ private:
 
     // sun: control_sp_ 是本周期控制输出，ref_ 是由当前状态生成的统一参考状态。
     Control_Setpoint_t control_sp_;
-    px4ctrl::LegacyTrajectoryReference trajectory_reference_;
+    px4ctrl::TrajectoryPlayer trajectory_reference_;
     Ref_State_t ref_; 
     rclcpp::Time start_time_;
     rclcpp::Time last_time_;
@@ -198,22 +180,8 @@ private:
                                   double param1, double param2, const char *mode_name);
     void reset_point_reference_(const Eigen::Vector3d &position);
     void update_point_reference_(double dt);
-    // 仅在进入 CMD 的首周期调用并以当前 ROS 时刻作为轨迹 t=0 装载；
-    // 多圈轨迹和离线 omtraj 模板在这里都只应用空间变换。
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
-    px4ctrl::FiveTurnTrajectoryOptions five_turn_options_;
-    OmTrajectoryResult five_turn_template_;
-    bool five_turn_template_ready_{false};
-    OmTrajectoryResult omtraj_template_;
-    Eigen::Vector3d omtraj_template_initial_position_{Eigen::Vector3d::Zero()};
-    double omtraj_template_initial_yaw_{0.0};
-    bool omtraj_template_ready_{false};
-    bool load_figure_eight_cmd_trajectory_();
-    bool load_barrel_roll_cmd_trajectory_();
-    bool load_five_turn_cmd_trajectory_();
-    bool load_omtraj_cmd_trajectory_();
-    bool load_minimum_snap_cmd_trajectory_();
-#endif
+    std::shared_ptr<const px4ctrl::Trajectory> cmd_trajectory_;
+    bool load_cmd_trajectory_();
     bool switch_to_offboard_mode_();
     bool switch_to_manual_mode_();
     

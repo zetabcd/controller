@@ -41,6 +41,88 @@ bool validQuaternion(const Eigen::Quaterniond & q)
 }
 }  // namespace
 
+ReferencePoint resolveGeometricReference(
+  ReferencePoint r, double gravity, const Eigen::Vector3d & heading, HeadingAxis axis)
+{
+  if (!std::isfinite(gravity) || gravity <= 0 || !heading.allFinite() ||
+    !r.position.allFinite() || !r.velocity.allFinite() || !r.acceleration.allFinite() ||
+    !r.jerk.allFinite() || !r.snap.allFinite())
+  {
+    throw std::invalid_argument("Invalid geometric reference");
+  }
+  const Jet force{r.acceleration + gravity * Eigen::Vector3d::UnitZ(), r.jerk, r.snap};
+  const Jet z = normalized(force);
+  const Jet auxiliary{heading, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+  Jet x, y;
+  if (axis == HeadingAxis::BodyX) {
+    y = normalized(cross(z, auxiliary));
+    x = cross(y, z);
+  } else {
+    x = normalized(cross(auxiliary, z));
+    y = cross(z, x);
+  }
+  Eigen::Matrix3d rotation, first, second;
+  rotation << x.value, y.value, z.value;
+  first << x.first, y.first, z.first;
+  second << x.second, y.second, z.second;
+  r.attitude = Eigen::Quaterniond(rotation).normalized();
+  r.thrust_acceleration = force.value.norm();
+  r.body_rate = vee(rotation.transpose() * first);
+  r.body_acceleration = vee(rotation.transpose() * second);
+  r.yaw = std::atan2(rotation(1, 0), rotation(0, 0));
+  r.full_state = true;
+  r.angular_acceleration_valid = true;
+  r.kinematics_valid = true;
+  return r;
+}
+
+ReferencePoint compensateReferenceAerodynamics(
+  ReferencePoint r, double gravity, const Eigen::Vector3d & drag, double lift)
+{
+  if (!drag.allFinite() || (drag.array()<0).any() || !std::isfinite(lift) || lift<0) {
+    throw std::invalid_argument("Invalid aerodynamic coefficients");
+  }
+  const Eigen::Matrix3d R=r.attitude.normalized().toRotationMatrix();
+  const Eigen::Vector3d vb=R.transpose()*r.velocity;
+  Eigen::Vector3d aero=-drag.cwiseProduct(vb);
+  aero.z()+=lift*vb.head<2>().squaredNorm();
+  const Eigen::Vector3d force=R*(Eigen::Vector3d(0,0,r.thrust_acceleration)-aero);
+  if (force.norm()<1e-6) {throw std::invalid_argument("Singular aerodynamic reference");}
+  if (!r.kinematics_valid || !r.angular_acceleration_valid) {
+    // Preserve twist through inversion; Euler yaw reconstruction would jump at
+    // the vertical circle's +/-90 degree pitch crossings.
+    r.attitude=(Eigen::Quaterniond::FromTwoVectors(R.col(2),force.normalized())*r.attitude).normalized();
+    r.thrust_acceleration=force.norm();r.angular_acceleration_valid=false;
+    return r;
+  }
+  const auto hat=[](const Eigen::Vector3d &w) {
+    Eigen::Matrix3d h;h<<0,-w.z(),w.y(),w.z(),0,-w.x(),-w.y(),w.x(),0;return h;
+  };
+  const Eigen::Matrix3d W=hat(r.body_rate);
+  const Eigen::Matrix3d Rd=R*W, Rdd=R*(hat(r.body_acceleration)+W*W);
+  const Eigen::Vector3d vbd=Rd.transpose()*r.velocity+R.transpose()*r.acceleration;
+  const Eigen::Vector3d vbdd=Rdd.transpose()*r.velocity+
+    2*Rd.transpose()*r.acceleration+R.transpose()*r.jerk;
+  Eigen::Vector3d ad=-drag.cwiseProduct(vbd),add=-drag.cwiseProduct(vbdd);
+  ad.z()+=2*lift*vb.head<2>().dot(vbd.head<2>());
+  add.z()+=2*lift*(vbd.head<2>().squaredNorm()+vb.head<2>().dot(vbdd.head<2>()));
+  const Jet f{r.acceleration+gravity*Eigen::Vector3d::UnitZ()-R*aero,
+    r.jerk-Rd*aero-R*ad, r.snap-Rdd*aero-2*Rd*ad-R*add};
+  const Jet z=normalized(f), heading{R.col(0),Rd.col(0),Rdd.col(0)};
+  const Jet y=normalized(cross(z,heading)),x=cross(y,z);
+  Eigen::Matrix3d rotation,first,second;
+  rotation<<x.value,y.value,z.value;
+  first<<x.first,y.first,z.first;
+  second<<x.second,y.second,z.second;
+  const auto original=r.attitude;
+  r.attitude=Eigen::Quaterniond(rotation).normalized();
+  if(original.dot(r.attitude)<0) {r.attitude.coeffs()*=-1;}
+  r.thrust_acceleration=f.value.norm();
+  r.body_rate=vee(rotation.transpose()*first);
+  r.body_acceleration=vee(rotation.transpose()*second);
+  return r;
+}
+
 ReferencePoint resolveReference(ReferencePoint r, double gravity)
 {
   if (!std::isfinite(gravity) || gravity <= 0 ||
@@ -49,7 +131,8 @@ ReferencePoint resolveReference(ReferencePoint r, double gravity)
     throw std::invalid_argument("Invalid reference position, velocity or gravity");
   }
   if (r.full_state) {
-    if (!validQuaternion(r.attitude) || !std::isfinite(r.thrust_acceleration) ||
+    if ((r.kinematics_valid && (!r.acceleration.allFinite() || !r.jerk.allFinite() || !r.snap.allFinite())) ||
+      !validQuaternion(r.attitude) || !std::isfinite(r.thrust_acceleration) ||
       r.thrust_acceleration <= 0 || !r.body_rate.allFinite() ||
       (r.angular_acceleration_valid && !r.body_acceleration.allFinite()))
     {
@@ -91,6 +174,7 @@ ReferencePoint resolveReference(ReferencePoint r, double gravity)
   r.body_acceleration = vee(first.transpose() * first + rotation.transpose() * second);
   r.full_state = true;
   r.angular_acceleration_valid = true;
+  r.kinematics_valid = true;
   return r;
 }
 
@@ -125,7 +209,8 @@ void validateReferenceWindow(const ReferenceWindow & w, int horizon, double dt)
     throw std::invalid_argument("Reference window size/time grid mismatch");
   }
   for (const auto & r : w.points) {
-    if (!r.full_state || !r.position.allFinite() || !r.velocity.allFinite() ||
+    if ((r.kinematics_valid && (!r.jerk.allFinite() || !r.snap.allFinite())) ||
+      !r.full_state || !r.position.allFinite() || !r.velocity.allFinite() ||
       !r.acceleration.allFinite() || !std::isfinite(r.yaw) ||
       !validQuaternion(r.attitude) || std::abs(r.attitude.norm() - 1) > 1e-6 ||
       !std::isfinite(r.thrust_acceleration) || r.thrust_acceleration <= 0 ||

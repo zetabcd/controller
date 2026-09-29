@@ -1,6 +1,6 @@
 **工程模块与使用手册**
 
-控制器架构更新：2026-09-29；其余内容核对日期：2026-09-28。基于 `trajectory-tracking` 分支、提交 `3a78c7f` 的源码、配置、launch 和本地 Git 历史整理。文中的“当前”指源码配置，不代表已经核实正在运行的节点或旧的 install 构建产物。本次整理没有启动飞行、仿真或修改控制参数。
+轨迹与接口重构更新：2026-09-29；其余内容核对日期：2026-09-28。基于 `trajectory-tracking` 分支、提交 `3a78c7f` 的源码、配置、launch 和本地 Git 历史整理。文中的“当前”指源码配置，不代表已经核实正在运行的节点或旧的 install 构建产物。本次整理没有启动飞行、仿真或修改控制参数。
 
 **1. 工程组成与数据流**
 
@@ -9,7 +9,7 @@
 | 模块 | 位置 | 功能与入口 |
 |---|---|---|
 | 自研飞行控制 | `src/realflight_modules/px4ctrl` | FSM、3 种顶层控制器、角速度内环、电机分配；`run_ctrl.launch.py` |
-| 轨迹生成 | `px4ctrl` 内的 `*_trajectory.*`、`omtraj.*` | 5 种 MPC/NMPC CMD 轨迹；离线优化入口 `omtraj_visualizer.launch.py` |
+| 轨迹生成 | `px4ctrl` 内的 `trajectory.*`、`omtraj.*` | 4 种解析 CMD 轨迹及 omtraj，所有控制器共用；离线优化入口 `omtraj_visualizer.launch.py` |
 | PX4 原生位置任务 | `px4ctrl` 内的 `px4_native_position_*` | 向 PX4 发位置航点，由 PX4 自己完成闭环控制 |
 | MuJoCo 仿真 | `src/uav_simulator/quadsim_mujoco` | 刚体、电机动态、桨与气动力、风场和传感器噪声；`mujoco.launch.py` |
 | ULog 记录 | `src/realflight_modules/flight_data_recorder` | ROS 数值话题逐消息记录；`record.launch.py` |
@@ -43,7 +43,7 @@ PX4 原生位置任务是另一条链路：`px4_native_position_node → traject
 | 项目 | 当前值 | 位置 |
 |---|---|---|
 | 顶层控制器 | `PX4CTRL_PRIMARY_CONTROLLER=2`，acados NMPC | [px4ctrlfsm.h](src/realflight_modules/px4ctrl/include/px4ctrl/px4ctrlfsm.h) |
-| CMD 轨迹 | `PX4CTRL_CMD_TRAJECTORY=2`，水平八字 | 同上 |
+| CMD 轨迹 | `trajectory.type=figure_eight`，新水平八字 | `params.yaml` |
 | 仿真编译模式 | `SIMULATION` 已定义 | [input.h](src/realflight_modules/px4ctrl/include/px4ctrl/input.h) |
 | 无遥控自动流程 | `USE_WITHOUT_RC` 已定义 | 同上 |
 | IMU 来源 | `PX4CTRL_USE_FILTERED_IMU=0`，sensor_combined | 同上 |
@@ -55,7 +55,7 @@ PX4 原生位置任务是另一条链路：`px4_native_position_node → traject
 
 无遥控流程按控制循环的启动相对时间合成挡位：约 0.1 s 后请求 AUTO_HOVER，约 2.1 s 后请求 CMD；状态转移仍取决于输入是否就绪。启用调参开关时延后悬停请求且不自动进入 CMD。
 
-控制器默认值已更新为 acados（3），CMD 默认为八字（2）；实际轨迹参数以当前 YAML 为准。
+控制器默认值为 acados（2），CMD 默认 `figure_eight`；轨迹由 YAML 选择，重启后生效，无需修改轨迹编译宏。
 
 **3. 编译、环境与最短仿真流程**
 
@@ -111,35 +111,27 @@ source install/setup.bash
 
 acados 的 `nmpc.*` 数值参数从 YAML 在启动时读取，修改后重启即可；`ros2 param set` 不会即时重配求解器。接口与配置说明见 [ACADOS_NMPC.md](src/realflight_modules/px4ctrl/ACADOS_NMPC.md)。只在改变模型、代价维度、约束结构或算法类型时，使用 [生成脚本](script/generate_px4ctrl_acados_nmpc.py)，再重新编译；普通构建直接使用仓库已有的生成 C 源码即可。Python 生成环境配置见第三方 README。
 
-**5. 轨迹生成：5 个现成入口**
+**5. 轨迹生成：统一连续时间接口**
 
-对控制器 1、3，修改 `PX4CTRL_CMD_TRAJECTORY` 后编译并重启。控制器 0 的 CMD 走旧的 `set_2D8_ref()` 路径，这个宏不会为它切换到新轨迹框架。
+完整说明见 [TRAJECTORIES.md](src/realflight_modules/px4ctrl/TRAJECTORIES.md)。依据 `0913/轨迹生成/uav_trajectory_design.tex` 实现三种圆/螺旋动作，并重写水平八字；旧 minimum-snap、barrel-roll、five-turn、旧八字及其适配器已删除。
 
-| 值 | 轨迹 | 修改入口与生效方式 |
+| `trajectory.type` | 轨迹 | 主要参数 |
 |---|---|---|
-| 0 | Minimum-snap 多航点 | `px4ctrlfsm.cpp::load_minimum_snap_cmd_trajectory_()` 内的相对航点和速度，改源码后编译 |
-| 1 | 单圈 barrel roll | `load_barrel_roll_cmd_trajectory_()` 内硬编码参数，改源码后编译 |
-| 2 | 平滑起飞 + 水平八字 | `params.yaml → trajectory.figure_eight`；进入 CMD 时读取 |
-| 3 | 最小 jerk QP 多圈翻滚 | `params.yaml → trajectory.five_turn`；启动时生成模板，改参数后重启 |
-| 4 | OmTrajectoryOptimizer 离线优化轨迹 | 先通过 `omtraj_visualizer` 生成 CSV，再由控制节点启动时读取 |
+| `horizontal_circle` | 平滑加速、匀速、减速水平圆 | `radius=1`，`speed=1.5`，匀速 2 圈 |
+| `vertical_circle` | 竖直俯仰翻转圆 | `radius=1`，1 圈，`centripetal_g=1.8` |
+| `helix` | 水平轴连续滚转螺旋 | `radius=1`，2 圈，`pitch=0.5 m/圈` |
+| `figure_eight` | 平滑起飞与水平八字（默认） | 全尺寸 2×1.2 m，1.5 m/s，2 圈 |
+| `omtraj` | 保留离线优化 CSV | `trajectory.omtraj.file` |
 
-五种现有轨迹仍输出 `OmTrajectoryResult`，由 FSM 边界的 `LegacyTrajectoryReference` 缓存并采样为公共 `ReferenceWindow`。传统控制器和 MPC/NMPC 都通过公共参考入口接入，但现有 CMD 轨迹选择路径暂时保留。控制器不再持有规划器结果，角加速度前馈可传递到内环，详见 [控制参考接口](src/realflight_modules/px4ctrl/CONTROL_REFERENCE.md)。
+所有控制器共用选择入口，所有参数在启动时生成/读取并检查，修改 YAML 后重启。圆主体直径不得超过 2 m；连接段需要额外空间。新轨迹九次连接匹配 p/v/a/jerk/snap，直接生成完整统一参考及解析角加速度，结束后明确悬停。启动时执行全动作推力、角速度、角加速度和静态逐电机分配采样检查；这不等同于闭环验证。
 
-Minimum-snap 当前设置 10 个相对航点，名义分段速度 0.65 m/s，七次多项式最小化 snap 平方积分并保证段间 v/a/jerk 连续；名义分段速度不是全轨迹的严格最大速度约束。航点加在进入 CMD 时的位置上。
-
-Barrel roll 当前为上升 1 m / 2.5 s、稳定 0.5 s、半径 1 m、轴向速度 0.5 m/s、进入 1.5 s、翻滚 3.5 s、退出 1.5 s、1 圈。其参数尚未暴露为 YAML。
-
-八字可调高度、起飞时长、稳定时长、全长、全宽、最大路径速度、圈数。当前 YAML 为长 6 m、宽 4 m、速度 3 m/s、2 圈，起飞相对高度 0.5 m。支持在进入或重新进入 CMD 前设置：
+轨迹按进入 CMD 的实测位置和航向对齐，假设激活时近似悬停。离线导出和检查：
 
 ```bash
-ros2 param set /px4ctrl_node trajectory.figure_eight.speed 0.5
+python3 script/analyze_trajectories.py
 ```
 
-已缓存并正在执行的轨迹不会被这条命令即时改写。只有选择轨迹 2 时这项才影响所执行的轨迹。八字和翻滚轴向按进入 CMD 时的机头水平投影设置。
-
-多圈翻滚的默认 YAML 为 5 圈、每圈 16 个圆周路标、半径 1 m、滚转段 9 s，支持速度/加速度跟踪与 jerk 权重；启动前解 QP，进入 CMD 时只做坐标变换和限制检查。
-
-若要从现有模块中选一个作为普通跟踪实验起点，可以先使用低速八字（2），或调整 minimum-snap（0）的航点及时间；降低速度后仍应通过仿真检查完整参考与限幅情况。本次整理没有更改轨迹选择。
+输出 `datalog/trajectory_refactor/` 内的 CSV、配置、指标和轨迹图，不发布飞行指令。
 
 **6. 离线 OmTrajectoryOptimizer**
 
@@ -155,7 +147,7 @@ ros2 launch px4ctrl omtraj_visualizer.launch.py rviz:=false
 
 重要配置包括网格数、总时间区间、推力/角速度边界、信赖域、输入平滑项，以及可选推力变化率/角加速度限制。当前 `enforce_input_rate_constraints` 和 `enforce_hover_boundary_input` 都为 false，不能仅凭路径看起来平滑认定内环容易跟踪。
 
-优化成功且 `output.save_trajectory=true` 时保存 `datalog/omtraj/omtraj_optimized.csv`。控制侧 `trajectory.omtraj.file` 必须对应此文件；把轨迹宏设为 4、重新编译并启动控制器后才会执行它。优化显示节点本身不控制飞机。
+优化成功且 `output.save_trajectory=true` 时保存 `datalog/omtraj/omtraj_optimized.csv`。控制侧 `trajectory.omtraj.file` 必须对应此文件；设置 `trajectory.type: omtraj` 并重启控制器后才会执行它。优化显示节点本身不控制飞机。
 
 控制器加载时会以 CSV 起点为基准，对齐进入 CMD 的当前位置和偏航，因而 CSV 的初始高度不是一个会直接命令飞机飞到的绝对起飞高度；若任务需要起飞段，要在轨迹中表达。CSV 修改后需重启控制节点重新加载。
 
@@ -325,18 +317,18 @@ ros2 run minco minco_example
 ros2 launch minco minco_visualizer.launch.py
 ```
 
-可先只读查看其说明：`git show minco:src/realflight_modules/minco/README.md`。当前 minimum-snap 和 five-turn 生成器不等同于已经合入了 MINCO 包。
+可先只读查看其说明：`git show minco:src/realflight_modules/minco/README.md`。本次解析轨迹重构也没有引入 MINCO 包。
 
 **14. 修改入口、数据路径与生效规则速查**
 
 | 想做什么 | 改哪里 | 生效方式 |
 |---|---|---|
-| 换顶层控制器 / CMD 轨迹 | `px4ctrlfsm.h` 的两个宏 | 编译并重启 |
+| 换顶层控制器 | `px4ctrlfsm.h` 的 `PX4CTRL_PRIMARY_CONTROLLER` | 编译并重启 |
+| 换 CMD 轨迹 | `params.yaml → trajectory.type` | 重启 |
 | 切实机 / 无遥控 / IMU 来源 | `input.h` 的宏 | 编译并重启 |
 | 调模型、PID、MPC/NMPC 参数 | `px4ctrl/config/params.yaml` | 默认按修改配置、重启相关节点使用；不要假定支持即时热更新 |
-| 调八字尺度/速度 | `trajectory.figure_eight.*` | 进入 CMD 时读取；支持先 param set 再重新进入 |
-| 调多圈轨迹 | `trajectory.five_turn.*` | 重启控制节点重新生成模板 |
-| 改 minimum-snap 航点 / barrel roll | `px4ctrlfsm.cpp` 相应加载函数 | 编译并重启 |
+| 调八字尺度/速度 | `trajectory.figure_eight.*` | 重启后重新生成与检查 |
+| 调圆/螺旋 | `trajectory.horizontal_circle/vertical_circle/helix.*` | 重启后重新生成与检查 |
 | 改离线优化航点/限制 | `omtraj.yaml` | 重跑优化，成功生成 CSV 后重启控制器 |
 | 改噪声/风场/电机时间常数 | `quadsim_mujoco/config/params.yaml` | 重启仿真 |
 | 改记录范围和记录触发 | `flight_data_recorder/config/recorder.yaml` | 重启记录器 |

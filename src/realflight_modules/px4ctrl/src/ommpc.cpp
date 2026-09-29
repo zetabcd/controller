@@ -279,7 +279,7 @@ bool OmMpcControl::estimateThrustModel(const Eigen::Vector3d &)
 
 px4debug_msgs::msg::Px4ctrlDebug OmMpcControl::calculateControl(
   const px4ctrl::ReferenceWindow &window,
-  const Ref_State_t &reference, const LocalPose_Data_t &pose,
+  const px4ctrl::ControlModeReference &reference, const LocalPose_Data_t &pose,
   const Attitude_Data_t &attitude, const Sensor_Data_t &, const double & /*dt*/,
   Control_Setpoint_t &control_setpoint, const Parameter_t &parameters)
 {
@@ -298,7 +298,7 @@ px4debug_msgs::msg::Px4ctrlDebug OmMpcControl::calculateControl(
   if (reference.fsm_state == kManualState) {
     // 手动模式不构造位置 MPC。四元数误差 q^{-1}q_d 的向量部近似半角误差，
     // 因而 8*vec(q_e) 在小角度下约等于 4*theta_e。
-    Eigen::Quaterniond error = attitude.q.conjugate() * reference.q;
+    Eigen::Quaterniond error = attitude.q.conjugate() * reference.attitude;
     // q 与 -q 表示同一姿态，选择 w>=0 的短旋转分支避免角速度跳变。
     if (error.w() < 0.0) {
       error.coeffs() *= -1.0;
@@ -310,7 +310,7 @@ px4debug_msgs::msg::Px4ctrlDebug OmMpcControl::calculateControl(
     const double throttle = std::clamp(reference.throttle, 0.0, 1.0);
     control_setpoint.thrust = 4.0 *
       (parameters.motor.u_min + throttle * (parameters.motor.u_max - parameters.motor.u_min));
-    control_setpoint.q = reference.q;
+    control_setpoint.q = reference.attitude;
     control_setpoint.rate_dot_ref.setZero();
     diagnostics_.solved = true;
     diagnostics_.status = "manual passthrough";

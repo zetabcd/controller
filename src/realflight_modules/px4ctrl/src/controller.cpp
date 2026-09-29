@@ -36,17 +36,22 @@ void QuadControl::resetControlParams()
 }
 
 px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
-    const px4ctrl::ReferenceWindow &window, const Ref_State_t &mode,
+    const px4ctrl::ReferenceWindow &window, const px4ctrl::ControlModeReference &mode,
     const LocalPose_Data_t &pose, const Attitude_Data_t &att,
     const Sensor_Data_t &sens, const double &dt,
     Control_Setpoint_t &output, const Parameter_t &param)
 {
+    Ref_State_t ref;
+    ref.fsm_state = mode.fsm_state; ref.q = mode.attitude;
+    ref.yaw_rate = mode.yaw_rate; ref.throttle = mode.throttle;
+    ref.flag_valid_p = mode.position_valid;
+    ref.flag_valid_v = mode.velocity_valid;
+    ref.flag_valid_a = mode.acceleration_valid;
     if (mode.fsm_state == FSM_STATE(manual)) {
-        return calculateControl(mode, pose, att, sens, dt, output, param);
+        return calculateLegacy(ref, pose, att, sens, dt, output, param);
     }
     px4ctrl::validateReferenceWindow(window, 0, window.dt);
     const auto &point = window.points.front();
-    Ref_State_t ref = mode;
     ref.p = point.position; ref.v = point.velocity; ref.a = point.acceleration;
     ref.j = point.jerk; ref.s = point.snap;
     ref.q = yaw_to_quaternion(point.yaw);
@@ -57,10 +62,10 @@ px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
         point.body_acceleration : Eigen::Vector3d::Zero();
     ref.explicit_feedforward = true;
     ref.acceleration_feedforward_valid = point.angular_acceleration_valid;
-    return calculateControl(ref, pose, att, sens, dt, output, param);
+    return calculateLegacy(ref, pose, att, sens, dt, output, param);
 }
 
-px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
+px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateLegacy(
     const Ref_State_t &ref, 
     const LocalPose_Data_t &pose, 
     const Attitude_Data_t &att,

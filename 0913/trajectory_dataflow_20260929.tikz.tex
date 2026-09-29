@@ -1,0 +1,99 @@
+% Shared editable TikZ drawing. Included by the standalone diagram document.
+\begin{tikzpicture}[x=1cm,y=1cm,
+  box/.style={draw=ink!70,rounded corners=2.5pt,line width=.8pt,fill=white,
+    align=center,font=\small,inner sep=6pt,minimum height=13mm},
+  new/.style={box,fill=teal!8,draw=teal!80},
+  old/.style={box,fill=amber!10,draw=amber!80},
+  flow/.style={-{Latex[length=2.5mm]},draw=ink,line width=1pt},
+  ros/.style={flow,dashed,draw=blue!65!black},
+  diag/.style={flow,densely dotted,draw=gray},
+  lbl/.style={font=\scriptsize,fill=white,inner sep=2pt,align=center}]
+\filldraw[fill=blue!2,draw=ink!30,rounded corners=5pt]
+  (-1,-12.2) rectangle (29,0);
+\node[anchor=north west,font=\bfseries\small,text=ink] at (-.7,-.15)
+  {进程一：px4ctrl\_node \quad 外环 100 Hz；轨迹核心与接口为进程内 C++ 调用};
+
+\node[box,text width=7.0cm] (config) at (3,1.4)
+ {\textbf{params.yaml}\quad trajectory.type 与各类参数\\启动读取；修改后重启，不在 CMD 中热切换};
+\node[old,text width=7.0cm] (csv) at (12,1.4)
+ {\textbf{保留离线 omtraj 优化器 / 可视化节点}\\OmTrajectoryResult $\rightarrow$ CSV 文件};
+\node[box,text width=8.8cm] (rc) at (23.5,1.4)
+ {\textbf{遥控 / 自动流程 / 飞行模式}\quad ROS 输入\\/joyStick 或 /fmu/out/manual\_control\_setpoint};
+
+\node[new,text width=7.0cm,minimum height=18mm] (analytic) at (3,-1.9)
+ {\textbf{AnalyticTrajectory}\quad 启动生成与检查\\水平加速圆 / 竖直翻转圆 / 水平轴螺旋 / 八字\\解析 $p,v,a,j,s,q,a_T,\omega,\alpha$};
+\node[old,text width=7.0cm,minimum height=18mm] (sampled) at (12,-1.9)
+ {\textbf{文件边界转换 $\rightarrow$ SampledTrajectory}\\CSV $\rightarrow$ TimedReference；保留离散插值\\缺失角加速度仅在该支路显式差分};
+\node[box,text width=8.8cm,minimum height=18mm] (fsm) at (23.5,-1.9)
+ {\textbf{FSM / 输入缓存}\quad 模式、时间、实测初始位姿\\CMD 激活模板；离开 CMD 清除活动轨迹\\内部仍保留部分 Ref\_State\_t 模式参考};
+
+\node[new,text width=16.0cm,minimum height=16mm] (player) at (7.5,-4.1)
+ {\textbf{TrajectoryPlayer + Trajectory::evaluate(t)}\\
+ 起点位置 / 航向对齐；$t=t_{\rm now}-t_0$；精确求值 $t+k\Delta t$\\
+ 新解析轨迹不经过 OmTrajectoryResult 或旧离散缓存};
+\node[box,text width=8.8cm,minimum height=16mm] (flat) at (23.5,-4.1)
+ {\textbf{悬停 / 降落等非 CMD 运动参考}\\extrapolateFlatReference + resolveReference\\常 snap / 常航向角加速度短窗外推};
+
+\node[new,text width=16.0cm,minimum height=16mm] (window) at (7.5,-6.4)
+ {\textbf{ReferenceWindow：唯一运动参考入口}\\
+ stamp、dt、$H+1$ 个 ReferencePoint\\
+ 位置高阶导数 + 完整姿态 / 推力加速度 / 角速度 / 角加速度 + 有效标志};
+\node[new,text width=8.8cm,minimum height=16mm] (mode) at (23.5,-8.7)
+ {\textbf{ControlModeReference：独立模式信息}\\
+ fsm\_state、手动态度 / 油门 / 航向速率\\
+ 位置 / 速度 / 加速度有效标志；不重复携带 $p,v,a$};
+\node[box,text width=16.0cm,minimum height=19mm] (control) at (7.5,-8.7)
+ {\textbf{三个可选外环控制器，实际仅运行编译选中的一个}\\
+ QuadControl（0，单点）\quad OmMPC（1，$H+1$ 点）\quad acados NMPC（2，默认）\\
+ NMPC 解析气动修正保留倒飞分支与解析前馈；CSV 支路仍使用差分};
+\node[new,text width=16.0cm,minimum height=15mm] (output) at (7.5,-11.1)
+ {\textbf{Control\_Setpoint\_t $\rightarrow$ RatesThrustSetpoint}\\
+ 总推力 $T$ [N]；角速度命令 [rad/s]；角加速度前馈 [rad/s$^2$] 及有效标志\\
+ 前馈变换到当前机体系；不直接下发轨迹力矩};
+
+\node[box,text width=16.0cm,minimum height=20mm] (inner) at (7.5,-14.3)
+ {\textbf{进程二：px4ctrlrate\_node}\quad 角速度内环 400 Hz\\
+ $\alpha_{\rm cmd}=\mathrm{PID}(\omega_{\rm cmd}-\omega)+\alpha_{\rm ff}$\\
+ $\tau=I\alpha_{\rm cmd}+\omega\times I\omega$ $\rightarrow$ 电机分配 / 转速与油门映射};
+\node[box,text width=8.8cm,minimum height=20mm] (feedback) at (23.5,-14.3)
+ {\textbf{状态反馈与坐标转换}\\
+ /fmu/out/vehicle\_local\_position、vehicle\_attitude\\
+ /fmu/out/sensor\_combined（当前 IMU 源）\\
+ 内部：局部 z 向上世界系 + FLU；反馈同时供外环与内环};
+\node[box,text width=16.0cm,minimum height=17mm] (plant) at (7.5,-17.5)
+ {\textbf{PX4 / 真实飞行器，或 MuJoCo 仿真器}\\
+ 接收 ActuatorMotors 电机控制量；反馈位置、速度、姿态和 IMU};
+\node[box,text width=8.8cm,minimum height=17mm] (logs) at (23.5,-17.5)
+ {\textbf{调试、记录与可视化支路}\\
+ /debugPx4/ctrl、/debugPx4/ratectrl + 状态话题\\
+ flight\_data\_recorder / RViz / 离线分析};
+
+\draw[flow] (config)--node[lbl]{配置；1 ms 名义采样检查}(analytic);
+\draw[flow] (csv)--node[lbl]{启动读取 CSV}(sampled);
+\draw[ros] (rc)--(fsm);
+\draw[flow] (analytic.south)--(analytic.south |- player.north);
+\draw[flow] (sampled.south)--(sampled.south |- player.north);
+\draw[flow] (fsm.west)--++(-.5,0)|-node[lbl,pos=.72]{激活时间、起始位置 / 航向}(player.east);
+\draw[flow] (fsm)--(flat);
+\draw[flow] (flat.south)--++(0,-.7)|-node[lbl,pos=.28]{非 CMD 的运动窗口}(window.east);
+\draw[flow] (fsm.east)--++(.6,0)|-(mode.east);
+\draw[flow] (player)--node[lbl]{当前点与预瞄点}(window);
+\draw[flow] (window)--node[lbl]{运动参考}(control);
+\draw[flow] (mode)--node[lbl]{模式信息}(control);
+\draw[flow] (control)--node[lbl]{$a_T$ [m/s$^2$] 转为 $T=ma_T$ [N]}(output);
+\draw[ros] (output)--node[lbl]{/rates\_thrust\_setpoint\\消息布局与单位本次保持不变}(inner);
+\draw[ros] (inner)--node[lbl]{/fmu/in/actuator\_motors}(plant);
+\draw[ros] (plant.east)--++(1,0)--++(0,1.5)-|(feedback.south);
+\draw[ros] (feedback.west)--node[lbl]{反馈}(inner.east);
+\draw[ros] (feedback.west)--++(-1.0,0)|-([yshift=-5mm]control.east);
+\draw[ros] (feedback.east)--++(.6,0)|-([yshift=4mm]fsm.east);
+\draw[diag] (output.east)--++(15.0,0)|-(logs.east);
+\draw[diag] (inner.south east)--++(.6,-.5)|-(logs.west);
+\draw[diag] (feedback)--(logs);
+
+\node[align=left,font=\small,text width=29cm,anchor=north west] at (-1,-19)
+ {\textbf{读图说明：}实线为进程内调用 / 文件读取；蓝色虚线为 ROS 消息；灰色点线为观测支路。\quad
+ 青色：本轮重构重点；浅橙色：保留的 omtraj 文件路径。\\
+ 当前 NMPC：外环更新 100 Hz，预测 $H=12$、$\Delta t=0.04$ s，共 13 点 / 0.48 s。
+ 手动模式允许空运动窗口。图中省略 Offboard 心跳、解锁服务及启动握手；未新增 ROS 轨迹发布话题。};
+\end{tikzpicture}

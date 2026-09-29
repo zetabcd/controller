@@ -77,9 +77,17 @@ target_include_directories(px4ctrl_acados_ocp_solver PUBLIC
 target_link_libraries(px4ctrl_acados_ocp_solver PUBLIC acados hpipm blasfeo m)
 
 # ROS-independent acados solver, also exercised directly by regression tests.
-add_library(px4ctrl_reference STATIC src/control_reference.cpp)
+add_library(px4ctrl_reference STATIC src/control_reference.cpp src/trajectory.cpp src/sampled_trajectory.cpp)
 target_include_directories(px4ctrl_reference PUBLIC include)
 target_link_libraries(px4ctrl_reference PUBLIC Eigen3::Eigen)
+
+add_library(px4ctrl_omtraj STATIC src/omtraj.cpp src/omtraj_reference.cpp)
+target_include_directories(px4ctrl_omtraj PUBLIC include)
+target_link_libraries(px4ctrl_omtraj PUBLIC px4ctrl_reference Eigen3::Eigen osqp::osqp)
+
+add_executable(trajectory_inspect src/trajectory_inspect.cpp)
+target_link_libraries(trajectory_inspect px4ctrl_reference)
+install(TARGETS trajectory_inspect DESTINATION lib/${PROJECT_NAME})
 
 add_library(px4ctrl_acados_nmpc STATIC src/acados_nmpc_solver.cpp)
 target_include_directories(px4ctrl_acados_nmpc PUBLIC include)
@@ -95,13 +103,7 @@ add_executable(px4ctrl_node
   src/px4ctrlparam.cpp
   src/frame_transforms.cpp
   src/ommpc.cpp
-  src/omtraj.cpp
-  src/minimum_snap_trajectory.cpp
-  src/barrel_roll_trajectory.cpp
-  src/five_turn_trajectory.cpp
-  src/figure_eight_trajectory.cpp
   src/acados_nmpc.cpp
-  src/legacy_trajectory_reference.cpp
 )
 ament_target_dependencies(px4ctrl_node 
   rclcpp 
@@ -122,12 +124,11 @@ target_link_libraries(px4ctrl_node
   osqp::osqp
   px4ctrl_acados_nmpc
   px4ctrl_reference
+  px4ctrl_omtraj
   m)
 
 add_executable(omtraj_visualizer_node
   src/omtraj_visualizer_node.cpp
-  src/omtraj.cpp
-  src/minimum_snap_trajectory.cpp
 )
 ament_target_dependencies(omtraj_visualizer_node
   rclcpp
@@ -139,7 +140,7 @@ ament_target_dependencies(omtraj_visualizer_node
 target_include_directories(omtraj_visualizer_node SYSTEM PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(omtraj_visualizer_node PRIVATE include)
-target_link_libraries(omtraj_visualizer_node Eigen3::Eigen osqp::osqp)
+target_link_libraries(omtraj_visualizer_node px4ctrl_omtraj)
 
 # 实机轨迹窗口复用 quadsim 的红/绿线数据来源：PX4 实际位置与控制器参考位置。
 # GUI 可在地面站电脑运行，机载电脑只需要继续发布原有 ROS 话题。
@@ -199,6 +200,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(acados_nmpc_test test/acados_nmpc_test.cpp)
   target_link_libraries(acados_nmpc_test px4ctrl_acados_nmpc)
+  ament_add_gtest(trajectory_test test/trajectory_test.cpp)
+  target_link_libraries(trajectory_test px4ctrl_reference px4ctrl_omtraj)
   ament_add_gtest(control_reference_test test/control_reference_test.cpp)
   target_link_libraries(control_reference_test px4ctrl_reference)
   ament_add_gtest(controller_adapter_test

@@ -246,34 +246,34 @@ void PX4ControlNode::config_from_ros_handle()
 	this->declare_parameter<double>("other.lim_pitchrate_int",0.0);
 	this->declare_parameter<double>("other.lim_yawrate_int",0.0);
 
-    // “起飞 + 八字”CMD 轨迹参数。length/width 为包围盒全尺寸，speed 为八字段
-    // 最大路径速度；参数只决定参考轨迹，不改变 FSM 状态转换或控制器求解设置。
-    this->declare_parameter<double>("trajectory.figure_eight.takeoff_height", 1.0);
-    this->declare_parameter<double>("trajectory.figure_eight.takeoff_duration", 2.5);
-    this->declare_parameter<double>("trajectory.figure_eight.settle_duration", 0.5);
+    // One startup-selected source for every controller; regenerate by restarting.
+    this->declare_parameter<std::string>("trajectory.type", "figure_eight");
+    this->declare_parameter<double>("trajectory.takeoff_height", 1.5);
+    this->declare_parameter<double>("trajectory.takeoff_duration", 3.0);
+    this->declare_parameter<double>("trajectory.settle_duration", 0.5);
+    for (const std::string type : {"horizontal_circle", "vertical_circle", "helix", "figure_eight"}) {
+        const std::string key = "trajectory." + type + ".";
+        this->declare_parameter<double>(key + "radius", 1.0);
+        this->declare_parameter<int>(key + "turns", type == "vertical_circle" ? 1 : 2);
+        if (type == "horizontal_circle" || type == "figure_eight") {
+            this->declare_parameter<double>(key + "speed", 1.5);
+            this->declare_parameter<double>(key + "ramp_duration", 3.0);
+        } else {
+            this->declare_parameter<double>(key + "centripetal_g", 1.8);
+            this->declare_parameter<double>(key + "entry_duration", 0.85);
+            this->declare_parameter<double>(key + "exit_duration", 0.85);
+            this->declare_parameter<double>(key + "entry_distance", 1.43);
+            this->declare_parameter<double>(key + "exit_distance", 1.43);
+            this->declare_parameter<double>(key + "connector_height", 1.1);
+        }
+    }
+    this->declare_parameter<double>("trajectory.helix.pitch", 0.5);
+    this->declare_parameter<double>("trajectory.helix.axis_transition_duration", 1.0);
     this->declare_parameter<double>("trajectory.figure_eight.length", 2.0);
     this->declare_parameter<double>("trajectory.figure_eight.width", 1.2);
-    this->declare_parameter<double>("trajectory.figure_eight.speed", 1.0);
-    this->declare_parameter<int>("trajectory.figure_eight.laps", 1);
-    // 论文最小-jerk QP 多圈翻滚轨迹；只有 PX4CTRL_CMD_TRAJECTORY=3 时使用。
-    this->declare_parameter<double>("trajectory.five_turn.takeoff_height", 1.0);
-    this->declare_parameter<double>("trajectory.five_turn.takeoff_duration", 2.5);
-    this->declare_parameter<double>("trajectory.five_turn.settle_duration", 0.5);
-    this->declare_parameter<int>("trajectory.five_turn.revolutions", 5);
-    this->declare_parameter<int>("trajectory.five_turn.waypoints_per_revolution", 16);
-    this->declare_parameter<double>("trajectory.five_turn.radius", 1.0);
-    this->declare_parameter<double>("trajectory.five_turn.axial_speed", 0.5);
-    this->declare_parameter<double>("trajectory.five_turn.entry_duration", 1.5);
-    this->declare_parameter<double>("trajectory.five_turn.roll_duration", 9.0);
-    this->declare_parameter<double>("trajectory.five_turn.exit_duration", 1.5);
-    this->declare_parameter<double>(
-        "trajectory.five_turn.velocity_tracking_weight", 100.0);
-    this->declare_parameter<double>(
-        "trajectory.five_turn.acceleration_tracking_weight", 10.0);
-    this->declare_parameter<double>(
-        "trajectory.five_turn.jerk_tracking_weight", 0.1);
-    // 在线控制只读取离线优化器保存的最终状态序列，不声明也不运行任何
-    // OmTrajectoryOptimizer 求解参数。
+    this->declare_parameter<double>("trajectory.limits.motor_fraction", 0.7);
+    this->declare_parameter<double>("trajectory.limits.angular_acceleration", 100.0);
+    this->declare_parameter<double>("trajectory.limits.minimum_relative_altitude", -0.01);
     this->declare_parameter<std::string>("trajectory.omtraj.file", "");
     this->declare_parameter<double>("trajectory.point_to_point.max_speed", 1.0);
     this->declare_parameter<double>("trajectory.point_to_point.max_acceleration", 1.5);
@@ -450,14 +450,13 @@ int main(int argc, char *argv[])
 	/* 读取参数 */
 	node->config_from_ros_handle();
 	node->param_init = node->param;
-#if PX4CTRL_CMD_TRAJECTORY == 4
 	const auto trajectory_file = node->get_parameter("trajectory.omtraj.file").as_string();
 	node->set_parameter(rclcpp::Parameter(
 		"trajectory.omtraj.file",
 		uav_utils::projectPath(
 			trajectory_file.empty() ? "datalog/omtraj/omtraj_optimized.csv" : trajectory_file,
 			ament_index_cpp::get_package_share_directory("px4ctrl")).string()));
-#endif
+
 
 	// ---------------------------------------------------------------------
 	// 轨迹控制器参数初始化（OmMpc / acados）
@@ -466,7 +465,7 @@ int main(int argc, char *argv[])
 	// config_from_ros_handle() 之后把真实重力、频率和执行器边界写入 MPC。
 
 	//这一段代码是保证mpc控制器的时候参数有效
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
+#if PX4CTRL_USES_PREDICTIVE_CONTROLLER
 	if (!(node->param.uav.mass > 0.0) ||
 		node->param.motor.u_max <= node->param.motor.u_min)
 	{
@@ -563,27 +562,12 @@ int main(int argc, char *argv[])
 #else
 	node->fsm.controller.setOptions(controller_options);
 #endif
-#if PX4CTRL_CMD_TRAJECTORY == 3
-	// 稠密最小-jerk QP 在启动阶段完成；此时控制循环尚未运行，约 1 s 的
-	// 计算不会中断 PX4 Offboard 心跳。生成失败则禁止带病进入飞行流程。
-	if (!node->fsm.prepare_five_turn_cmd_trajectory()) {
-		RCLCPP_FATAL(
-			node->get_logger(),
-			"[px4ctrl] Cannot prepare five-turn CMD trajectory");
-		rclcpp::shutdown();
-		return 1;
-	}
-#elif PX4CTRL_CMD_TRAJECTORY == 4
-	// 这里只读取离线优化结果并做完整性检查，不运行轨迹优化器。
-	if (!node->fsm.load_offline_omtraj_template()) {
-		RCLCPP_FATAL(
-			node->get_logger(),
-			"[px4ctrl] Cannot prepare omtraj CMD trajectory");
-		rclcpp::shutdown();
-		return 1;
-	}
 #endif
-#endif
+    if (!node->fsm.prepare_cmd_trajectory()) {
+        rclcpp::shutdown();
+        return 1;
+    }
+
 
 	node->node_handshake_check("px4ctrl_node", "px4ctrlrate_node");
 
@@ -690,7 +674,7 @@ int main(int argc, char *argv[])
 #endif	
 	/* 启动FSM */
 	rclcpp::WallRate loop_rate(node->param.ctrl_freq_max);
-#if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
+#if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
 	// [LEGACY QuadControl] 原位置/速度环的加速度滤波器初始化。
     node->fsm.controller.init_filters(node->param);
 #endif

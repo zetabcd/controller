@@ -87,7 +87,7 @@ public:
   // 构造/求解 OSQP，最后写入 control_setpoint。
   px4debug_msgs::msg::Px4ctrlDebug calculateControl(
     const px4ctrl::ReferenceWindow &window,
-    const Ref_State_t &reference,
+    const px4ctrl::ControlModeReference &reference,
     const LocalPose_Data_t &pose,
     const Attitude_Data_t &attitude,
     const Sensor_Data_t &sensor,

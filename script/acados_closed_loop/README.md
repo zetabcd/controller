@@ -16,8 +16,8 @@ python3 script/acados_closed_loop/analyze.py q18_seed42
 每个运行名必须唯一，避免覆盖证据。每次保存配置、二进制 SHA256、原始数组、节点日志。
 分析器的 `--output-root` 必须与运行脚本一致；生成 metrics.json 和 comparison.png/json。
 
-本脚本固定使用 6×4 m、3 m/s 八字的当前 FSM 路径；若改变轨迹，须核对分析窗口：
-当前从 CMD 开始后 3 秒评估到日志中的轨迹结束，排除起飞和末尾悬停。
+轨迹由传入 YAML 的 `trajectory.type` 选择。旧分析器的“CMD 后 3 秒”及日志识别规则针对旧八字，
+分析新圆/螺旋/八字时须按 `trajectory_inspect` 导出的 main_start/main_end 重设评价窗口；不要直接套用旧指标。
 同一套参数下仅改变 Qp 时也不能承诺同一实时执行序列；调度和 DDS 到达顺序会改变噪声使用。
 
 适配器用固定 deadline 的实时 400 Hz 步进及 /clock，控制节点 use_sim_time=true，

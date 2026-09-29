@@ -8,38 +8,50 @@ px4ctrl_node:
 
     gra    : 9.805
 
-    # CMD 模式的“平滑起飞 + 水平八字”轨迹。length/width 是八字包围盒的
-    # 全长/全宽，speed 是八字段最大路径速度；进入 CMD 时读取这些参数并生成轨迹。
+    # All controllers use the same source. Selection/parameters take effect after restart.
     trajectory:
-      point_to_point:
-        max_speed: 1.0            # AUTO_HOVER 平移参考最大速度 [m/s]
-        max_acceleration: 1.5     # AUTO_HOVER 平移参考最大加速度 [m/s^2]
+      type: vertical_circle  # horizontal_circle | vertical_circle | helix | figure_eight | omtraj
+      takeoff_height: 1.5 # relative to CMD activation position [m]
+      takeoff_duration: 3.0
+      settle_duration: 0.5
+      horizontal_circle:
+        radius: 1.0      # main circle diameter <= 2 m, enforced by generator
+        turns: 2         # cruise turns; acceleration/deceleration add phase
+        speed: 1.5
+        ramp_duration: 3.0
+      vertical_circle:
+        radius: 1.0
+        turns: 1
+        centripetal_g: 1.8 # A/g > 1; slowing arbitrarily destroys inversion
+        entry_duration: 0.85
+        exit_duration: 0.85
+        entry_distance: 1.43
+        exit_distance: 1.43
+        connector_height: 1.1 # hover endpoints above circle bottom [m]
+      helix:
+        radius: 1.0
+        turns: 2
+        axis_transition_duration: 1.0
+        pitch: 0.5       # axial advance per revolution [m], not m/s
+        centripetal_g: 1.8
+        entry_duration: 0.85
+        exit_duration: 0.85
+        entry_distance: 1.43
+        exit_distance: 1.43
+        connector_height: 1.1
       figure_eight:
-        takeoff_height: 0.5       # 相对进入 CMD 时位置的上升高度 [m]
-        takeoff_duration: 2.5     # 七阶平滑起飞时间 [s]
-        settle_duration: 0.5      # 到达 1 m 后的稳定悬停时间 [s]
-        length: 6.0               # 八字长轴全长 [m]
-        width: 4.0                # 八字短轴全宽 [m]
-        speed: 3.0                # 八字段最大路径速度 [m/s]
-        laps: 2                   # 连续绕行圈数
-      # 论文最小-jerk QP 多圈翻滚；编译时选择 PX4CTRL_CMD_TRAJECTORY=3 后启用。
-      # 默认值复现外部 five_turn_helix 实现，并在前面增加实机平滑起飞。
-      five_turn:
-        takeoff_height: 1.0       # 相对进入 CMD 时位置的上升高度 [m]
-        takeoff_duration: 2.5     # 七阶平滑起飞时间 [s]
-        settle_duration: 0.5      # 起飞后的稳定时间 [s]
-        revolutions: 5            # 连续完整翻滚圈数
-        waypoints_per_revolution: 16 # 每圈圆周硬路标数，必须>=8且为4的倍数
-        radius: 1.0               # 螺旋圆周半径 [m]
-        axial_speed: 0.5          # 沿机头/滚转轴前进速度 [m/s]
-        entry_duration: 1.5       # 从静止进入轴向速度的时间 [s]
-        roll_duration: 9.0        # 完成全部翻滚圈的时间 [s]
-        exit_duration: 1.5        # 从轴向速度减速到静止的时间 [s]
-        velocity_tracking_weight: 100.0
-        acceleration_tracking_weight: 10.0
-        jerk_tracking_weight: 0.1
-      # 选择 PX4CTRL_CMD_TRAJECTORY=4 时只读取离线优化保存的 CSV。
-      # 相对于工程根目录，与 omtraj.yaml 中的输出路径一致。
+        length: 2.0      # full bounding-box dimensions [m]
+        width: 1.2
+        turns: 2         # total complete laps, including phase ramps
+        speed: 1.5       # upper bound on path speed [m/s]
+        ramp_duration: 3.0
+      limits:
+        motor_fraction: 0.7 # static single-motor maximum budget
+        angular_acceleration: 100.0 # nominal body angular acceleration norm [rad/s^2]
+        minimum_relative_altitude: -0.01
+      point_to_point:
+        max_speed: 1.0
+        max_acceleration: 1.5
       omtraj:
         file: datalog/omtraj/omtraj_optimized.csv
 
@@ -48,7 +60,7 @@ px4ctrl_node:
       horizon: 8
       prediction_dt: 0.01
       body_rate_max: [14.0, 14.0, 14.0]
-      state_weight: [10000.0, 8000.0, 8000.0, 40.0, 40.0, 10.0, 50.0, 50.0, 40.0]
+      state_weight: [1000.0, 1000.0, 800.0, 40.0, 40.0, 10.0, 50.0, 50.0, 40.0]
       input_weight: [0.5, 0.6, 0.6, 0.6]
       terminal_weight_scale: 1.0
 

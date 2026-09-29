@@ -119,19 +119,11 @@ public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     QuadControl(PX4ControlNode &);
     px4debug_msgs::msg::Px4ctrlDebug calculateControl(
-        const px4ctrl::ReferenceWindow &window, const Ref_State_t &mode,
+        const px4ctrl::ReferenceWindow &window, const px4ctrl::ControlModeReference &mode,
         const LocalPose_Data_t &pose, const Attitude_Data_t &att,
         const Sensor_Data_t &sens, const double &dt,
         Control_Setpoint_t &control_sp, const Parameter_t &param);
-    px4debug_msgs::msg::Px4ctrlDebug calculateControl(
-        const Ref_State_t &des,
-        const LocalPose_Data_t &pose,
-        const Attitude_Data_t &att,
-        const Sensor_Data_t &sens,
-		const double &dt,
-        Control_Setpoint_t &control_sp,
-        const Parameter_t &param
-    );
+
 	// sun: 状态切换或重新进入闭环控制时清空积分量和滤波器历史，避免旧状态造成瞬态冲击。
 	void resetControlParams();
 	// sun: 将牛顿制总推力转换为飞控内部使用的推力信号，并维护在线推力映射模型。
@@ -142,6 +134,15 @@ public:
 	void reset_filters();
 	
 private:
+    px4debug_msgs::msg::Px4ctrlDebug calculateLegacy(
+        const Ref_State_t &des,
+        const LocalPose_Data_t &pose,
+        const Attitude_Data_t &att,
+        const Sensor_Data_t &sens,
+		const double &dt,
+        Control_Setpoint_t &control_sp,
+        const Parameter_t &param
+    );
     enum procedure_id_ {
         FSM_STATE(manual_on),
         FSM_STATE(manual), 

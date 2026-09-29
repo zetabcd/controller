@@ -1,3 +1,4 @@
+#include <px4ctrl/sampled_trajectory.h>
 #include "px4ctrl/input.h"
 #include <Eigen/src/Core/Matrix.h>
 #include <px4ctrl/px4ctrlfsm.h>
@@ -164,7 +165,7 @@ void* PX4CtrlFSM::FSM_FUNCT(manual_on)(void * this_fsm)
                 set_last_state((FSM *)this_fsm);
                 set_next_state((FSM *)this_fsm, FSM_STATE(manual));
                 RCLCPP_INFO(px4controlnode_.get_logger(), "\033[32m[px4ctrl] MANUAL(ON) --> MANUAL(OFF)\033[0m");
-#if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
+#if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
                 // [LEGACY QuadControl] 在线推力映射复位。
                 controller.resetThrustMapping(px4controlnode_.param);
 #endif
@@ -203,10 +204,8 @@ void* PX4CtrlFSM::FSM_FUNCT(manual)(void * this_fsm)
     // sun: manual 是 OFFBOARD 下的遥控姿态模式；首次进入时锁定现场状态并清控制器历史。
     if (get_last_state((FSM *)this_fsm) != FSM_STATE(manual))
     {
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
-        // [OMMPC] 离开 CMD 后必须清除整条轨迹，否则轨迹源优先级高于 Ref_State_t。
-        trajectory_reference_.clearTrajectory();
-#endif
+        // Leaving CMD clears the active source before local mode references resume.
+        trajectory_reference_.clear();
         set_init_ref();
         record_position();
         reset_controller_();
@@ -306,15 +305,13 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
     /*  刚进入状态 */
     if (get_last_state((FSM *)this_fsm) != FSM_STATE(auto_hover))
     {
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
-        // [OMMPC] 非 CMD 模式使用 Ref_State_t 局部参考，不保留旧轨迹。
-        trajectory_reference_.clearTrajectory();
-#endif
+        // Non-CMD modes use their own local reference, never the previous trajectory.
+        trajectory_reference_.clear();
         set_init_ref();
         record_position();
         reset_point_reference_(record_state_data.p + record_state_data.v * 0.3);
         reset_controller_();
-#if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
+#if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
         // [LEGACY QuadControl] 悬停阶段复位推力映射。
         controller.resetThrustMapping(px4controlnode_.param);
 #endif
@@ -397,7 +394,7 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
     // set_hover_ref();
     set_point_hover(0,0,0.5);
     // set_manual_postion_ref(dt_,false);
-#if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
+#if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
     controller.estimateThrustModel(sens_data.a);
 #endif
     calculate_control_();
@@ -414,64 +411,17 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
 void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
 {   
     // RCLCPP_INFO(px4controlnode_.get_logger(),"\033[31mJust for debug11111111111111!!!\033[0m");
-    // [ACTIVE OmMpcControl] CMD 首次进入时生成并一次性装载所选离散轨迹；
-    // 后续控制周期只按 elapsed time 采样 H+1 个预瞄点，不会重复生成轨迹。
+    // The template is prepared before control starts. Activate it once in the
+    // measured local frame, then evaluate H+1 points at exact prediction times.
     if (get_last_state((FSM *)this_fsm) != FSM_STATE(cmd))
     {
         record_position();
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
-        // ref_ 在轨迹激活时只提供 FSM 状态等兼容字段，真正的 p/v/R/u 参考来自
-        // 公共参考适配器缓存的轨迹。
         set_hover_ref();
-#endif
         reset_controller_();
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
-#if PX4CTRL_CMD_TRAJECTORY == 2
-        if (!load_figure_eight_cmd_trajectory_()) {
-            RCLCPP_ERROR(
-                px4controlnode_.get_logger(),
-                "[px4ctrl] Cannot enter CMD: figure-eight trajectory generation failed");
+        if (!load_cmd_trajectory_()) {
             set_next_state((FSM *)this_fsm, FSM_STATE(auto_hover));
             return NULL;
         }
-#elif PX4CTRL_CMD_TRAJECTORY == 3
-        if (!load_five_turn_cmd_trajectory_()) {
-            RCLCPP_ERROR(
-                px4controlnode_.get_logger(),
-                "[px4ctrl] Cannot enter CMD: five-turn trajectory generation failed");
-            set_next_state((FSM *)this_fsm, FSM_STATE(auto_hover));
-            return NULL;
-        }
-#elif PX4CTRL_CMD_TRAJECTORY == 4
-        if (!load_omtraj_cmd_trajectory_()) {
-            RCLCPP_ERROR(
-                px4controlnode_.get_logger(),
-                "[px4ctrl] Cannot enter CMD: omtraj trajectory loading failed");
-            set_next_state((FSM *)this_fsm, FSM_STATE(auto_hover));
-            return NULL;
-        }
-#elif PX4CTRL_CMD_TRAJECTORY == 1
-        if (!load_barrel_roll_cmd_trajectory_()) {
-            RCLCPP_ERROR(
-                px4controlnode_.get_logger(),
-                "[px4ctrl] Cannot enter CMD: barrel-roll trajectory generation failed");
-            set_next_state((FSM *)this_fsm, FSM_STATE(auto_hover));
-            return NULL;
-        }
-
-#elif PX4CTRL_CMD_TRAJECTORY == 0
-        // [ALTERNATIVE] 原 minimum-snap CMD 轨迹完整保留；将轨迹宏改为 0 即启用。
-        if (!load_minimum_snap_cmd_trajectory_()) {
-            RCLCPP_ERROR(
-                px4controlnode_.get_logger(),
-                "[px4ctrl] Cannot enter CMD: minimum-snap trajectory generation failed");
-            set_next_state((FSM *)this_fsm, FSM_STATE(auto_hover));
-            return NULL;
-        }
-#else
-#error "PX4CTRL_CMD_TRAJECTORY must be 0 (minimum-snap), 1 (barrel roll), 2 (figure eight), 3 (five-turn), or 4 (omtraj)"
-#endif
-#endif
         set_last_state((FSM *)this_fsm);
     }
     /* 状态切换 */ 
@@ -524,10 +474,9 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
     }
 #endif
     /* 任务 */
-#if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
+#if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
     // [LEGACY QuadControl] 原解析 8 字轨迹入口完整保留；切换宏为 0 后自动启用。
     px4controlnode_.init_param();
-    set_2D8_ref();
 #endif
     calculate_control_();
     publish_rates_thrust_setpoint();
@@ -543,13 +492,11 @@ void* PX4CtrlFSM::FSM_FUNCT(safe)(void* this_fsm)
     /*  刚进入状态 */
     if (get_last_state((FSM *)this_fsm) != FSM_STATE(safe))
     {
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
         // [OMMPC] 安全/降落参考必须覆盖 CMD 轨迹源。
-        trajectory_reference_.clearTrajectory();
-#endif
+        trajectory_reference_.clear();
         record_position();
         reset_controller_();
-#if !PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
+#if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
         // [LEGACY QuadControl] 安全模式恢复推力映射。
         controller.resetThrustMapping(px4controlnode_.param);
 #endif
@@ -583,351 +530,95 @@ void* PX4CtrlFSM::FSM_FUNCT(safe)(void* this_fsm)
     return NULL;
 }
 
-#if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
-bool PX4CtrlFSM::load_figure_eight_cmd_trajectory_()
+bool PX4CtrlFSM::prepare_cmd_trajectory()
 {
-    FigureEightTrajectoryOptions options;
-    // 八字长轴沿进入 CMD 时的机头水平投影，避免装载轨迹瞬间改变参考偏航。
-    const double initial_yaw = get_yaw_from_quaternion(record_state_data.q);
-    options.forward_axis =
-        Eigen::Vector3d(std::cos(initial_yaw), std::sin(initial_yaw), 0.0);
-
-    // 参数在节点启动时声明，进入 CMD 时读取当前值；因此也可以先用
-    // `ros2 param set /px4ctrl_node trajectory.figure_eight.speed ...` 调整，
-    // 再重新进入 CMD 生成新轨迹，无需重新编译。
-    px4controlnode_.get_parameter(
-        "trajectory.figure_eight.takeoff_height", options.takeoff_height);
-    px4controlnode_.get_parameter(
-        "trajectory.figure_eight.takeoff_duration", options.takeoff_duration);
-    px4controlnode_.get_parameter(
-        "trajectory.figure_eight.settle_duration", options.takeoff_settle_duration);
-    px4controlnode_.get_parameter("trajectory.figure_eight.length", options.length);
-    px4controlnode_.get_parameter("trajectory.figure_eight.width", options.width);
-    px4controlnode_.get_parameter("trajectory.figure_eight.speed", options.speed);
-    options.laps = static_cast<int>(
-        px4controlnode_.get_parameter("trajectory.figure_eight.laps").as_int());
-    options.sample_dt = 1.0 / std::max(1.0, px4controlnode_.param.ctrl_freq_max);
-    options.gravity = px4controlnode_.param.gra;
-
-    OmTrajectoryResult trajectory =
-        generateFigureEightTrajectory(record_state_data.p, options);
-    if (!trajectory.success) {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(), "[px4ctrl] Figure-eight failed: %s",
-            trajectory.status.c_str());
-        return false;
-    }
-
-    const std::size_t state_count = trajectory.states.size();
-    const double total_time = trajectory.total_time;
-    // 和其他轨迹相同：完整缓存只装载一次，在线 MPC 每周期仅采样 H+1 个预瞄点。
-    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
-    RCLCPP_INFO(
-        px4controlnode_.get_logger(),
-        "[px4ctrl] Takeoff + figure-eight activated: height=%.2f m, size=%.2fx%.2f m, "
-        "max_speed=%.2f m/s, laps=%d, %zu samples, %.3f s",
-        options.takeoff_height, options.length, options.width, options.speed,
-        options.laps, state_count, total_time);
-    return true;
-}
-
-bool PX4CtrlFSM::load_barrel_roll_cmd_trajectory_()
-{
-    BarrelRollTrajectoryOptions options;
-    // 在原 barrel_roll_trajectory_preview_node 参数前增加平滑起飞和短暂稳定段。
-    // 起点使用进入 CMD 时的实际位置；滚转轴沿当前机头水平投影，避免偏航跳变。
-    const double initial_yaw = get_yaw_from_quaternion(record_state_data.q);
-    options.roll_axis = Eigen::Vector3d(std::cos(initial_yaw), std::sin(initial_yaw), 0.0);
-    // 先用 2.5 s 竖直上升 1 m，再悬停 0.5 s；起飞段首末端 v/a/jerk
-    // 均为零，飞机不会从地面直接进入水平加速或滚转。
-    options.takeoff_height = 1.0;
-    options.takeoff_duration = 2.5;
-    options.takeoff_settle_duration = 0.5;
-    options.radius = 1.0;
-    options.axial_speed = 0.5;
-    options.entry_duration = 1.5;
-    options.roll_duration = 3.5;
-    options.exit_duration = 1.5;
-    options.turns = 1;
-    options.polynomial_segments_per_turn = 32;
-    options.sample_dt = 1.0 / std::max(1.0, px4controlnode_.param.ctrl_freq_max);
-    options.gravity = px4controlnode_.param.gra;
-
-    OmTrajectoryResult trajectory =
-        generateBarrelRollTrajectory(record_state_data.p, options);
-    if (!trajectory.success) {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(), "[px4ctrl] Barrel-roll failed: %s",
-            trajectory.status.c_str());
-        return false;
-    }
-
-    const std::size_t state_count = trajectory.states.size();
-    const double total_time = trajectory.total_time;
-    // setTrajectory() 一次接收整条缓存；在线 MPC 只抽取当前时刻开始的预测窗。
-    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
-    RCLCPP_INFO(
-        px4controlnode_.get_logger(),
-        "[px4ctrl] Takeoff + barrel-roll activated: %.2f m takeoff, %d turn(s), "
-        "%zu samples, %.3f s",
-        options.takeoff_height, options.turns, state_count, total_time);
-    return true;
-}
-
-bool PX4CtrlFSM::prepare_five_turn_cmd_trajectory()
-{
-    px4ctrl::FiveTurnTrajectoryOptions options;
-    // 标准轨迹以原点和 +X 轴生成。进入 CMD 时再按实物的当前位置和偏航做
-    // 刚体变换；QP 不依赖这两个量，因此无需在控制循环中重复求解。
-    options.roll_axis = Eigen::Vector3d::UnitX();
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.takeoff_height", options.takeoff_height);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.takeoff_duration", options.takeoff_duration);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.settle_duration", options.takeoff_settle_duration);
-    options.revolutions = static_cast<int>(px4controlnode_.get_parameter(
-        "trajectory.five_turn.revolutions").as_int());
-    options.circle_waypoints_per_revolution = static_cast<int>(px4controlnode_.get_parameter(
-        "trajectory.five_turn.waypoints_per_revolution").as_int());
-    px4controlnode_.get_parameter("trajectory.five_turn.radius", options.radius);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.axial_speed", options.axial_speed);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.entry_duration", options.entry_duration);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.roll_duration", options.roll_duration);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.exit_duration", options.exit_duration);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.velocity_tracking_weight",
-        options.velocity_tracking_weight);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.acceleration_tracking_weight",
-        options.acceleration_tracking_weight);
-    px4controlnode_.get_parameter(
-        "trajectory.five_turn.jerk_tracking_weight",
-        options.jerk_tracking_weight);
-    options.sample_dt = 1.0 / std::max(1.0, px4controlnode_.param.ctrl_freq_max);
-    options.mass = px4controlnode_.param.uav.mass;
-    options.gravity = px4controlnode_.param.gra;
-
-    five_turn_template_ =
-        px4ctrl::generateFiveTurnTrajectory(Eigen::Vector3d::Zero(), options);
-    if (!five_turn_template_.success) {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(),
-            "[px4ctrl] Five-turn startup generation failed: %s",
-            five_turn_template_.status.c_str());
-        five_turn_template_ready_ = false;
-        return false;
-    }
-    five_turn_options_ = options;
-    five_turn_template_ready_ = true;
-    RCLCPP_INFO(
-        px4controlnode_.get_logger(),
-        "[px4ctrl] Five-turn template ready: %zu samples, %.3f s; "
-        "parameter changes require a node restart",
-        five_turn_template_.states.size(), five_turn_template_.total_time);
-    return true;
-}
-
-bool PX4CtrlFSM::load_five_turn_cmd_trajectory_()
-{
-    if (!five_turn_template_ready_) {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(),
-            "[px4ctrl] Five-turn template was not prepared before flight");
-        return false;
-    }
-
-    OmTrajectoryResult trajectory = five_turn_template_;
-    const double initial_yaw = get_yaw_from_quaternion(record_state_data.q);
-    const Eigen::AngleAxisd yaw_rotation(initial_yaw, Eigen::Vector3d::UnitZ());
-    const Eigen::Quaterniond yaw_quaternion(yaw_rotation);
-    for (auto &state : trajectory.states) {
-        state.position = record_state_data.p + yaw_rotation * state.position;
-        state.velocity = yaw_rotation * state.velocity;
-        state.attitude = (yaw_quaternion * state.attitude).normalized();
-        // body_rate 在机体系表达，世界坐标系绕 z 旋转后数值保持不变。
-    }
-    const px4ctrl::FiveTurnTrajectoryOptions &options = five_turn_options_;
-
-    // 论文轨迹的姿态变化和推力峰值都比较激进。装载前按实物参数再次检查，
-    // 防止电机或角速度限制不足时仍切入 CMD。
-    double peak_thrust_acceleration = 0.0;
-    Eigen::Vector3d peak_absolute_body_rate = Eigen::Vector3d::Zero();
-    for (const auto &state : trajectory.states) {
-        peak_thrust_acceleration =
-            std::max(peak_thrust_acceleration, state.thrust_acceleration);
-        peak_absolute_body_rate = peak_absolute_body_rate.cwiseMax(
-            state.body_rate.cwiseAbs());
-    }
-    const auto &controller_limits = controller.options();
-    if (peak_thrust_acceleration > controller_limits.thrust_acceleration_max + 1.0e-6 ||
-        (peak_absolute_body_rate.array() >
-        controller_limits.body_rate_max.array() + 1.0e-6).any())
-    {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(),
-            "[px4ctrl] Five-turn reference exceeds controller limits: "
-            "peak thrust=%.2f/%.2f m/s^2, peak |rate|=[%.2f %.2f %.2f], "
-            "limits=[%.2f %.2f %.2f] rad/s",
-            peak_thrust_acceleration, controller_limits.thrust_acceleration_max,
-            peak_absolute_body_rate.x(), peak_absolute_body_rate.y(),
-            peak_absolute_body_rate.z(), controller_limits.body_rate_max.x(),
-            controller_limits.body_rate_max.y(), controller_limits.body_rate_max.z());
-        return false;
-    }
-
-    const std::size_t state_count = trajectory.states.size();
-    const double total_time = trajectory.total_time;
-    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
-    RCLCPP_INFO(
-        px4controlnode_.get_logger(),
-        "[px4ctrl] Five-turn minimum-jerk activated: takeoff=%.2f m, "
-        "turns=%d, radius=%.2f m, roll_time=%.2f s, peak thrust=%.2f/%.2f m/s^2, "
-        "peak |rate|=[%.2f %.2f %.2f] rad/s, %zu samples, %.3f s",
-        options.takeoff_height, options.revolutions, options.radius,
-        options.roll_duration, peak_thrust_acceleration,
-        controller_limits.thrust_acceleration_max, peak_absolute_body_rate.x(),
-        peak_absolute_body_rate.y(), peak_absolute_body_rate.z(), state_count, total_time);
-    return true;
-}
-
-bool PX4CtrlFSM::load_offline_omtraj_template()
-{
-    const std::string file_path = px4controlnode_.get_parameter(
-        "trajectory.omtraj.file").as_string();
-    omtraj_template_ = loadOmTrajectoryCsv(file_path);
-    if (!omtraj_template_.success || omtraj_template_.states.empty()) {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(),
-            "[px4ctrl] Cannot load offline omtraj file '%s': %s",
-            file_path.c_str(), omtraj_template_.status.c_str());
-        omtraj_template_ready_ = false;
-        return false;
-    }
-
-    const OmTrajectoryState &initial = omtraj_template_.states.front();
-    omtraj_template_initial_position_ = initial.position;
-    omtraj_template_initial_yaw_ = get_yaw_from_quaternion(initial.attitude);
-    omtraj_template_ready_ = true;
-    RCLCPP_INFO(
-        px4controlnode_.get_logger(),
-        "[px4ctrl] Loaded offline omtraj: %s, %zu states, %.3f s",
-        file_path.c_str(), omtraj_template_.states.size(),
-        omtraj_template_.total_time);
-    return true;
-}
-bool PX4CtrlFSM::load_omtraj_cmd_trajectory_()
-{
-    if (!omtraj_template_ready_) {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(),
-            "[px4ctrl] Omtraj template was not prepared before flight");
-        return false;
-    }
-
-    OmTrajectoryResult trajectory = omtraj_template_;
-    const double current_yaw = get_yaw_from_quaternion(record_state_data.q);
-    const Eigen::AngleAxisd world_rotation(
-        current_yaw - omtraj_template_initial_yaw_, Eigen::Vector3d::UnitZ());
-    const Eigen::Quaterniond attitude_rotation(world_rotation);
-    for (auto &state : trajectory.states) {
-        state.position = record_state_data.p +
-            world_rotation * (state.position - omtraj_template_initial_position_);
-        state.velocity = world_rotation * state.velocity;
-        state.attitude = (attitude_rotation * state.attitude).normalized();
-        // body_rate 是机体系量，不随世界系刚体旋转改变。
-    }
-
-    double peak_thrust_acceleration = 0.0;
-    Eigen::Vector3d peak_absolute_body_rate = Eigen::Vector3d::Zero();
-    for (const auto &state : trajectory.states) {
-        peak_thrust_acceleration = std::max(
-            peak_thrust_acceleration, state.thrust_acceleration);
-        peak_absolute_body_rate = peak_absolute_body_rate.cwiseMax(
-            state.body_rate.cwiseAbs());
-    }
-    const auto &controller_limits = controller.options();
-    if (peak_thrust_acceleration > controller_limits.thrust_acceleration_max + 1.0e-6 ||
-        (peak_absolute_body_rate.array() >
-        controller_limits.body_rate_max.array() + 1.0e-6).any())
-    {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(),
-            "[px4ctrl] Omtraj reference exceeds controller input limits");
-        return false;
-    }
-
-    const std::size_t state_count = trajectory.states.size();
-    const double total_time = trajectory.total_time;
-    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
-    RCLCPP_INFO(
-        px4controlnode_.get_logger(),
-        "[px4ctrl] Omtraj CMD trajectory activated: %zu states, %.3f s, "
-        "peak thrust=%.2f m/s^2, peak |rate|=[%.2f %.2f %.2f] rad/s",
-        state_count, total_time, peak_thrust_acceleration,
-        peak_absolute_body_rate.x(), peak_absolute_body_rate.y(),
-        peak_absolute_body_rate.z());
-    return true;
-}
-
-bool PX4CtrlFSM::load_minimum_snap_cmd_trajectory_()
-{
-    // 航点采用“进入 CMD 时的位置 + ENU 相对偏移”，因此无论起飞原点和悬停
-    // 高度如何，第一点都与实机当前位置连续。这里是唯一需要修改任务航点的位置。
-    const Eigen::Vector3d origin = record_state_data.p;
-    // 10 个相对航点构成一条小范围、连续转弯并缓慢爬升的测试路线，用于
-    // 检查 MPC 对弯绕轨迹的跟踪；这里只控制轨迹尺度，不添加空间硬约束。
-    const std::vector<Eigen::Vector3d> relative_points{
-        Eigen::Vector3d(0.0, 0.0, 0.0),
-        Eigen::Vector3d(0.4, 0.2, 0.1),
-        Eigen::Vector3d(0.9, 0.6, 0.2),
-        Eigen::Vector3d(1.4, 1.1, 0.3),
-        Eigen::Vector3d(1.15, 1.5, 0.4),
-        Eigen::Vector3d(0.4, 1.3, 0.5),
-        Eigen::Vector3d(-0.4, 0.9, 0.6),
-        Eigen::Vector3d(-1.1, 0.4, 0.675),
-        Eigen::Vector3d(-1.5, -0.3, 0.75),
-        Eigen::Vector3d(-1.1, -1.2, 0.8)};
-    std::vector<Eigen::Vector3d> points;
-    points.reserve(relative_points.size());
-    for (const auto &offset : relative_points) {
-        points.push_back(origin + offset);
-    }
-
-    MinimumSnapOptions trajectory_options;
-    // 保守速度用于降低倾角、推力变化率和角加速度。
-    trajectory_options.nominal_speed = 0.65;
-    trajectory_options.minimum_segment_time = 0.2;
-    // 缓存采样频率取外环名义频率。在线 MPC 的预测步长可以略有不同，
-    // OmTrajectoryOptimizer::sample() 会对缓存轨迹插值。
-    trajectory_options.sample_dt = 1.0 / std::max(1.0, px4controlnode_.param.ctrl_freq_max);
-    trajectory_options.gravity = px4controlnode_.param.gra;
-    trajectory_options.yaw = get_yaw_from_quaternion(record_state_data.q);
-
-    MinimumSnapTrajectory generator(points.size(), points, trajectory_options);
-    OmTrajectoryResult trajectory = generator.generate();
-    if (!trajectory.success) {
-        RCLCPP_ERROR(
-            px4controlnode_.get_logger(), "[px4ctrl] Minimum-snap failed: %s",
-            trajectory.status.c_str());
-        return false;
-    }
-
-    const std::size_t state_count = trajectory.states.size();
-    const double total_time = trajectory.total_time;
-    // 右值装载把离散缓存所有权移交给 MPC，不复制数千个轨迹节点。
-    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
-    RCLCPP_INFO(
-        px4controlnode_.get_logger(),
-        "[px4ctrl] Minimum-snap trajectory activated: %zu points, %zu samples, %.3f s",
-        points.size(), state_count, total_time);
-    return true;
-}
+    try {
+        const auto &p = px4controlnode_.param;
+        const auto type = px4controlnode_.get_parameter("trajectory.type").as_string();
+        if (type == "omtraj") {
+            cmd_trajectory_ = px4ctrl::loadOmTrajectoryReference(
+                px4controlnode_.get_parameter("trajectory.omtraj.file").as_string(), p.gra);
+        } else {
+            px4ctrl::AnalyticTrajectoryOptions o;
+            if (type == "horizontal_circle") {o.path = px4ctrl::AnalyticPath::HorizontalCircle;}
+            else if (type == "vertical_circle") {o.path = px4ctrl::AnalyticPath::VerticalCircle;}
+            else if (type == "helix") {o.path = px4ctrl::AnalyticPath::Helix;}
+            else if (type == "figure_eight") {o.path = px4ctrl::AnalyticPath::FigureEight;}
+            else {throw std::invalid_argument("Unknown trajectory.type: " + type);}
+            o.gravity = p.gra;
+            const auto read = [&](const std::string &key, double &value) {
+                px4controlnode_.get_parameter("trajectory." + key, value);
+            };
+            read("takeoff_height", o.takeoff_height);
+            read("takeoff_duration", o.takeoff_duration);
+            read("settle_duration", o.settle_duration);
+            read(type + ".radius", o.radius);
+            o.turns = static_cast<int>(px4controlnode_.get_parameter("trajectory." + type + ".turns").as_int());
+            if (type == "horizontal_circle" || type == "figure_eight") {
+                read(type + ".speed", o.speed);
+                read(type + ".ramp_duration", o.ramp_duration);
+            } else {
+                read(type + ".centripetal_g", o.centripetal_g);
+                read(type + ".entry_duration", o.entry_duration);
+                read(type + ".exit_duration", o.exit_duration);
+                read(type + ".entry_distance", o.entry_distance);
+                read(type + ".exit_distance", o.exit_distance);
+                read(type + ".connector_height", o.connector_height);
+            }
+            if (type == "helix") {
+                read("helix.pitch", o.pitch);
+                read("helix.axis_transition_duration", o.axis_transition_duration);
+            }
+            if (type == "figure_eight") {
+                read("figure_eight.length", o.eight_length);
+                read("figure_eight.width", o.eight_width);
+            }
+            cmd_trajectory_ = std::make_shared<px4ctrl::AnalyticTrajectory>(o);
+        }
+        px4ctrl::TrajectoryLimits limits;
+        limits.gravity = p.gra; limits.mass = p.uav.mass;
+        limits.inertia = {p.uav.Jvx, p.uav.Jvy, p.uav.Jvz};
+        limits.arm = p.uav.l; limits.arm_angle = p.uav.beta_deg * 3.14159265358979323846 / 180.0;
+        limits.torque_to_thrust = p.motor.cq0 / p.motor.ct0;
+        limits.motor_min = p.motor.u_min;
+        const double motor_fraction = px4controlnode_.get_parameter("trajectory.limits.motor_fraction").as_double();
+        if (!std::isfinite(motor_fraction) || motor_fraction <= 0 || motor_fraction > 1) {
+            throw std::invalid_argument("trajectory.limits.motor_fraction must be in (0,1]");
+        }
+        limits.motor_max = p.motor.u_max * motor_fraction;
+        limits.thrust_min = 4.0 * limits.motor_min / limits.mass;
+        limits.thrust_max = 4.0 * limits.motor_max / limits.mass;
+#if PX4CTRL_PRIMARY_CONTROLLER != 0
+        limits.rate_max = controller.options().body_rate_max;
+        limits.thrust_min = std::max(limits.thrust_min, controller.options().thrust_acceleration_min);
+        limits.thrust_max = std::min(limits.thrust_max, controller.options().thrust_acceleration_max);
 #endif
+        limits.angular_acceleration_max = px4controlnode_.get_parameter("trajectory.limits.angular_acceleration").as_double();
+        limits.minimum_relative_altitude = px4controlnode_.get_parameter("trajectory.limits.minimum_relative_altitude").as_double();
+        const auto audit = px4ctrl::auditTrajectory(*cmd_trajectory_, limits);
+        if (!audit.valid) {
+            throw std::invalid_argument(audit.reason + " at t=" + std::to_string(audit.first_failure_time));
+        }
+        RCLCPP_INFO(px4controlnode_.get_logger(),
+            "Trajectory %s ready: %.3f s, speed %.2f m/s, thrust [%.2f, %.2f] m/s2, "
+            "rate %.2f rad/s, alpha %.2f rad/s2, static motors [%.2f, %.2f] N; sampled nominal audit only",
+            type.c_str(), cmd_trajectory_->duration(), audit.max_speed, audit.min_thrust,
+            audit.max_thrust, audit.max_rate, audit.max_angular_acceleration, audit.min_motor, audit.max_motor);
+        return true;
+    } catch (const std::exception &error) {
+        cmd_trajectory_.reset();
+        RCLCPP_ERROR(px4controlnode_.get_logger(), "Cannot prepare trajectory: %s", error.what());
+        return false;
+    }
+}
+
+bool PX4CtrlFSM::load_cmd_trajectory_()
+{
+    if (!cmd_trajectory_) {return false;}
+    trajectory_reference_.start(cmd_trajectory_, px4controlnode_.get_clock()->now().seconds(),
+        record_state_data.p, get_yaw_from_quaternion(record_state_data.q));
+    return true;
+}
 
 /* 故障模式 */
 void* PX4CtrlFSM::FSM_FUNCT(err)(void* this_fsm)// 错误状态
@@ -1059,40 +750,6 @@ void PX4CtrlFSM::set_land_ref()
     ref.yaw_accel = 0.0;
     ref.fsm_state = get_curr_state(&fsm_);
 	ref_ = ref;
-}
-
-// 8轨迹（高度不变）
-void PX4CtrlFSM::set_2D8_ref()
-{
-    // sun: 轨迹采用参数化“8”字曲线，并显式给出位置到 snap 的解析导数供前馈控制使用。
-    Ref_State_t ref;
-    auto start_time = record_state_data.time;
-    auto now_time = px4controlnode_.get_clock()->now();
-    double t = (now_time-start_time).seconds();
-    
-    double m = 0.5;
-    double vmax = 2.5;
-    double v = (2.0/(exp(-m*t)+1)-1)*vmax;
-    // sun: Logistic 速度包络让轨迹从零速平滑加速到 vmax，降低刚进入 CMD 时的参考突变。
-    double A = 5.0;
-    double k = v / A;
-    t = t + pi/2/k;
-    if (t > pi*2/k)t -= pi*2/k;
-	ref.p << A*sin(k*t)*cos(k*t),A*cos(k*t),0.0;
-    ref.p += record_state_data.p;
-	ref.v << A*k*cos(2*k*t),-A*k*sin(k*t),0.0;
-	ref.a << -2*A*k*k*sin(2*k*t),-A*k*k*cos(k*t),0.0;
-	ref.j << -4*A*k*k*k*cos(2*k*t),A*k*k*k*sin(k*t),0.0;
-    ref.s << 8*A*k*k*k*k*sin(2*k*t),A*k*k*k*k*cos(k*t),0.0;
-    ref.q = yaw_to_quaternion(get_yaw_from_quaternion(record_state_data.q));
-	ref.yaw_rate = 0.0;
-    ref.throttle = std::numeric_limits<double>::quiet_NaN();
-    ref.fsm_state = get_curr_state(&fsm_);
-    
-    ref.flag_valid_p = true;
-    ref.flag_valid_v = true;
-    ref.flag_valid_a = true;
-    ref_ = ref;
 }
 
 void PX4CtrlFSM::record_position()
@@ -1479,8 +1136,7 @@ void PX4CtrlFSM::publish_rates_thrust_setpoint()
 	rates_thrust_setpoint_publisher->publish(msg);
 }
 
-// Build one explicit snapshot at the controller boundary. Existing trajectory
-// generation is deliberately unchanged; it can be replaced independently.
+// One native reference window and separate mode metadata for every controller.
 void PX4CtrlFSM::calculate_control_()
 {
     const double now = px4controlnode_.get_clock()->now().seconds();
@@ -1496,7 +1152,7 @@ void PX4CtrlFSM::calculate_control_()
             return px4ctrl::ReferenceWindow{now, prediction_dt, {}};
         }
         if (trajectory_reference_.active()) {
-            return trajectory_reference_.sample(now, horizon, prediction_dt, px4controlnode_.param.gra);
+            return trajectory_reference_.sample(now, horizon, prediction_dt);
         }
         px4ctrl::ReferencePoint point;
         point.position = ref_.p; point.velocity = ref_.v; point.acceleration = ref_.a;
@@ -1506,12 +1162,18 @@ void PX4CtrlFSM::calculate_control_()
         return px4ctrl::extrapolateFlatReference(
             point, now, horizon, prediction_dt, px4controlnode_.param.gra);
     };
+    px4ctrl::ControlModeReference mode;
+    mode.fsm_state = ref_.fsm_state; mode.attitude = ref_.q;
+    mode.yaw_rate = ref_.yaw_rate; mode.throttle = ref_.throttle;
+    mode.position_valid = ref_.flag_valid_p;
+    mode.velocity_valid = ref_.flag_valid_v;
+    mode.acceleration_valid = ref_.flag_valid_a;
     const auto calculate = [&](const px4ctrl::ReferenceWindow &window) {
 #if PX4CTRL_PRIMARY_CONTROLLER == 2
-        debug_msg = controller.calculate(window, ref_,
+        debug_msg = controller.calculate(window, mode,
             {pose_data.p, pose_data.v, att_data.q, sens_data.w}, now, dt_, control_sp_);
 #else
-        debug_msg = controller.calculateControl(window, ref_, pose_data, att_data,
+        debug_msg = controller.calculateControl(window, mode, pose_data, att_data,
             sens_data, dt_, control_sp_, px4controlnode_.param);
 #endif
     };
@@ -1521,11 +1183,13 @@ void PX4CtrlFSM::calculate_control_()
         // Never execute a stale preview after a rejected reference. Recover to
         // current-position hover, keeping the normal mode/Offboard lifecycle.
         RCLCPP_ERROR(px4controlnode_.get_logger(), "Invalid control reference: %s", error.what());
-        trajectory_reference_.clearTrajectory();
+        trajectory_reference_.clear();
         reset_controller_();
         record_position();
         set_hover_ref();
         set_next_state(&fsm_, FSM_STATE(auto_hover));
+        mode.fsm_state = ref_.fsm_state;
+        mode.position_valid = mode.velocity_valid = mode.acceleration_valid = true;
         calculate(make_reference());
     }
 #if PX4CTRL_PRIMARY_CONTROLLER == 2
