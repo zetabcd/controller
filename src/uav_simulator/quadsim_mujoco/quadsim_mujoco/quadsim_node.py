@@ -728,7 +728,7 @@ def main(args=None):
         viewer.cam.distance = 3.0      # 相机距离目标点距离
         viewer.cam.azimuth = 0        # 水平旋转角 (0-360度)
         viewer.cam.elevation = -35     # 俯仰角 (-90 到 90度)
-        viewer.cam.lookat[:] = [0,0,5] # 目标点坐标 (x, y, z)
+        viewer.cam.lookat[:] = data.qpos[:3] # 相机初始看向无人机的实际起点
         
         last_time = time.time()
         quad.start_time = time.time()

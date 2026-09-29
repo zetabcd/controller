@@ -32,7 +32,7 @@ class PX4ControlNode;
 // 0=QuadControl, 1=OmMpcControl, 2=Ipopt+Eigen, 3=acados,
 // 4=NLopt+Eigen, 5=Ipopt+CasADi。
 #ifndef PX4CTRL_PRIMARY_CONTROLLER
-#define PX4CTRL_PRIMARY_CONTROLLER 1
+#define PX4CTRL_PRIMARY_CONTROLLER 3
 #endif
 
 // 旧条件宏现在表示“使用可接收 OmTrajectoryResult 的轨迹控制器”。保留名称
@@ -43,7 +43,7 @@ class PX4ControlNode;
 // 2=figure eight，3=论文最小-jerk多圈翻滚，4=本项目 OmTrajectoryOptimizer。
 // 危险机动不作为默认项自动启用。
 #ifndef PX4CTRL_CMD_TRAJECTORY
-#define PX4CTRL_CMD_TRAJECTORY 1
+#define PX4CTRL_CMD_TRAJECTORY 2
 #endif
 
 class PX4CtrlFSM

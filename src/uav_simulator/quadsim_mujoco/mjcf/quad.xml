@@ -54,7 +54,8 @@
     <!-- <camera name="down" pos="0 0 20" euler="0 0 0"/> -->
     <camera name="capture_cam" pos="62.50 -108.25 125.00" euler="60 0 60"/>
     
-    <body name="quad" pos="0 0 5.0"> 
+    <!-- 机架底部比机体原点低约 2.25 mm；从地面起始并留 0.05 mm 间隙，避免初始穿地。 -->
+    <body name="quad" pos="0 0 0.0023"> 
       <camera name="track_cam" pos="-2 0 1" euler="-90 0 60" mode="track"/>
       <camera name="fpv" pos="0 0 0.3" euler="-90 0 180" resolution="3280 2464" focal="1.88e-3 1.88e-3" sensorsize="3.936e-3 2.9568e-3"/>
       <!-- <joint name="quad" type="ball" pos="0 0 0"/> -->

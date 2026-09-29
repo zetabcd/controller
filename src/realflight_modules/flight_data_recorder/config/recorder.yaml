@@ -22,4 +22,3 @@ flight_data_recorder:
       - /clock
       - /rosout
       - /parameter_events
-      - /fmu/out/vehicle_attitude
