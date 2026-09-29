@@ -25,7 +25,7 @@ struct BarrelRollTrajectoryOptions
   double gravity{9.805};
 };
 
-// 生成与 OmMpcControl::setTrajectory() 直接兼容的完整离散轨迹。
+// 生成与 LegacyTrajectoryReference::setTrajectory() 直接兼容的完整离散轨迹。
 // 每个状态同时包含 p、v、R、质量归一化推力和机体系角速度，因此该轨迹
 // 不只是用于显示的位置曲线，而是可以直接作为 MPC 的状态/输入参考。
 OmTrajectoryResult generateBarrelRollTrajectory(

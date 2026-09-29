@@ -7,7 +7,7 @@
 
 ```text
 FSM → AcadosNmpcControl → AcadosNmpcSolver → generated/acados/px4ctrl_nmpc
-    轨迹采样/手动模式       数值配置/求解/恢复       模型与求解器结构
+    参考适配/手动模式       数值配置/求解/恢复       模型与求解器结构
     单位换算/调试消息
 ```
 
@@ -17,12 +17,12 @@ FSM → AcadosNmpcControl → AcadosNmpcSolver → generated/acados/px4ctrl_nmpc
   返回质量归一化推力与机体角速度。返回值可能来自反馈回退，须结合 `diagnostics()`。
 - `reset()`：只清空迭代、热启动和历史命令，保留 dt、权重、边界、重力和求解选项。
 - `AcadosNmpcControl::configure(options, mass)`：在节点参数初始化后调用。
-- `calculate(ref, pose, attitude, measured_body_rate, now_seconds, elapsed_seconds, output)`：FSM 适配入口，
-  输出推力为牛顿；时间由 FSM 显式传入，不保存 ROS Node 引用；显式接收 FLU 实测角速度，作为预测状态。
-- `setTrajectory`/`clearTrajectory`：使用现有 `OmTrajectoryResult`，更换轨迹时清空热启动。
+- `calculate(window, mode, state, now_seconds, elapsed_seconds, output)`：接收本周期公共参考窗口、模式信息和原生 `AcadosNmpcState`。
+  输出推力为牛顿，同时输出角加速度前馈及有效标志；不再缓存规划器结果。
+- 参考窗口与前馈契约见 [CONTROL_REFERENCE.md](CONTROL_REFERENCE.md)。现有轨迹通过 FSM 边界的兼容器接入。
 
-参考窗口和求解轨迹缓存在配置阶段分配，正常 step 不重建求解器，也不分配动态向量。
-状态/输入边界和权重仅配置一次，每帧只更新测量、参考和上一条实际控制指令。
+求解器缓存在配置阶段分配，正常 step 不重建求解器。参考适配器按窗口构造工作副本。
+状态/输入边界和权重仅配置一次，每帧更新测量、参考、前馈参数和上一条实际控制指令。
 
 ## 调参：修改 YAML 后重启，无需生成或编译
 
@@ -62,19 +62,19 @@ FSM → AcadosNmpcControl → AcadosNmpcSolver → generated/acados/px4ctrl_nmpc
 p_dot = v
 v_dot = R(q) * (e3*a_T + aero_body) - g*e3
 q_dot = 0.5*q⊗[0,omega_actual]
-omega_actual_dot = (omega_command - omega_actual) / rate_time_constant
+omega_actual_dot = (omega_command - omega_actual) / rate_time_constant + alpha_ff
 aero_body = -linear_drag .* (R(q)^T*v)
 aero_body.z += horizontal_lift * (v_body.x² + v_body.y²)
 ```
 
 `linear_drag=[kdx,kdy,kdz]/mass`，`horizontal_lift=kh/mass`；关闭 ROS
 `drag_compensation` 时二者置零。独立 C++ 接口通过 options 显式传入，默认无阻力。
-模型参数共 12 项：g、上一帧命令(4)、时间常数(3)、阻力/质量(3)、kh/质量。
+模型参数共 15 项：g、上一帧命令(4)、时间常数(3)、阻力/质量(3)、kh/质量、角加速度前馈(3)。
 结构变化全部在生成脚本完成，生成 C 不手工修改。
 
 参考姿态和推力补偿阻力，角速度参考由补偿后的姿态序列计算；再用
-`omega_command_ref = omega_ref + tau .* omega_ref_dot` 补偿内环响应。
-这是预测代价使用的输入参考；输出给内环的 `rate_dot_ref` 仍为零，避免重复补偿。
+`omega_command_ref = omega_ref + tau .* (omega_ref_dot - alpha_ff)` 仅补偿尚未由前馈覆盖的部分。
+同一 alpha_ff 写入预测模型并通过 `rate_dot_ref` 下发；求解失败时禁用前馈。
 使用 ERK/RK4 多重射击、完整 SQP、Gauss–Newton、HPIPM。
 
 代价采用明确的**离散累加**：

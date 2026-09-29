@@ -15,7 +15,7 @@ using InputArray = std::array<double, 4>;
 using Clock = std::chrono::steady_clock;
 static_assert(
   PX4CTRL_NMPC_NX == 13 && PX4CTRL_NMPC_NU == 4 &&
-  PX4CTRL_NMPC_NP == 12 && PX4CTRL_NMPC_NY0 == 18 &&
+  PX4CTRL_NMPC_NP == 15 && PX4CTRL_NMPC_NY0 == 18 &&
   PX4CTRL_NMPC_NY == 14 && PX4CTRL_NMPC_NYN == 10,
   "Regenerate acados with script/generate_px4ctrl_acados_nmpc.py");
 
@@ -125,7 +125,7 @@ public:
       -options.body_rate_max.y(), -options.body_rate_max.z()};
     InputArray hi{options.thrust_acceleration_max, options.body_rate_max.x(),
       options.body_rate_max.y(), options.body_rate_max.z()};
-    std::array<double, 12> params{options.gravity, options.gravity, 0, 0, 0,
+    std::array<double, 15> params{options.gravity, options.gravity, 0, 0, 0,
       options.rate_time_constant.x(), options.rate_time_constant.y(),
       options.rate_time_constant.z(),
       options.linear_drag.x(), options.linear_drag.y(), options.linear_drag.z(),
@@ -280,7 +280,7 @@ public:
       refs.size() != static_cast<std::size_t>(options.horizon + 1) ||
       !std::all_of(
         refs.begin(), refs.end(), [](const auto & r) {
-          return validState(r.state) && validInput(r.input);
+          return validState(r.state) && validInput(r.input) && r.angular_acceleration_ff.allFinite();
         })) {return fail(-1);}
 
     if (has_solution && elapsed >= options.horizon * options.prediction_dt) {
@@ -296,15 +296,18 @@ public:
       c->nlp_config, c->nlp_dims, c->nlp_in, c->nlp_out, 0, "ubx",
       x0.data());
     setX(0, x0);
-    std::array<double, 12> params{options.gravity, last_command.thrust_acceleration,
+    std::array<double, 15> params{options.gravity, last_command.thrust_acceleration,
       last_command.body_rate.x(), last_command.body_rate.y(), last_command.body_rate.z(),
       options.rate_time_constant.x(), options.rate_time_constant.y(),
       options.rate_time_constant.z(),
       options.linear_drag.x(), options.linear_drag.y(), options.linear_drag.z(),
       options.horizontal_lift};
-    px4ctrl_nmpc_acados_update_params(c, 0, params.data(), params.size());
     Eigen::Vector4d previous_q = Eigen::Map<Eigen::Vector4d>(x0.data() + 6);
     for (int k = 0; k <= options.horizon; ++k) {
+      for (int axis = 0; axis < 3; ++axis) {
+        params[12 + axis] = refs[k].angular_acceleration_ff[axis];
+      }
+      px4ctrl_nmpc_acados_update_params(c, k, params.data(), params.size());
       std::array<double, 18> ref{};
       auto x = pack(refs[k].state);
       Eigen::Map<Eigen::Vector4d> q(x.data() + 6);

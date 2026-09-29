@@ -46,7 +46,7 @@
 #include "px4ctrl_nmpc_model/px4ctrl_nmpc_model.h"
 #include "acados_sim_solver_px4ctrl_nmpc.h"
 // initial value of stagewise parameters
-static const double p_init[] = {9.805,9.805,0,0,0,0.1,0.083,0.25,0,0,0,0,};
+static const double p_init[] = {9.805,9.805,0,0,0,0.1,0.083,0.25,0,0,0,0,0,0,0,};
 
 // ** solver data **
 

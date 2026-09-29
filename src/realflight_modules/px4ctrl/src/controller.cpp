@@ -36,6 +36,31 @@ void QuadControl::resetControlParams()
 }
 
 px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
+    const px4ctrl::ReferenceWindow &window, const Ref_State_t &mode,
+    const LocalPose_Data_t &pose, const Attitude_Data_t &att,
+    const Sensor_Data_t &sens, const double &dt,
+    Control_Setpoint_t &output, const Parameter_t &param)
+{
+    if (mode.fsm_state == FSM_STATE(manual)) {
+        return calculateControl(mode, pose, att, sens, dt, output, param);
+    }
+    px4ctrl::validateReferenceWindow(window, 0, window.dt);
+    const auto &point = window.points.front();
+    Ref_State_t ref = mode;
+    ref.p = point.position; ref.v = point.velocity; ref.a = point.acceleration;
+    ref.j = point.jerk; ref.s = point.snap;
+    ref.q = yaw_to_quaternion(point.yaw);
+    ref.yaw_rate = point.yaw_rate; ref.yaw_accel = point.yaw_acceleration;
+    ref.feedforward_attitude = point.attitude;
+    ref.body_rate_ff = point.body_rate;
+    ref.body_acceleration_ff = point.angular_acceleration_valid ?
+        point.body_acceleration : Eigen::Vector3d::Zero();
+    ref.explicit_feedforward = true;
+    ref.acceleration_feedforward_valid = point.angular_acceleration_valid;
+    return calculateControl(ref, pose, att, sens, dt, output, param);
+}
+
+px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
     const Ref_State_t &ref, 
     const LocalPose_Data_t &pose, 
     const Attitude_Data_t &att,
@@ -243,6 +268,12 @@ px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
 
 
 
+        if (ref.explicit_feedforward) {
+            const Eigen::Quaterniond reference_to_actual =
+                att.q.normalized().conjugate() * ref.feedforward_attitude;
+            rate_ref = reference_to_actual * ref.body_rate_ff;
+            rate_dot_ref = reference_to_actual * ref.body_acceleration_ff;
+        } else {
         // sun: jerk 和 snap 通过微分平坦关系映射为角速度、角加速度前馈；
         // sun: last_Td 使用上一周期推力，避免当前求导链路形成代数环。
         Eigen::Vector3d h_ome;
@@ -257,6 +288,8 @@ px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
                                 2 * diff_T / last_Td * sens.w.cross(z_B) + diff2_T / last_Td * z_B);
         rate_dot_ref << -h_alpha.dot(y_B), h_alpha.dot(x_B), ref.yaw_accel * Eigen::Vector3d::UnitZ().dot(z_B);
         last_Td = collective_thrust_des;
+        }
+
     }
 
 
@@ -304,6 +337,12 @@ px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
     control_sp.bodyrates = rate_des;
     control_sp.thrust = collective_thrust_des;
     control_sp.rate_dot_ref = rate_dot_ref;
+    control_sp.rate_dot_ref_valid = ref.fsm_state != FSM_STATE(manual) &&
+        (!ref.explicit_feedforward || ref.acceleration_feedforward_valid);
+    if (param.tuning.attitude_loop || param.tuning.angular_rate_loop) {
+        control_sp.rate_dot_ref.setZero();
+        control_sp.rate_dot_ref_valid = false;
+    }
 
     // static auto last_print_time = px4controlnode_.get_clock()->now();
     // auto now_time = px4controlnode_.get_clock()->now();
@@ -338,9 +377,9 @@ px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
     debug_msg_.ref_rate_y = -rate_ref[1];
     debug_msg_.ref_rate_z = -rate_ref[2];
 
-    debug_msg_.ref_rate_dot_x = rate_dot_ref[0];
-    debug_msg_.ref_rate_dot_y = -rate_dot_ref[1];
-    debug_msg_.ref_rate_dot_z = -rate_dot_ref[2];
+    debug_msg_.ref_rate_dot_x = control_sp.rate_dot_ref[0];
+    debug_msg_.ref_rate_dot_y = -control_sp.rate_dot_ref[1];
+    debug_msg_.ref_rate_dot_z = -control_sp.rate_dot_ref[2];
 
     debug_msg_.des_a_x = acc_des[0];
     debug_msg_.des_a_y = -acc_des[1];

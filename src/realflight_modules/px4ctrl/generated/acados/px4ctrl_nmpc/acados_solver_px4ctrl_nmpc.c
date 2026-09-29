@@ -89,7 +89,7 @@
 #define NSGN   PX4CTRL_NMPC_NSGN
 #define NSBXN  PX4CTRL_NMPC_NSBXN
 // initial value of stagewise parameters
-static const double p_init[] = {9.805,9.805,0,0,0,0.1,0.083,0.25,0,0,0,0,};
+static const double p_init[] = {9.805,9.805,0,0,0,0.1,0.083,0.25,0,0,0,0,0,0,0,};
 
 
 
@@ -1130,7 +1130,7 @@ int px4ctrl_nmpc_acados_update_params(px4ctrl_nmpc_solver_capsule* capsule, int 
 {
     int solver_status = 0;
 
-    int casadi_np = 12;
+    int casadi_np = 15;
     if (casadi_np != np) {
         printf("acados_update_params: trying to set %i parameters for external functions."
             " External function has %i parameters. Exiting.\n", np, casadi_np);

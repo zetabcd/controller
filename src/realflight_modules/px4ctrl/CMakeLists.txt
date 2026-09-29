@@ -77,6 +77,10 @@ target_include_directories(px4ctrl_acados_ocp_solver PUBLIC
 target_link_libraries(px4ctrl_acados_ocp_solver PUBLIC acados hpipm blasfeo m)
 
 # ROS-independent acados solver, also exercised directly by regression tests.
+add_library(px4ctrl_reference STATIC src/control_reference.cpp)
+target_include_directories(px4ctrl_reference PUBLIC include)
+target_link_libraries(px4ctrl_reference PUBLIC Eigen3::Eigen)
+
 add_library(px4ctrl_acados_nmpc STATIC src/acados_nmpc_solver.cpp)
 target_include_directories(px4ctrl_acados_nmpc PUBLIC include)
 target_link_libraries(px4ctrl_acados_nmpc PUBLIC Eigen3::Eigen px4ctrl_acados_ocp_solver)
@@ -97,6 +101,7 @@ add_executable(px4ctrl_node
   src/five_turn_trajectory.cpp
   src/figure_eight_trajectory.cpp
   src/acados_nmpc.cpp
+  src/legacy_trajectory_reference.cpp
 )
 ament_target_dependencies(px4ctrl_node 
   rclcpp 
@@ -116,6 +121,7 @@ target_link_libraries(px4ctrl_node
   Eigen3::Eigen
   osqp::osqp
   px4ctrl_acados_nmpc
+  px4ctrl_reference
   m)
 
 add_executable(omtraj_visualizer_node
@@ -193,6 +199,13 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(acados_nmpc_test test/acados_nmpc_test.cpp)
   target_link_libraries(acados_nmpc_test px4ctrl_acados_nmpc)
+  ament_add_gtest(control_reference_test test/control_reference_test.cpp)
+  target_link_libraries(control_reference_test px4ctrl_reference)
+  ament_add_gtest(controller_adapter_test
+    test/controller_adapter_test.cpp src/acados_nmpc.cpp src/frame_transforms.cpp)
+  target_link_libraries(controller_adapter_test px4ctrl_reference px4ctrl_acados_nmpc osqp::osqp)
+  ament_target_dependencies(controller_adapter_test
+    rclcpp geometry_msgs sensor_msgs px4_msgs fms_utils uav_utils px4debug_msgs joy_msgs)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # uncomment the line when a copyright and license is not present in all source files

@@ -73,39 +73,6 @@ Eigen::Vector3d logSo3(const Eigen::Matrix3d &rotation)
   return angle * axis;
 }
 
-double yawOf(const Eigen::Quaterniond &q)
-{
-  // 从机体到世界的旋转矩阵提取 ZYX 欧拉角中的偏航角。
-  const Eigen::Matrix3d r = q.normalized().toRotationMatrix();
-  return std::atan2(r(1, 0), r(0, 0));
-}
-
-Eigen::Matrix3d attitudeFromForce(const Eigen::Vector3d &specific_force, double yaw)
-{
-  // 平移模型给出期望合力方向 f_d=a_d+g e3，令期望机体 z 轴
-  // z_b^d=f_d/||f_d||。再用给定偏航构造 x/y 轴，得到完整 R_d。
-  Eigen::Vector3d zb = specific_force;
-  if (!zb.allFinite() || zb.norm() < 1.0e-6) {
-    zb = Eigen::Vector3d::UnitZ();
-  } else {
-    zb.normalize();
-  }
-  // y_c 是期望航向平面内与 x_c 正交的向量；x_b=y_c x z_b。
-  const Eigen::Vector3d yc(-std::sin(yaw), std::cos(yaw), 0.0);
-  Eigen::Vector3d xb = yc.cross(zb);
-  if (xb.norm() < 1.0e-6) {
-    xb = Eigen::Vector3d::UnitX();
-  } else {
-    xb.normalize();
-  }
-  Eigen::Vector3d yb = zb.cross(xb).normalized();
-  Eigen::Matrix3d r;
-  r.col(0) = xb;
-  r.col(1) = yb;
-  r.col(2) = zb;
-  return r;
-}
-
 struct CscStorage
 {
   // OSQP C API 的矩阵由动态内存持有。该 RAII 包装负责所有权转移和释放，
@@ -290,41 +257,6 @@ void OmMpcControl::setOptions(const OmMpcOptions &options)
   options_.prediction_dt = std::max(1.0e-4, options_.prediction_dt);
 }
 
-void OmMpcControl::setReferencePreview(
-  const std::vector<OmMpcReference, Eigen::aligned_allocator<OmMpcReference>> &preview)
-{
-  // 外部预瞄和整条轨迹是互斥参考源，最后一次显式设置者生效。
-  preview_ = preview;
-  trajectory_active_ = false;
-}
-
-void OmMpcControl::setTrajectory(
-  const OmTrajectoryResult &trajectory, const rclcpp::Time &start_time)
-{
-  // 只有离线优化器已报告 success 且状态序列非空才激活，防止跟踪失败结果。
-  trajectory_ = trajectory;
-  trajectory_start_ = start_time;
-  trajectory_active_ = trajectory.success && !trajectory.states.empty();
-  preview_.clear();
-}
-
-void OmMpcControl::setTrajectory(
-  OmTrajectoryResult &&trajectory, const rclcpp::Time &start_time)
-{
-  trajectory_ = std::move(trajectory);
-  trajectory_start_ = start_time;
-  trajectory_active_ = trajectory_.success && !trajectory_.states.empty();
-  preview_.clear();
-}
-
-void OmMpcControl::clearTrajectory()
-{
-  // 清空两个可持续参考源；下一周期将使用传入的 Ref_State_t 局部外推。
-  trajectory_active_ = false;
-  trajectory_.states.clear();
-  preview_.clear();
-}
-
 void OmMpcControl::resetControlParams()
 {
   // 飞行模式切换或控制器复位时，不应沿用上一模式中的角速度命令。
@@ -346,10 +278,12 @@ bool OmMpcControl::estimateThrustModel(const Eigen::Vector3d &)
 }
 
 px4debug_msgs::msg::Px4ctrlDebug OmMpcControl::calculateControl(
+  const px4ctrl::ReferenceWindow &window,
   const Ref_State_t &reference, const LocalPose_Data_t &pose,
-  const Attitude_Data_t &attitude, const Sensor_Data_t &, const double &dt,
+  const Attitude_Data_t &attitude, const Sensor_Data_t &, const double & /*dt*/,
   Control_Setpoint_t &control_setpoint, const Parameter_t &parameters)
 {
+  control_setpoint.rate_dot_ref_valid = false;
   // 每周期诊断只描述本次求解，不能遗留上一周期的 solved/status。
   diagnostics_ = {};
   // attitude.q 按工程约定表示机体系到世界系旋转。
@@ -384,59 +318,9 @@ px4debug_msgs::msg::Px4ctrlDebug OmMpcControl::calculateControl(
   }
 
   const int horizon = std::max(1, options_.horizon);
-  // 优先使用控制器实测周期，使预测网格与当前执行频率一致；异常 dt 才回退配置值。
-  const double prediction_dt = dt > 1.0e-4 ? dt : options_.prediction_dt;
-  std::vector<OmMpcReference, Eigen::aligned_allocator<OmMpcReference>> refs;
-  refs.reserve(static_cast<std::size_t>(horizon + 1));
-  if (trajectory_active_) {
-    // 参考源优先级 1：离线最短时间轨迹。用 ROS 经过时间定位当前轨迹时刻，
-    // 再按 k*prediction_dt 采出 H+1 个预瞄节点。
-    const double now = (node_.get_clock()->now() - trajectory_start_).seconds();
-    for (int k = 0; k <= horizon; ++k) {
-      const OmTrajectoryState sample =
-        OmTrajectoryOptimizer::sample(trajectory_, now + k * prediction_dt);
-      OmMpcReference r;
-      r.position = sample.position;
-      r.velocity = sample.velocity;
-      r.attitude = sample.attitude;
-      r.thrust_acceleration = sample.thrust_acceleration;
-      r.body_rate = sample.body_rate;
-      refs.push_back(r);
-    }
-  } else if (preview_.size() >= static_cast<std::size_t>(horizon + 1)) {
-    // 参考源优先级 2：调用者提供的多点预瞄。多余点不会进入当前 QP。
-    refs.assign(preview_.begin(), preview_.begin() + horizon + 1);
-  } else {
-    // 参考源优先级 3：由单个 Ref_State_t 做短时 Taylor 外推：
-    // p_d(t)=p+t v+1/2 t^2 a, v_d(t)=v+t a, a_d(t)=a+t j。
-    std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> rotations;
-    rotations.reserve(static_cast<std::size_t>(horizon + 1));
-    const double yaw0 = yawOf(reference.q);
-    for (int k = 0; k <= horizon; ++k) {
-      const double t = k * prediction_dt;
-      OmMpcReference r;
-      r.position = reference.p + t * reference.v + 0.5 * t * t * reference.a;
-      r.velocity = reference.v + t * reference.a;
-      const Eigen::Vector3d acceleration = reference.a + t * reference.j;
-      const Eigen::Vector3d specific_force = acceleration +
-        Eigen::Vector3d(0.0, 0.0, options_.gravity);
-      // 由 f_d=a_d+g e3 恢复期望机体 z 轴及姿态；偏航按 yaw_rate 匀速外推。
-      const Eigen::Matrix3d rd = attitudeFromForce(specific_force, yaw0 + t * reference.yaw_rate);
-      r.attitude = Eigen::Quaterniond(rd);
-      r.thrust_acceleration = std::clamp(
-        specific_force.norm(), options_.thrust_acceleration_min,
-        options_.thrust_acceleration_max);
-      rotations.push_back(rd);
-      refs.push_back(r);
-    }
-    // 相邻期望姿态的 SO(3) 对数除以 dt，得到与姿态序列一致的前馈角速度。
-    for (int k = 0; k < horizon; ++k) {
-      refs[static_cast<std::size_t>(k)].body_rate = logSo3(
-        rotations[static_cast<std::size_t>(k)].transpose() *
-        rotations[static_cast<std::size_t>(k + 1)]) / prediction_dt;
-    }
-    refs.back().body_rate = horizon > 0 ? refs[refs.size() - 2].body_rate : Eigen::Vector3d::Zero();
-  }
+  const double prediction_dt = options_.prediction_dt;
+  px4ctrl::validateReferenceWindow(window, horizon, prediction_dt);
+  const auto &refs = window.points;
 
   // -----------------------------------------------------------------------
   // 预测模型凝聚
@@ -526,7 +410,10 @@ px4debug_msgs::msg::Px4ctrlDebug OmMpcControl::calculateControl(
   control_setpoint.bodyrates = command.tail<3>();
   // q 仅作为期望姿态/日志字段；本控制器的直接执行输入仍是 thrust+bodyrates。
   control_setpoint.q = refs.front().attitude;
-  control_setpoint.rate_dot_ref.setZero();
+  control_setpoint.rate_dot_ref = diagnostics_.solved ?
+    px4ctrl::angularFeedforward(refs.front(), attitude.q) : Eigen::Vector3d::Zero();
+
+  control_setpoint.rate_dot_ref_valid = diagnostics_.solved && refs.front().angular_acceleration_valid;
 
   // 工程调试消息沿用历史显示坐标约定：x 不变，y/z 取反；这里的符号变换
   // 只影响日志/可视化，不反馈到 MPC 内部 ENU 动力学和控制命令。
@@ -544,6 +431,9 @@ px4debug_msgs::msg::Px4ctrlDebug OmMpcControl::calculateControl(
   debug_message_.des_rate_y = -command(2);
   debug_message_.des_rate_z = -command(3);
   debug_message_.des_thrust = control_setpoint.thrust;
+  debug_message_.ref_rate_dot_x = control_setpoint.rate_dot_ref.x();
+  debug_message_.ref_rate_dot_y = -control_setpoint.rate_dot_ref.y();
+  debug_message_.ref_rate_dot_z = -control_setpoint.rate_dot_ref.z();
   // Px4ctrlDebug 时间戳单位为微秒。
   debug_message_.timestamp = node_.get_clock()->now().nanoseconds() / 1000;
   return debug_message_;

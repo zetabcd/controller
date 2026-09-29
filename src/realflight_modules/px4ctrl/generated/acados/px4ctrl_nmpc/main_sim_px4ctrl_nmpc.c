@@ -115,6 +115,9 @@ int main()
     p[9] = 0;
     p[10] = 0;
     p[11] = 0;
+    p[12] = 0;
+    p[13] = 0;
+    p[14] = 0;
 
     px4ctrl_nmpc_acados_sim_update_params(capsule, p, NP);
 

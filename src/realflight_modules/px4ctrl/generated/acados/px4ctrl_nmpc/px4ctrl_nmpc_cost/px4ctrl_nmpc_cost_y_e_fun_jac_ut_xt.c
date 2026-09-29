@@ -56,7 +56,7 @@ extern "C" {
 static const casadi_int casadi_s0[3] = {13, 1, 1};
 static const casadi_int casadi_s1[3] = {0, 1, 1};
 static const casadi_int casadi_s2[3] = {0, 0, 1};
-static const casadi_int casadi_s3[3] = {12, 1, 1};
+static const casadi_int casadi_s3[3] = {15, 1, 1};
 static const casadi_int casadi_s4[3] = {10, 1, 1};
 static const casadi_int casadi_s5[23] =
   {13, 10, 0, 1, 2, 3, 4, 5,
@@ -64,7 +64,7 @@ static const casadi_int casadi_s5[23] =
   3, 4, 5, 6, 7, 8, 9};
 static const casadi_int casadi_s6[3] = {10, 0, 1};
 
-/* px4ctrl_nmpc_cost_y_e_fun_jac_ut_xt:(i0[13],i1[0],i2[0],i3[],i4[12])->(o0[10],o1[13x10,10nz],o2[10x0]) */
+/* px4ctrl_nmpc_cost_y_e_fun_jac_ut_xt:(i0[13],i1[0],i2[0],i3[],i4[15])->(o0[10],o1[13x10,10nz],o2[10x0]) */
 static int casadi_f0(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem) {
   casadi_real a0;
   a0=arg[0]? arg[0][0] : 0;

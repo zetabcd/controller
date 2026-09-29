@@ -27,7 +27,7 @@ def export_model() -> AcadosModel:
 
     [DYN-1] p_dot=v, v_dot=R(q)(e3*a_T+body_aero/mass)-g*e3.
     [DYN-3] q_dot uses measured/predicted body rate, not its command.
-    [DYN-4] omega_dot=(omega_command-omega)/tau models the rate loop.
+    [DYN-4] omega_dot=(omega_command-omega)/tau+alpha_ff models the rate loop.
     acados' ERK integrator later discretizes these continuous equations.
     """
     p = ca.SX.sym("p", 3)
@@ -39,7 +39,7 @@ def export_model() -> AcadosModel:
     x = ca.vertcat(p, v, q, actual_omega)
     u = ca.vertcat(thrust_acceleration, omega)
     xdot = ca.SX.sym("xdot", 13)
-    parameters = ca.SX.sym("parameters", 12)  # g, previous u(4), tau(3), body drag/mass(3), kh/mass
+    parameters = ca.SX.sym("parameters", 15)  # g, previous u(4), tau(3), drag(3), kh, alpha_ff(3)
 
     qw, qx, qy, qz = q[0], q[1], q[2], q[3]
     wx, wy, wz = actual_omega[0], actual_omega[1], actual_omega[2]
@@ -74,7 +74,7 @@ def export_model() -> AcadosModel:
     model.xdot = xdot
     model.u = u
     model.p = parameters
-    model.f_expl_expr = ca.vertcat(v, acceleration, q_dot, (omega - actual_omega) / parameters[5:8])
+    model.f_expl_expr = ca.vertcat(v, acceleration, q_dot, (omega - actual_omega) / parameters[5:8] + parameters[12:15])
     model.f_impl_expr = xdot - model.f_expl_expr
     return model
 
@@ -91,7 +91,7 @@ def build_ocp(output_directory: Path) -> AcadosOcp:
     # Discrete sum: J=sum ||x-xref||_Q^2+||u-uref||_R^2 + terminal.
     # Stage zero additionally penalizes u0 - previous actually applied command;
     # this is inter-cycle smoothing, not an all-horizon Delta-u penalty.
-    ocp.parameter_values = np.array([GRAVITY, GRAVITY, 0.0, 0.0, 0.0, 0.10, 0.083, 0.25, 0.0, 0.0, 0.0, 0.0])
+    ocp.parameter_values = np.array([GRAVITY, GRAVITY, 0.0, 0.0, 0.0, 0.10, 0.083, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     ocp.cost.cost_type = "NONLINEAR_LS"
     ocp.cost.cost_type_0 = "NONLINEAR_LS"
     ocp.cost.cost_type_e = "NONLINEAR_LS"

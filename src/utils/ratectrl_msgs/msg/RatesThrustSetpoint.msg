@@ -3,5 +3,8 @@ uint64 timestamp	# time since system start (microseconds)
 
 float32 thrust      # N
 float32[3] bodyrates		# [rad/s] bodyrate setpoint
-# sun: rate_dot_ref 是轨迹微分平坦产生的角加速度前馈，不包含 PID 反馈项。
+# Nominal angular acceleration in current FLU body axes, held until next message.
+# Contains no feedback contribution. Invalid means explicitly disabled, not stale.
 float32[3] rate_dot_ref		# [rad/s^2] feedforward angular acceleration
+
+bool rate_dot_ref_valid

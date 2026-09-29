@@ -21,7 +21,7 @@ struct MinimumSnapOptions
 
 // 给定有序位置点，求解分段七次多项式：最小化所有段的积分 snap 平方，
 // 同时满足位置插值、段间 v/a/jerk 连续以及首末端 v/a/jerk 为零。
-// generate() 直接返回现有 MPC 能由 setTrajectory() 接收的结果类型。
+// generate() 直接返回现有轨迹兼容器能接收的结果类型。
 class MinimumSnapTrajectory
 {
 public:

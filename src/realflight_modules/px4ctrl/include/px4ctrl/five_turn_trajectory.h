@@ -180,7 +180,7 @@ struct FiveTurnTrajectoryOptions
   double gravity{9.805};
 };
 
-// 返回与所有当前 MPC/NMPC setTrajectory() 接口直接兼容的离散参考。
+// 返回与LegacyTrajectoryReference::setTrajectory() 接口直接兼容的离散参考。
 OmTrajectoryResult generateFiveTurnTrajectory(
   const Eigen::Vector3d &start_position,
   const FiveTurnTrajectoryOptions &options = {});

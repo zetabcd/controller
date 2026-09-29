@@ -25,6 +25,9 @@ struct AcadosNmpcReference
 {
   AcadosNmpcState state;
   AcadosNmpcInput input;
+  // Known additive acceleration applied by the rate loop, FLU [rad/s^2].
+  // Held constant over this shooting interval; not an optimization variable.
+  Eigen::Vector3d angular_acceleration_ff{Eigen::Vector3d::Zero()};
 };
 using AcadosNmpcReferences = std::vector < AcadosNmpcReference,
   Eigen::aligned_allocator < AcadosNmpcReference >>;

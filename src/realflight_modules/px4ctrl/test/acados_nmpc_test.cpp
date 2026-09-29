@@ -284,3 +284,38 @@ TEST(AcadosNmpc, ConstantVelocityDragBalanceSurvivesReset)
     EXPECT_LT(solver.diagnostics().objective, 1e-5);
   }
 }
+
+TEST(AcadosNmpc, AdditiveFeedforwardMatchesIndependentRatePlantAndDoesNotLeak)
+{
+  auto o = testOptions();o.prediction_dt = 0.02;o.command_change_weight.setZero();
+  AcadosNmpcSolver solver(o);
+  auto refs = hover(o);
+  constexpr double alpha = 0.6;
+  const double tau = o.rate_time_constant.z();
+  // Analytic solution with command=0, omega(0)=0 and constant additive alpha.
+  for (int k = 0; k <= o.horizon; ++k) {
+    const double t = k * o.prediction_dt;
+    const double omega = tau * alpha * (1 - std::exp(-t / tau));
+    const double yaw = tau * alpha * (t - tau * (1 - std::exp(-t / tau)));
+    refs[k].state.attitude = Eigen::Quaterniond(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+    refs[k].state.body_rate.z() = omega;
+    refs[k].angular_acceleration_ff.z() = alpha;
+  }
+  auto u = solver.step({}, refs, 0.01);
+  ASSERT_TRUE(solver.diagnostics().solved) << solver.diagnostics().status;
+  EXPECT_LT(u.body_rate.norm(), 1e-4); // the model must NOT compensate alpha twice
+  EXPECT_LT(solver.diagnostics().objective, 1e-7);
+  solver.reset();
+  for (auto & r : refs) {r.angular_acceleration_ff.setZero();}
+  u = solver.step({}, refs, 0.01);
+  ASSERT_TRUE(solver.diagnostics().solved);
+  EXPECT_GT(u.body_rate.z(), 0.005);
+  // New zero-FF window must overwrite parameters at EVERY stage, even without reset.
+  u = solver.step({}, hover(o), 0.01);
+  ASSERT_TRUE(solver.diagnostics().solved);
+  EXPECT_LT(u.body_rate.norm(), 1e-4);
+  refs = hover(o);
+  refs[2].angular_acceleration_ff.x() = std::numeric_limits<double>::quiet_NaN();
+  solver.step({}, refs, 0.01);
+  EXPECT_EQ(solver.diagnostics().status, -1);
+}

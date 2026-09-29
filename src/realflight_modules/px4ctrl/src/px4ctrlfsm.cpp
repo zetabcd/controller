@@ -205,7 +205,7 @@ void* PX4CtrlFSM::FSM_FUNCT(manual)(void * this_fsm)
     {
 #if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
         // [OMMPC] 离开 CMD 后必须清除整条轨迹，否则轨迹源优先级高于 Ref_State_t。
-        controller.clearTrajectory();
+        trajectory_reference_.clearTrajectory();
 #endif
         set_init_ref();
         record_position();
@@ -308,7 +308,7 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
     {
 #if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
         // [OMMPC] 非 CMD 模式使用 Ref_State_t 局部参考，不保留旧轨迹。
-        controller.clearTrajectory();
+        trajectory_reference_.clearTrajectory();
 #endif
         set_init_ref();
         record_position();
@@ -421,7 +421,7 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
         record_position();
 #if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
         // ref_ 在轨迹激活时只提供 FSM 状态等兼容字段，真正的 p/v/R/u 参考来自
-        // OmMpcControl 内部缓存的 OmTrajectoryResult。
+        // 公共参考适配器缓存的轨迹。
         set_hover_ref();
 #endif
         reset_controller_();
@@ -545,7 +545,7 @@ void* PX4CtrlFSM::FSM_FUNCT(safe)(void* this_fsm)
     {
 #if PX4CTRL_USE_OMMPC_PRIMARY_CONTROLLER
         // [OMMPC] 安全/降落参考必须覆盖 CMD 轨迹源。
-        controller.clearTrajectory();
+        trajectory_reference_.clearTrajectory();
 #endif
         record_position();
         reset_controller_();
@@ -621,7 +621,7 @@ bool PX4CtrlFSM::load_figure_eight_cmd_trajectory_()
     const std::size_t state_count = trajectory.states.size();
     const double total_time = trajectory.total_time;
     // 和其他轨迹相同：完整缓存只装载一次，在线 MPC 每周期仅采样 H+1 个预瞄点。
-    controller.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now());
+    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
     RCLCPP_INFO(
         px4controlnode_.get_logger(),
         "[px4ctrl] Takeoff + figure-eight activated: height=%.2f m, size=%.2fx%.2f m, "
@@ -665,7 +665,7 @@ bool PX4CtrlFSM::load_barrel_roll_cmd_trajectory_()
     const std::size_t state_count = trajectory.states.size();
     const double total_time = trajectory.total_time;
     // setTrajectory() 一次接收整条缓存；在线 MPC 只抽取当前时刻开始的预测窗。
-    controller.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now());
+    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
     RCLCPP_INFO(
         px4controlnode_.get_logger(),
         "[px4ctrl] Takeoff + barrel-roll activated: %.2f m takeoff, %d turn(s), "
@@ -782,7 +782,7 @@ bool PX4CtrlFSM::load_five_turn_cmd_trajectory_()
 
     const std::size_t state_count = trajectory.states.size();
     const double total_time = trajectory.total_time;
-    controller.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now());
+    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
     RCLCPP_INFO(
         px4controlnode_.get_logger(),
         "[px4ctrl] Five-turn minimum-jerk activated: takeoff=%.2f m, "
@@ -863,7 +863,7 @@ bool PX4CtrlFSM::load_omtraj_cmd_trajectory_()
 
     const std::size_t state_count = trajectory.states.size();
     const double total_time = trajectory.total_time;
-    controller.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now());
+    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
     RCLCPP_INFO(
         px4controlnode_.get_logger(),
         "[px4ctrl] Omtraj CMD trajectory activated: %zu states, %.3f s, "
@@ -920,7 +920,7 @@ bool PX4CtrlFSM::load_minimum_snap_cmd_trajectory_()
     const std::size_t state_count = trajectory.states.size();
     const double total_time = trajectory.total_time;
     // 右值装载把离散缓存所有权移交给 MPC，不复制数千个轨迹节点。
-    controller.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now());
+    trajectory_reference_.setTrajectory(std::move(trajectory), px4controlnode_.get_clock()->now().seconds());
     RCLCPP_INFO(
         px4controlnode_.get_logger(),
         "[px4ctrl] Minimum-snap trajectory activated: %zu points, %zu samples, %.3f s",
@@ -1471,6 +1471,7 @@ void PX4CtrlFSM::publish_rates_thrust_setpoint()
         std::cout << "msg.bodyrates contains NAN!" << std::endl;
     }
     msg.thrust = control_sp_.thrust;
+    msg.rate_dot_ref_valid = control_sp_.rate_dot_ref_valid;
     msg.rate_dot_ref[0] = control_sp_.rate_dot_ref[0];
     msg.rate_dot_ref[1] = control_sp_.rate_dot_ref[1];
     msg.rate_dot_ref[2] = control_sp_.rate_dot_ref[2];
@@ -1478,21 +1479,62 @@ void PX4CtrlFSM::publish_rates_thrust_setpoint()
 	rates_thrust_setpoint_publisher->publish(msg);
 }
 
-// Keep legacy-controller adaptation at the FSM boundary, outside acados itself.
+// Build one explicit snapshot at the controller boundary. Existing trajectory
+// generation is deliberately unchanged; it can be replaced independently.
 void PX4CtrlFSM::calculate_control_()
 {
+    const double now = px4controlnode_.get_clock()->now().seconds();
+#if PX4CTRL_PRIMARY_CONTROLLER == 0
+    const int horizon = 0;
+    const double prediction_dt = 1.0 / std::max(1.0, px4controlnode_.param.ctrl_freq_max);
+#else
+    const int horizon = controller.options().horizon;
+    const double prediction_dt = controller.options().prediction_dt;
+#endif
+    const auto make_reference = [&]() {
+        if (ref_.fsm_state == FSM_STATE(manual)) {
+            return px4ctrl::ReferenceWindow{now, prediction_dt, {}};
+        }
+        if (trajectory_reference_.active()) {
+            return trajectory_reference_.sample(now, horizon, prediction_dt, px4controlnode_.param.gra);
+        }
+        px4ctrl::ReferencePoint point;
+        point.position = ref_.p; point.velocity = ref_.v; point.acceleration = ref_.a;
+        point.jerk = ref_.j; point.snap = ref_.s;
+        point.yaw = get_yaw_from_quaternion(ref_.q);
+        point.yaw_rate = ref_.yaw_rate; point.yaw_acceleration = ref_.yaw_accel;
+        return px4ctrl::extrapolateFlatReference(
+            point, now, horizon, prediction_dt, px4controlnode_.param.gra);
+    };
+    const auto calculate = [&](const px4ctrl::ReferenceWindow &window) {
 #if PX4CTRL_PRIMARY_CONTROLLER == 2
-    debug_msg = controller.calculate(ref_, pose_data, att_data, sens_data.w,
-        px4controlnode_.get_clock()->now().seconds(), dt_, control_sp_);
+        debug_msg = controller.calculate(window, ref_,
+            {pose_data.p, pose_data.v, att_data.q, sens_data.w}, now, dt_, control_sp_);
+#else
+        debug_msg = controller.calculateControl(window, ref_, pose_data, att_data,
+            sens_data, dt_, control_sp_, px4controlnode_.param);
+#endif
+    };
+    try {
+        calculate(make_reference());
+    } catch (const std::invalid_argument &error) {
+        // Never execute a stale preview after a rejected reference. Recover to
+        // current-position hover, keeping the normal mode/Offboard lifecycle.
+        RCLCPP_ERROR(px4controlnode_.get_logger(), "Invalid control reference: %s", error.what());
+        trajectory_reference_.clearTrajectory();
+        reset_controller_();
+        record_position();
+        set_hover_ref();
+        set_next_state(&fsm_, FSM_STATE(auto_hover));
+        calculate(make_reference());
+    }
+#if PX4CTRL_PRIMARY_CONTROLLER == 2
     const auto &d = controller.diagnostics();
     if (d.fallback) {
         RCLCPP_WARN_THROTTLE(px4controlnode_.get_logger(), *px4controlnode_.get_clock(),
             1000, "[acados] Feedback fallback: status=%d, failures=%d, iter=%d, time=%.3f ms",
             d.status, d.consecutive_failures, d.iterations, d.solve_time_ms);
     }
-#else
-    debug_msg = controller.calculateControl(ref_, pose_data, att_data,
-        sens_data, dt_, control_sp_, px4controlnode_.param);
 #endif
 }
 

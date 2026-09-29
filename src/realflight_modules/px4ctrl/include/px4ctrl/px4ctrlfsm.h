@@ -25,6 +25,7 @@
 #include <px4ctrl/minimum_snap_trajectory.h>
 #include <px4ctrl/five_turn_trajectory.h>
 #include <px4ctrl/acados_nmpc.h>
+#include <px4ctrl/legacy_trajectory_reference.h>
 
 class PX4ControlNode;
 
@@ -138,6 +139,7 @@ private:
 
     // sun: control_sp_ 是本周期控制输出，ref_ 是由当前状态生成的统一参考状态。
     Control_Setpoint_t control_sp_;
+    px4ctrl::LegacyTrajectoryReference trajectory_reference_;
     Ref_State_t ref_; 
     rclcpp::Time start_time_;
     rclcpp::Time last_time_;

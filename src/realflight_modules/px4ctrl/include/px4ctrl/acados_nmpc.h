@@ -3,9 +3,8 @@
 
 #include <px4ctrl/acados_nmpc_solver.h>
 #include <px4ctrl/controller.h>
-#include <px4ctrl/omtraj.h>
 
-// Thin FSM adapter: trajectory sampling, manual mode, unit conversion and debug.
+// Controller adapter: explicit reference window, manual mode, units and debug.
 // Solver owns optimization and failure recovery; no node dependency.
 class AcadosNmpcControl
 {
@@ -14,22 +13,18 @@ public:
   const AcadosNmpcOptions & options() const;
   const AcadosNmpcDiagnostics & diagnostics() const;
   void reset();
-  void setTrajectory(OmTrajectoryResult trajectory, const rclcpp::Time & start);
-  void clearTrajectory();
   px4debug_msgs::msg::Px4ctrlDebug calculate(
-    const Ref_State_t & reference, const LocalPose_Data_t & pose,
-    const Attitude_Data_t & attitude, const Eigen::Vector3d & measured_body_rate,
+    const px4ctrl::ReferenceWindow & window, const Ref_State_t & reference,
+    const AcadosNmpcState & state,
     double now_seconds, double elapsed_seconds,
     Control_Setpoint_t & output);
 
 private:
-  void sampleReferences(const Ref_State_t & reference, double now_seconds);
+  void prepareReferences(const px4ctrl::ReferenceWindow & window, const Eigen::Quaterniond & attitude);
   std::unique_ptr < AcadosNmpcSolver > solver_;
   AcadosNmpcReferences references_;
-  OmTrajectoryResult trajectory_;
-  double trajectory_start_ {0.0};
   double mass_ {1.0};
-  bool trajectory_active_ {false};
+  bool feedforward_valid_{false};
 };
 
 #endif

@@ -266,7 +266,10 @@ public:
 			std::cout << "desired_data_.rate_des contains NAN!" << std::endl;
 		}
 		desired_data_.thrust_des = msg->thrust;
-		desired_data_.rate_dot_ref << msg->rate_dot_ref[0], msg->rate_dot_ref[1], msg->rate_dot_ref[2];
+        desired_data_.rate_dot_ref.setZero();
+        if (msg->rate_dot_ref_valid) {
+            desired_data_.rate_dot_ref << msg->rate_dot_ref[0], msg->rate_dot_ref[1], msg->rate_dot_ref[2];
+        }
 		input_stamps_[3].update(msg->timestamp, steadySeconds(),
 			desired_data_.rate_des.allFinite() && desired_data_.rate_dot_ref.allFinite() &&
 			std::isfinite(desired_data_.thrust_des));
@@ -291,6 +294,9 @@ public:
 	void calculateControl(Eigen::Array4d &thro_setpoint)
 	{
 		const auto calculation_started = std::chrono::steady_clock::now();
+		if (!input_stamps_[3].fresh(steadySeconds(), state_timeout_s_)) {
+			desired_data_.rate_dot_ref.setZero();
+		}
 		debug_msg_.control_updated = true;
 		// sun: dt 使用实际时钟差而非名义频率，使积分项在调度抖动下仍按真实时间累计。
 		auto now_time = this->get_clock()->now();

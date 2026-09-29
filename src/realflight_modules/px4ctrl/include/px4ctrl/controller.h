@@ -6,6 +6,7 @@
 // sun: 除特别说明外，位置、速度和加速度均使用 ROS ENU 惯性坐标系。
 
 #include <rclcpp/time.hpp>
+#include <px4ctrl/control_reference.h>
 #include <Eigen/Dense>
 #include <queue>
 #include <cmath>
@@ -62,6 +63,12 @@ struct Ref_State_t
 	double yaw_rate;
 	double yaw_accel;
 	double throttle;
+    // Explicit nominal feedforward supplied by the common reference adapter.
+    Eigen::Quaterniond feedforward_attitude{Eigen::Quaterniond::Identity()};
+    Eigen::Vector3d body_rate_ff{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d body_acceleration_ff{Eigen::Vector3d::Zero()};
+    bool explicit_feedforward{false};
+    bool acceleration_feedforward_valid{false};
 
 	bool flag_valid_p;
 	bool flag_valid_v;
@@ -78,6 +85,7 @@ struct Ref_State_t
 		  s(Eigen::Vector3d::Zero()),
 		  q(Eigen::Quaterniond::Identity()),
 		  yaw_rate(0.0),
+		  yaw_accel(0.0),
 		  throttle(-1.0),
 		  flag_valid_p(true), flag_valid_v(true), flag_valid_a(true),
 		  fsm_state(0){};
@@ -92,11 +100,14 @@ struct Control_Setpoint_t
 	Eigen::Vector3d bodyrates; // [rad/s]
 	double thrust;	// N
 	Eigen::Vector3d rate_dot_ref;
+    bool rate_dot_ref_valid{false};
 
 	Eigen::Array4d thro_setpoint;
 	Control_Setpoint_t() : 
+        q(Eigen::Quaterniond::Identity()),
 		bodyrates(Eigen::Vector3d::Zero()),
 		thrust(-1.0),
+        rate_dot_ref(Eigen::Vector3d::Zero()),
 		thro_setpoint(Eigen::Array4d::Constant(-1.0)){};
 
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -107,6 +118,11 @@ class QuadControl
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     QuadControl(PX4ControlNode &);
+    px4debug_msgs::msg::Px4ctrlDebug calculateControl(
+        const px4ctrl::ReferenceWindow &window, const Ref_State_t &mode,
+        const LocalPose_Data_t &pose, const Attitude_Data_t &att,
+        const Sensor_Data_t &sens, const double &dt,
+        Control_Setpoint_t &control_sp, const Parameter_t &param);
     px4debug_msgs::msg::Px4ctrlDebug calculateControl(
         const Ref_State_t &des,
         const LocalPose_Data_t &pose,

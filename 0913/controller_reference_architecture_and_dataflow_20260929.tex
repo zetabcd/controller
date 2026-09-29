@@ -1,0 +1,501 @@
+% Compile: latexmk -xelatex -interaction=nonstopmode -halt-on-error <this-file>.tex
+\documentclass[UTF8,a4paper,11pt,fontset=fandol]{ctexart}
+\usepackage[margin=21mm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,bm,booktabs,tabularx,array,longtable}
+\usepackage[table]{xcolor}
+\usepackage{xurl,enumitem,fancyhdr,tikz,graphicx}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage[unicode,colorlinks=true,linkcolor=blue!45!black,urlcolor=blue!45!black]{hyperref}
+\definecolor{ink}{RGB}{35,65,86}
+\definecolor{panel}{RGB}{236,243,249}
+\definecolor{greenpanel}{RGB}{233,245,236}
+\definecolor{oldpanel}{RGB}{247,239,228}
+\setlength{\parskip}{4pt}
+\setlength{\emergencystretch}{3em}
+\setlist{itemsep=3pt,topsep=3pt,leftmargin=2em}
+\renewcommand{\arraystretch}{1.2}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\code}[1]{{\small\nolinkurl{#1}}}
+\newcommand{\note}[1]{\par\noindent\colorbox{panel}{\parbox{\dimexpr\linewidth-2\fboxsep}{#1}}\par}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\tikzset{box/.style={draw=ink,rounded corners=2pt,fill=panel,align=center,font=\small,minimum height=12mm},
+ old/.style={box,fill=oldpanel}, good/.style={box,fill=greenpanel},
+ flow/.style={-{Latex[length=2mm]},thick,draw=ink},
+ ros/.style={flow,dashed},lbl/.style={font=\scriptsize,fill=white,inner sep=2pt,align=center}}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small 控制参考接口：重构前后与数据流}
+\fancyhead[R]{\small 2026-09-29}\fancyfoot[C]{\thepage}
+\hypersetup{pdftitle={控制参考接口重构前后：结构、数据流与前馈设计},pdfauthor={many controller V3 项目工作区说明}}
+\setcounter{tocdepth}{1}
+\title{\textbf{控制参考接口重构前后说明}\\[5pt]\large 原有结构、当前数据流、前馈链路与设计思想}
+\author{many\_controllerV3 项目源码说明}\date{2026 年 9 月 29 日}
+\begin{document}
+\maketitle
+\note{本次统一的是\textbf{控制器边界上的参考语义、时间窗口和前馈传递协议}。
+轨迹采样从 MPC 控制器内部移到 FSM 边界；传统控制器、OmMPC、NMPC 保留各自原生算法。
+中间层目前是进程内 C++ 适配代码，\textbf{没有新增 ROS 轨迹发布节点}。}
+
+本文依据当前工作区已实施的接口改动整理；原结构按本轮改动前的 Git HEAD（\code{c863a1a}）源码还原。
+工作区包含未提交变更，单独检出 HEAD 不能得到本文“当前结构”。
+已有的轨迹生成与选择逻辑暂时保留，后续只保留并优化 omtraj 时可独立替换。
+本文对接口和前馈的说明以当前代码为准，早前同日文档中的旧模型参数数量等描述不再代表当前实现。
+
+\textbf{先回答三个核心问题：}
+控制器外部入口已经增加统一窗口，内部控制律和求解器保持原生表达；
+轨迹由边界适配器按所选控制器的网格转换，再直接调用控制器；
+角加速度前馈现在可以从两类 MPC 传至角速度内环，NMPC 预测模型也包含该已知前馈。
+这不等同于恢复所有旧轨迹的精确高阶导数，也不等同于已完成闭环飞行验证。
+
+{\small\setlength{\parskip}{0pt}\tableofcontents}
+\clearpage
+
+\section{原来的结构：入口相似，实际数据通路不同}
+\label{sec:old}
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}
+\node[old,text width=14.9cm] (fsm) at (0,0) {\textbf{px4ctrl\_node / FSM：模式、轨迹选择与参考更新}\\手动／悬停提供 Ref\_State\_t；CMD 按控制器分支选择旧轨迹};
+\node[old,text width=4.3cm,minimum height=20mm] (flat) at (-5,-2) {传统轨迹路径\\即时 $p,v,a,j,s,\psi$ 等\\Ref\_State\_t};
+\node[old,text width=9.3cm,minimum height=20mm] (traj) at (2.5,-2) {旧轨迹生成器／CSV → OmTrajectoryResult\\FSM 调用 MPC 的 setTrajectory(result, start)};
+\node[old,text width=4.3cm,minimum height=31mm] (quad) at (-5,-4.65) {\textbf{QuadControl}\\直接使用单点参考\\位置／速度／姿态控制\\内部推导角速度与角加速度};
+\node[old,text width=4.3cm,minimum height=31mm] (om) at (0,-4.65) {\textbf{OmMpcControl}\\内部缓存整条轨迹与预瞄\\自行采样或外推\\原生误差状态 QP};
+\node[old,text width=4.3cm,minimum height=31mm] (nm) at (5,-4.65) {\textbf{AcadosNmpcControl}\\内部缓存整条轨迹\\自行采样或外推\\原生非线性求解器};
+\node[old,text width=14.9cm,minimum height=18mm] (out) at (0,-7.3) {\textbf{Control\_Setpoint\_t → RatesThrustSetpoint}\\共同下发推力与角速度；已有 rate\_dot\_ref 字段，但两个 MPC 路径输出零};
+\node[old,text width=14.9cm,minimum height=17mm] (rate) at (0,-9.4) {\textbf{px4ctrlrate\_node：角速度 PID + 角加速度前馈}\\力矩计算 → 电机分配 → /fmu/in/actuator\_motors};
+\draw[flow] (fsm.south -| flat.north)--(flat.north);
+\draw[flow] (fsm.south -| traj.north)--(traj.north);
+\draw[flow] (flat)--(quad);
+\draw[flow] (traj.south -| om.north)--(om.north);
+\draw[flow] (traj.south -| nm.north)--(nm.north);
+\foreach \n in {quad,om,nm}{\draw[flow] (\n.south)--(\n.south |- out.north);}
+\draw[ros] (out)--node[lbl]{ROS：/rates\_thrust\_setpoint}(rate);
+\end{tikzpicture}
+\caption{修改前的实际分支。图中三个外环是可选分支，实际编译选择其中一个；实线为进程内数据／调用，虚线为 ROS 消息。MPC 无轨迹时也接收 FSM 单点参考并内部外推，图中省略该备用连线。}
+\end{figure}
+
+\textbf{原结构并非算法本身不合理，问题主要在职责和数据语义。}
+传统控制器消费单点高阶导数，OmMPC 消费名义状态／输入，NMPC 还需要实际角速度状态及角速度命令参考；这些差异有物理原因。
+但旧实现将整条轨迹的持有、时钟、采样、备用外推都放在控制器内部，使同名入口不能充分说明本周期实际使用了什么参考。
+
+OmMPC 还保留持久化 \code{setReferencePreview()} 通道；两个 MPC 的备用外推与采样处理不同。
+旧 OmMPC 优先采用实际控制间隔作为预测步长，旧 NMPC 使用配置步长。
+前馈下传字段虽已存在，MPC 分支却显式清零，因而“消息里有字段”没有形成完整前馈链路。
+\clearpage
+
+\section{现在的结构：统一边界，两端保留专业表达}
+\label{sec:new}
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}
+\node[old,text width=7cm,minimum height=18mm] (src) at (-4,0) {旧轨迹生成器／CSV\\OmTrajectoryResult（暂时兼容）};
+\node[box,text width=7cm,minimum height=18mm] (mode) at (4,0) {FSM 单点参考 Ref\_State\_t\\悬停／传统轨迹／其他模式参考};
+\node[good,text width=7cm,minimum height=20mm] (legacy) at (-4,-2.05) {\textbf{LegacyTrajectoryReference}\\FSM 持有轨迹与起点时间\\按请求网格采样、显式估计缺失角加速度};
+\node[good,text width=7cm,minimum height=20mm] (flat) at (4,-2.05) {\textbf{extrapolateFlatReference}\\常 snap／常航向角加速度外推\\resolveReference 解析补全姿态与前馈};
+\node[good,text width=15cm,minimum height=17mm] (win) at (0,-4.15) {\textbf{ReferenceWindow：本周期唯一的参考快照}\\stamp、dt、H+1 个 ReferencePoint；坐标／单位／字段权威性明确};
+\node[box,text width=4.3cm,minimum height=24mm] (q) at (-5,-6.45) {\textbf{QuadControl 适配入口}\\1 点 → 原 Ref\_State\_t\\位置／速度／姿态控制律};
+\node[box,text width=4.3cm,minimum height=24mm] (o) at (0,-6.45) {\textbf{OmMPC 适配入口}\\H+1 点 → 名义 $x^d,u^d$\\误差状态 QP};
+\node[box,text width=4.3cm,minimum height=24mm] (n) at (5,-6.45) {\textbf{NMPC 适配入口}\\H+1 点 → 原生参考数组\\气动／滞后适配 → acados};
+\node[good,text width=15cm,minimum height=16mm] (out) at (0,-8.65) {\textbf{统一输出 Control\_Setpoint\_t}\\总推力 $T$、角速度命令 $\omega_{\rm cmd}$、角加速度前馈 $\alpha_{\rm ff}$ 及有效标志};
+\node[box,text width=15cm,minimum height=18mm] (rate) at (0,-10.85) {\textbf{px4ctrlrate\_node：角速度反馈 + 有效前馈}\\$\tau=J\alpha_{\rm cmd}+\omega\times J\omega$ → 分配／电机映射 → PX4};
+\draw[flow] (src)--(legacy);\draw[flow] (mode)--(flat);
+\draw[flow] (legacy.south)--(legacy.south |- win.north);
+\draw[flow] (flat.south)--(flat.south |- win.north);
+\foreach \a in {q,o,n}{\draw[flow] (win.south -| \a.north)--(\a.north);\draw[flow] (\a.south)--(\a.south |- out.north);}
+\draw[ros] (out)--node[lbl]{RatesThrustSetpoint：/rates\_thrust\_setpoint}(rate);
+\end{tikzpicture}
+\caption{当前自动控制主路径。上半部分全部在 px4ctrl\_node 进程内；下方 ROS 边界保持原有两个节点。实际反馈 $p,v,q,\omega$ 独立进入所选控制器，不属于参考窗口。}
+\end{figure}
+\textbf{当前还没有统一轨迹选择。}传统控制器 CMD 仍调用 \code{set_2D8_ref()}；
+MPC／NMPC 仍按原轨迹分支加载，当前默认轨迹宏选择 five-turn。
+默认控制器宏为 NMPC。手动模式使用单独模式参考，允许空窗口，不走图中的自动轨迹补全过程。
+\clearpage
+
+\section{统一接口的具体内容与物理含义}
+\label{sec:contract}
+\subsection{ReferenceWindow：明确本次调用对应的时间轴}
+\begin{equation}
+\mathcal W=(t_0,\Delta t,\{r_0,\ldots,r_H\}),\qquad t_k=t_0+k\Delta t.
+\end{equation}
+\code{stamp} 是首点参考时刻，单位秒；\code{dt} 是预测网格间隔。
+传统控制器取 $H=0$，只有当前点；MPC 使用 $H$ 个预测区间、$H+1$ 个参考节点。
+每个控制周期新建窗口，控制器不再持有长期轨迹或复用上一次设置的预瞄。
+求解器自己的热启动、积分器、上一控制输入等控制历史仍然保留。
+
+\subsection{ReferencePoint：两种权威输入，共用一个解析后边界}
+\begin{table}[h!]
+\small\centering
+\begin{tabularx}{\linewidth}{L{4.5cm}L{2.2cm}Y}
+\toprule
+字段 & 单位／坐标 & 含义与使用规则 \\\midrule
+\code{position, velocity} & m；m/s，世界系 & 名义位置、速度；两种输入均提供。\\
+\code{acceleration, jerk, snap} & m/s$^{2,3,4}$，世界系 & 平坦输入的 $a,j,s$；完整状态输入不要求提供真实 jerk、snap。\\
+\code{yaw, yaw_rate, yaw_acceleration} & rad；rad/s；rad/s$^2$ & 平坦输入的航向及其时间导数。\\
+\code{attitude} & 单位四元数 & 将参考机体系向量旋转到世界系，记为 $R_d$。\\
+\code{thrust_acceleration} & m/s$^2$ & $a_T=T/m$，沿参考机体 $+z$；既不是油门，也不是世界系竖直加速度。\\
+\code{body_rate} & rad/s，参考机体系 & 名义角速度 $\omega_d$。\\
+\code{body_acceleration} & rad/s$^2$，参考机体系 & 名义物理角加速度 $\alpha_d$，由有效标志说明是否可用。\\
+\code{full_state} & bool & false：平坦量权威；true：$p,v,q,a_T,\omega$ 权威。\\
+\code{angular_acceleration_valid} & bool & 区分“有意义的零角加速度”与“没有角加速度信息”。\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{平坦输入：}提供 $p,v,a,j,s,\psi,\dot\psi,\ddot\psi$，调用
+\code{resolveReference()} 解析得到 $q,a_T,\omega,\alpha$，完成后设置完整状态与角加速度有效标志。
+\textbf{完整状态输入：}提供 $p,v,q,a_T,\omega$，可选提供有效 $\alpha$；
+四元数归一化，并按无气动名义模型恢复
+\begin{equation} a_d=R_d e_3 a_T-g e_3. \end{equation}
+缺失 $\alpha$ 时值归零但标志保持 false，不能把这个零解释为轨迹真实角加速度。
+完整输入也不会反向伪造 jerk、snap。
+
+\note{世界系采用与反馈一致的局部 $z$ 向上约定，机体系为 FLU。当前 PX4 桥的实际变换是
+NED $\rightarrow$ NWU：$[x,y,z]\mapsto[x,-y,-z]$，不能因旧注释而写成 ENU。
+本轮没有改动坐标桥。Eigen 四元数构造顺序为 $w,x,y,z$，不要与其 coeffs 存储顺序混淆。}
+\clearpage
+
+\section{参考补全：哪些是解析结果，哪些是近似}
+\label{sec:resolve}
+\subsection{平坦量到姿态、角速度和角加速度}
+忽略气动的名义平动模型为 $a=R e_3 a_T-g e_3$。定义
+\begin{align}
+ f&=a+g e_3, & a_T&=\norm{f}, & z_d&=f/\norm{f},\\
+ y_c&=(-\sin\psi,\cos\psi,0)^\top, &
+ x_d&=\frac{y_c\times z_d}{\norm{y_c\times z_d}}, & y_d&=z_d\times x_d,\\
+ R_d&=[x_d\ y_d\ z_d].
+\end{align}
+代码对归一化与叉乘使用一、二阶解析求导；$\dot f=j$、$\ddot f=s$，航向部分使用
+$\dot\psi,\ddot\psi$。以 $b=v/n,n=\norm v$ 为例，
+\begin{align}
+ \dot n&=v^\top\dot v/n, &
+ \ddot n&=(\dot v^\top\dot v+v^\top\ddot v-\dot n^2)/n,\\
+ \dot b&=(\dot v-b\dot n)/n, &
+ \ddot b&=(\ddot v-b\ddot n-2\dot b\dot n)/n.
+\end{align}
+由 $R_d,\dot R_d,\ddot R_d$ 得到
+\begin{align}
+ \omega_d&=\operatorname{vee}\!\left(\operatorname{skew}(R_d^\top\dot R_d)\right),\\
+ \alpha_d&=\operatorname{vee}\!\left(\operatorname{skew}(\dot R_d^\top\dot R_d+R_d^\top\ddot R_d)\right).
+\end{align}
+$\operatorname{skew}(A)=(A-A^\top)/2$；vee 为反对称矩阵到三维向量的映射。
+因此高阶导数已有明确用途：加速度决定名义推力／姿态，jerk 决定角速度前馈，snap 与航向二阶导数参与角加速度前馈。
+
+该解析映射采用正常飞行局部姿态表示：代码拒绝近零推力、奇异构造及推力方向不朝上的情况。
+翻滚／倒飞应直接提供完整四元数参考；这仅解决表示问题，不保证传统控制律能够跟踪任意机动。
+
+\subsection{单点到短窗口：导数一致，但不创造未来信息}
+令 $\tau=k\Delta t$，使用常 snap、常航向角加速度假设：
+\begin{align}
+ p(\tau)&=p_0+v_0\tau+\tfrac12 a_0\tau^2+\tfrac16 j_0\tau^3+\tfrac1{24}s_0\tau^4,\\
+ v(\tau)&=v_0+a_0\tau+\tfrac12j_0\tau^2+\tfrac16s_0\tau^3,\\
+ a(\tau)&=a_0+j_0\tau+\tfrac12s_0\tau^2,\qquad j(\tau)=j_0+s_0\tau,\\
+ \psi(\tau)&=\psi_0+\dot\psi_0\tau+\tfrac12\ddot\psi_0\tau^2.
+\end{align}
+每个采样点再解析补全旋转参考。该方法使本地外推的 $p,v,a,j,s$ 相互一致，
+但不保证逼近真实未来轨迹，尤其不应把较长预测窗口的外推当作规划器提供的真实预瞄。
+完整轨迹存在时优先按轨迹采样。
+\clearpage
+
+\section{逐周期数据传输与三个不同的时间尺度}
+\label{sec:time}
+\begin{enumerate}
+\item 外环处理反馈、RC 与模式；FSM 更新单点参考，或激活旧轨迹兼容源。
+\item 进入 \code{calculate_control_()}，读取本周期 ROS 时刻 $t_0$。
+从所选控制器配置取得 $H,\Delta t$；传统控制器使用 $H=0$。
+\item 活跃轨迹按 $t_0-t_{\rm start}+k\Delta t$ 采样；否则由 FSM 单点构造窗口。
+\item 将窗口、模式参考、当前反馈、实际控制间隔交给所选控制器。
+控制器校验后转换为原生参考，计算当前一个控制输出。
+\item FSM 把推力、角速度、角加速度前馈及有效标志打包发布。整个预测窗口留在外环进程内。
+\item 角速度节点接收最新命令并保持；每个内环周期结合最新反馈计算力矩，分配到电机并发布执行器消息。
+\end{enumerate}
+
+\begin{table}[h!]
+\centering\small
+\begin{tabularx}{\linewidth}{L{3.1cm}L{3.7cm}Y}
+\toprule
+时间尺度 & 当前配置示例 & 用途 \\\midrule
+外环实际调用间隔 & 目标 100 Hz，约 0.01 s & FSM 更新、重新建窗、求解、发布。实际 elapsed 仍用于有关积分／热启动。\\
+预测网格间隔 & OmMPC：0.01 s；NMPC：0.04 s & 每个窗口内部参考节点与预测动力学的离散间隔；不由本周期抖动改变。\\
+角速度内环间隔 & 目标 400 Hz，约 0.0025 s & 角速度反馈、力矩与电机命令更新；两次外环消息间保持命令分量。\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[x=0.25cm,y=0.85cm]
+\draw[flow] (0,0)--(51,0) node[right,font=\small]{时间};
+\foreach \x/\t in {0/12.00,4/12.04,8/12.08,12/12.12,48/12.48}{
+ \draw (\x,-0.12)--(\x,0.12);\node[below,font=\scriptsize] at (\x,-0.13){\t};}
+\node[anchor=east,font=\small] at (-1,1){NMPC 窗口};
+\foreach \x in {0,4,...,48}{\fill[ink] (\x,1) circle (1.7pt);}
+\draw[ink] (0,1)--(48,1);
+\node[above,font=\small] at (24,1.15){$H=12$，13 点，覆盖 0.48 s};
+\node[anchor=east,font=\small] at (-1,-1.5){外环调用};
+\foreach \x in {0,1,2,3,4,5,6,7,8}{\draw[ink] (\x,-1.3)--(\x,-1.7);}
+\node[anchor=west,font=\small] at (10,-1.5){12.01 s 已重新建窗与求解};
+\end{tikzpicture}
+\caption{示例时间轴：预测点间隔 0.04 s 不表示 NMPC 每 0.04 s 才运行一次。图示为理想调度，实际存在异步与抖动。}
+\end{figure}
+
+若轨迹起点为 10.00 s，当前 ROS 时刻为 12.00 s，NMPC 采样轨迹局部时间
+$2.00,2.04,\ldots,2.48$ s，对应绝对时刻 $12.00,\ldots,12.48$ s。
+OmMPC 当前 $H=8$，9 点覆盖 0.08 s。
+消息 \code{timestamp} 则在发布时另取 ROS 时钟，以微秒存储；它不一定严格等于窗口 stamp，
+也不是 PX4 硬件采样时间。节点使用墙钟节拍调度，参考时间来自 ROS 时钟，二者需区分。
+
+ROS 通路异步，100/400 Hz 不保证严格每条外环命令执行四次内环。
+当前命令 QoS 为 best effort、transient local、depth 1；没有通过这一接口引入同步执行保证。
+\clearpage
+
+\section{三种控制器如何适配，内部保留了什么}
+\label{sec:adapters}
+\begin{table}[h!]
+\centering\small
+\begin{tabularx}{\linewidth}{L{2.2cm}L{4.2cm}Y}
+\toprule
+控制器 & 统一窗口之后的适配 & 原生计算与输出 \\\midrule
+传统控制器 & 取唯一参考点；将平动参考、航向写入原 Ref\_State\_t；另外明确传入参考姿态、角速度／角加速度前馈。 & 位置、速度与姿态反馈保持；给出推力与角速度命令，独立下传角加速度前馈。\\
+OmMPC & H+1 点作为名义状态 $p,v,R$ 与名义输入 $a_T,\omega$；OmMpcReference 成为统一点类型的别名。 & 9 维局部误差状态，4 维输入修正；QP 求得 $u_0=u_0^d+\delta u_0$，输出 $T=ma_T$ 与角速度。\\
+acados NMPC & 转换为 AcadosNmpcReference 数组；必要时做气动参考调整和角速度滞后补偿。 & 13 状态、4 输入的非线性求解器；保留 step(state, refs, elapsed) 入口。角加速度前馈作为已知模型参数。\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{传统控制器：保留级联控制，增加显式前馈通道}
+位置／速度反馈与名义加速度共同产生期望合力，进而生成反馈使用的期望姿态。
+参考完整姿态用于前馈坐标转换，\textbf{并不意味着位置控制路径完全跳过原姿态构造、直接跟踪任意输入四元数}。
+新增的显式前馈使完整状态参考即使没有 jerk、snap，也能把已有的 $\omega_d,\alpha_d$ 传入控制律。
+原单点函数签名及原有导数路径仍保留给直接调用者；FSM 走新的窗口入口。
+
+\subsection{OmMPC：只消费窗口，保持局部误差优化}
+误差状态为 $\delta x=[\delta p,\delta v,\delta\theta]\in\mathbb R^9$，
+输入为 $u=[a_T,\omega]\in\mathbb R^4$。
+控制器不再识别轨迹 CSV、轨迹起点或 \code{OmTrajectoryResult}。
+预测步长固定来自配置；求解成功时，第一点的有效角加速度转换到当前机体系后下发。
+此次未给 OmMPC 增加角速度执行滞后状态，其“角速度作为理想输入”的模型假设仍在。
+
+\subsection{NMPC：状态角速度与命令角速度必须区分}
+\begin{equation}
+ x=[p_3,v_3,q_4,\omega_3]\in\mathbb R^{13},\qquad
+ u=[a_T,\omega_{{\rm cmd},3}]\in\mathbb R^4.
+\end{equation}
+$x$ 中的角速度是预测的实际角速度；$u$ 中的是下发给角速度闭环的命令。
+NMPC 原生接口继续区分状态参考与输入参考，不能为了字段完全同形而将两者强行合并。
+参考适配器承担“共同名义运动如何变成该模型所需参考”的责任。
+
+\note{统一窗口没有要求三个算法使用相同状态维度、相同预测时域或相同控制律。
+统一的是“这段参考是什么意思、何时有效、前馈是否存在”；模型特有处理仍在对应控制器适配器内。}
+\clearpage
+
+\section{前馈如何贯穿外环、消息、内环和执行器}
+\label{sec:ff}
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}
+\node[good,text width=14.5cm] (ref) at (0,0) {参考来源：$a,j,s,\psi,\dot\psi,\ddot\psi$ 解析补全，或直接给 $q_d,a_T,\omega_d,\alpha_d$};
+\node[box,text width=14.5cm,minimum height=16mm] (outer) at (0,-1.7) {外环反馈／优化生成 $T,\omega_{\rm cmd}$\\名义角加速度单独转换：$\alpha_{\rm ff}^{B}=R_B^\top R_d\alpha_d^{B_d}$};
+\node[good,text width=14.5cm] (msg) at (0,-3.4) {RatesThrustSetpoint：thrust、bodyrates、rate\_dot\_ref、rate\_dot\_ref\_valid};
+\node[box,text width=14.5cm,minimum height=16mm] (pid) at (0,-5.1) {角速度内环：$\alpha_{\rm cmd}=K_P(\omega_{\rm cmd}-\omega)+I-K_D\dot\omega+\alpha_{\rm ff}$\\无效前馈或命令超时：$\alpha_{\rm ff}\leftarrow0$};
+\node[box,text width=14.5cm] (motor) at (0,-6.8) {力矩 $\tau=J\alpha_{\rm cmd}+\omega\times J\omega$ → 推力／力矩分配 → 电机命令};
+\draw[flow] (ref)--(outer);\draw[flow] (outer)--(msg);
+\draw[ros] (msg)--(pid);\draw[flow] (pid)--(motor);
+\end{tikzpicture}
+\caption{前馈执行链。角加速度在内环 PID 输出端加入，然后统一乘惯量形成力矩；没有再重复叠加第二份 $J\alpha_{\rm ff}$。}
+\end{figure}
+
+$R_B$ 是当前实际机体到世界的旋转，$R_d$ 是参考机体到世界的旋转。
+\code{body_acceleration} 属于参考机体系，发布前必须转到当前机体系。
+消息内保持的是名义\textbf{物理角加速度}，不是最终角速度命令的跨周期差分，也不包含外环反馈修正的导数。
+因而不把姿态误差项或坐标搬运后命令的导数额外混入名义前馈。
+
+\begin{table}[h!]
+\centering\small
+\begin{tabularx}{\linewidth}{L{4.2cm}Y}
+\toprule
+跨 ROS 边界字段 & 实际传递内容 \\\midrule
+\code{thrust} & 总推力，N；MPC 从 $a_T$ 乘质量得到。\\
+\code{bodyrates[3]} & 当前机体系 FLU 角速度命令，rad/s。\\
+\code{rate_dot_ref[3]} & 当前机体系 FLU 名义角加速度前馈，rad/s$^2$。\\
+\code{rate_dot_ref_valid} & true 才采用前馈；有效零与缺失明确区分。\\
+\code{timestamp} & 发布 ROS 时刻的微秒值，辅助消息新鲜度判断。\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\code{Control_Setpoint_t.q} 不在该命令消息中下发，仅用于外环相关处理／调试；
+位置、jerk、snap、完整窗口、求解器预测轨迹也不经这条命令消息传给内环。
+新消息到达前，内环零阶保持上述机体系分量，未在每个内环周期利用参考姿态重新旋转前馈。
+手动、求解回退及有关调参覆盖路径禁用前馈；超时清零前馈不等于已清零推力／角速度或建立完整失联保护。
+\clearpage
+
+\section{NMPC 为什么也要修改模型：避免重复前馈}
+\label{sec:nmpc}
+原接口下 NMPC 不下发角加速度前馈，其角速度一阶模型与名义输入近似为
+\begin{equation}
+ \dot\omega=(\omega_{\rm cmd}-\omega)\oslash\tau_\omega,
+ \qquad \omega_{\rm cmd}^d=\omega_d+\tau_\omega\odot\alpha_d.
+\end{equation}
+其中 $\odot,\oslash$ 表示逐轴乘、除。若现在既保持全部 $\tau_\omega\alpha_d$ 补偿，
+又让真实内环额外加同一份 $\alpha_d$，就可能重复补偿；只改消息而不改模型也会导致预测与执行不符。
+
+当前模型为
+\begin{align}
+ \dot p&=v,\\
+ \dot v&=R(q)(e_3a_T+a_{\rm aero}^{B})-g e_3,\\
+ \dot q&=\tfrac12q\otimes[0,\omega],\\
+ \dot\omega&=(\omega_{\rm cmd}-\omega)\oslash\tau_\omega+\alpha_{\rm ff}.
+\end{align}
+据此只对尚未由显式前馈承担的部分进行逆响应补偿：
+\begin{equation}
+ \boxed{\omega_{\rm cmd}^d=\omega_d+
+ \tau_\omega\odot(\alpha_d-\alpha_{\rm ff})}.
+\end{equation}
+\begin{itemize}
+\item 有完整前馈且实际姿态与参考姿态对齐时，$\alpha_{\rm ff}=\alpha_d$，因此输入参考为 $\omega_d$。
+\item 缺失前馈时，$\alpha_{\rm ff}=0$；可用显式差分估计的名义角加速度做滞后补偿，但缺失标志本身不会因此自动变成有效下传前馈。
+\item 第 0 阶段使用变换到当前实际机体系的前馈，与本周期真实发布量一致；未来阶段使用相应名义机体系的前馈分量。每个阶段按机体系分量零阶保持。
+\end{itemize}
+首阶段实际姿态偏离参考时，上述处理是当前一阶模型中的工程近似，
+不能据此宣称大姿态误差下有严格的连续时间参考动力学一致性。
+气动调整后重新构造的角加速度是另一个明确产生有效前馈的路径，见下一节。
+
+\textbf{增加的是参数，不是优化状态或控制输入。}
+模型仍为 13 状态、4 输入。每阶段参数从 12 个增加到 15 个：
+\begin{equation}
+ \theta_k=[g,\ u_{\rm prev}^{(4)},\ \tau_\omega^{(3)},\ d^{(3)},\ k_h,
+ \ \alpha_{{\rm ff},k}^{(3)}].
+\end{equation}
+每次求解刷新全部 $H+1$ 个阶段的参数，避免残留上一个窗口的前馈；生成脚本和 acados C 代码已同步。
+求解成功才发布该参考前馈；失败采用反馈回退并关闭前馈。
+
+\note{这一模型仍是角速度闭环的一阶近似。实际 PID 的积分、微分滤波、饱和、电机／推力滞后和分配约束没有完整纳入动力学。
+OmMPC 也未因此获得相同的一阶模型。接口连通解决了数据和模型参数传递问题，实际动态匹配仍需仿真与辨识验证。}
+\clearpage
+
+\section{旧轨迹兼容、气动适配与异常行为}
+\label{sec:limits}
+\subsection{LegacyTrajectoryReference 是过渡组件}
+兼容器由 FSM 持有，只在这里保存 \code{OmTrajectoryResult} 和轨迹起始时间。
+加载时检查轨迹成功标志、非空、时间严格递增、字段有限、四元数非退化与正推力。
+采样沿用旧 \code{OmTrajectoryOptimizer::sample()}：位置、速度、推力、角速度独立线性插值，姿态使用最短路径 SLERP。
+
+旧数据没有角加速度，兼容器在相邻原始样本 $i,i+1$ 间估计世界系角速度导数，再转回采样姿态机体系：
+\begin{equation}
+ \alpha_d(t)\approx R_d(t)^\top
+ \frac{R_{i+1}\omega_{i+1}-R_i\omega_i}{t_{i+1}-t_i}.
+\end{equation}
+这比忽略不同机体系直接做分量差分更清楚，但仍是\textbf{离散近似}，不是原始连续轨迹的精确二阶姿态导数。
+独立插值也不保证 $\dot p=v$、$\dot R=R\widehat\omega$ 同时严格成立。
+原始节点处可能发生前馈跳变；到末端或超出范围时不把该差分标为有效。
+
+采样超出轨迹范围沿用端点夹持。\textbf{夹持末点不保证悬停}：若末点速度／角速度非零，其名义状态仍可能不满足稳定终端要求。
+后续 omtraj 应负责合理终端及一致采样，而不是让各控制器猜测如何延长轨迹。
+
+\subsection{NMPC 的气动参考调整仍属于模型适配}
+当模型启用线性阻力或水平升力，先由参考姿态与速度计算
+\begin{equation}
+ v_B=R_d^\top v_d,\quad
+ a_{\rm aero}^B=-D v_B+k_h(v_{Bx}^2+v_{By}^2)e_3,
+ \quad f_{\rm new}=R_d(e_3a_T-a_{\rm aero}^B).
+\end{equation}
+再由 $f_{\rm new}$ 与航向调整姿态、推力，随后从调整后的姿态序列差分角速度、
+从世界角速度差分角加速度。新的姿态不能继续搭配未经调整的旧旋转导数。
+当前做法是显式的一次参考修正与离散导数重构，并非完整气动逆动力学求解，末端导数也采用近似处理。
+
+\subsection{校验、回退与真实保障范围}
+\begin{itemize}
+\item 窗口边界检查首时刻／步长有限、步长匹配、点数严格为 $H+1$、已解析完整状态、必要字段有限、四元数单位化、推力为正。
+NMPC 额外检查窗口首时刻与当前调用时间一致；不能说所有适配器都做了同等过期校验。
+\item FSM 在建窗／控制调用捕获 \code{invalid_argument} 时清空旧源、重置控制器、记录当前位置并重建悬停参考。
+恢复依赖有效反馈和可构造的悬停参考；并非覆盖所有轨迹加载错误或所有故障的通用安全监督器。
+\item OmMPC 求解失败仍沿用已有的上一有效输入回退；NMPC 使用其反馈回退。两者都不继续下发有效轨迹角加速度前馈，但回退策略没有完全统一。
+\item 内环命令超时检查会清零前馈，当前配置阈值 0.25 s；这次没有重构完整命令超时后的执行器处置。
+\end{itemize}
+\clearpage
+
+\section{这样设计的好处、取舍与后续 omtraj 对接}
+\label{sec:benefits}
+\textbf{设计思想是把责任放在能解释其物理含义的地方。}
+轨迹源负责产生一致的名义运动；公共参考层负责字段语义、时间轴和可复用数学转换；
+控制器适配器负责模型特有参考；控制算法负责反馈／优化；内环负责角速度误差、力矩与执行器。
+每层都只转换本层必需的信息，并保留有效性信息，避免靠补零或隐式缓存掩盖缺失数据。
+
+\begin{table}[h!]
+\centering\small
+\begin{tabularx}{\linewidth}{L{3cm}Y Y}
+\toprule
+方面 & 原结构的成本 & 当前实际收益 \\\midrule
+轨迹与控制耦合 & MPC 知道规划结果、轨迹起点与采样过程。 & 规划器类型隔离在兼容层；改 omtraj 输出时可局部替换源适配。\\
+周期参考的可追踪性 & 单点、轨迹缓存、持久预瞄隐藏在不同路径。 & 每次调用显式传入窗口，可检查本周期使用的时刻、网格与数据。\\
+控制器切换 & 要分别解释轨迹如何进入每种控制器。 & 同一参考语义可适配三个控制器；保留各自所需时域和状态维度。\\
+前馈完整性 & MPC 输出角加速度为零；字段存在却未贯通。 & 可用前馈连通到内环；有效零与缺失可区分，失败路径主动禁用。\\
+预测一致性 & OmMPC 网格受实际周期变化影响；显式前馈不在 NMPC 模型中。 & 固定预测网格；NMPC 已知前馈进入模型，减少重复补偿。\\
+测试和维护 & 采样、导数与算法混合，难以单独校验。 & 纯 C++ 参考数学可单测，适配测试与求解器测试可分别定位问题。\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{为何目前采用进程内中间层？}
+现有轨迹与外环已经在同一执行路径，先抽取轻量公共类型与转换函数就能解决主要耦合，
+不必同时引入 ROS 序列化、缓冲、轨迹版本、丢包和时间同步协议。
+统一参考层不依赖 ROS，将来确需独立规划／发布节点时，可在它外面增加消息接收与时间对齐适配器。
+当前没有承诺零分配或硬实时：窗口及有关派生数组仍存在复制／分配。
+
+\textbf{后续只保留 omtraj 时，建议沿现有边界继续简化：}
+\begin{enumerate}
+\item 让 omtraj 提供独立于求解器内部数据结构的连续轨迹求值接口：按给定 $t$ 返回一致的 $p,v,q,a_T,\omega,\alpha$，或足够阶的平坦量。
+轨迹求解历史、迭代矩阵等不进入控制接口。
+\item 参考提供方按 $(t_0,H,\Delta t)$ 求值得到统一窗口；用真正导数替换旧兼容器差分，并明确起止时间、终端和切换行为。
+\item 在 FSM 删除旧轨迹分支与兼容源，同时让三个控制器使用同一个新轨迹入口。接口统一之后，这一步才实现实际轨迹选择统一。
+\item 若将 omtraj 拆成独立进程，再定义带坐标、单位、时间基准、版本及导数有效性的传输协议；接收端仍产出当前的 ReferenceWindow。
+\end{enumerate}
+这些是后续建议，尚未以“未来结构”替代本文描述的当前实现。
+\clearpage
+
+\section{代码定位、验证证据与阅读方法}
+\label{sec:code}
+下面路径以 \code{src/realflight_modules/px4ctrl/} 为基准，方便对照图中各块。
+\begin{small}
+\begin{longtable}{L{6.8cm}L{8.0cm}}
+\toprule
+文件／入口 & 责任 \\\midrule
+\endhead
+\code{include/px4ctrl/control_reference.h}\newline
+\code{src/control_reference.cpp} & 公共点／窗口类型；解析补全、常 snap 外推、窗口校验、角加速度坐标转换与显式差分。\\
+\code{include/px4ctrl/legacy_trajectory_reference.h}\newline
+\code{src/legacy_trajectory_reference.cpp} & 临时持有旧轨迹、按起点与请求网格采样、估计缺失角加速度。\\
+\code{src/px4ctrlfsm.cpp}\newline
+\code{calculate_control_()} & 本周期建窗、控制器路由、非法参考恢复；发布统一输出消息。\\
+\code{include/px4ctrl/controller.h}\newline
+\code{src/controller.cpp} & 传统控制器窗口入口、显式前馈字段与原级联控制律；公共外环输出。\\
+\code{include/px4ctrl/ommpc.h}\newline
+\code{src/ommpc.cpp} & 名义状态／输入窗口适配、局部误差 QP、首点前馈下发。\\
+\code{src/acados_nmpc.cpp} & NMPC 原生参考适配、气动调整、前馈与滞后补偿、状态反馈入口。\\
+\code{include/px4ctrl/acados_nmpc_solver.h}\newline
+\code{src/acados_nmpc_solver.cpp} & 原生状态／输入／参考类型，逐阶段前馈参数更新，求解与回退。\\
+\code{src/px4ctrlrate_node.cpp} & 接收命令、有效性／新鲜度处理、角速度内环、力矩计算与电机分配。\\
+\code{config/params.yaml}\newline
+\code{config/ratectrl_diagnostics.yaml} & 当前频率、时域／网格、模型参数及超时配置。\\
+\code{test/control_reference_test.cpp}\newline
+\code{test/controller_adapter_test.cpp}\newline
+\code{test/acados_nmpc_test.cpp} & 参考数学、窗口适配与前馈，以及 NMPC 求解／失败回归测试。\\
+\bottomrule
+\end{longtable}
+\end{small}
+消息定义位于工程根目录下
+\code{src/utils/ratectrl_msgs/msg/RatesThrustSetpoint.msg}；
+模型生成脚本为 \code{script/generate_px4ctrl_acados_nmpc.py}，生成结果位于
+\code{px4ctrl/generated/acados/px4ctrl_nmpc/}（此处 px4ctrl 为上文路径简写）。
+
+\textbf{已有验证证据：}本轮接口实现完成时，消息包与控制包构建通过；
+三个控制器宏分支通过语法检查；参考测试 6 项、控制器适配测试 1 项、NMPC 测试 13 项，共 20 项通过。
+测试涵盖解析导数、坐标转换、缺失／非法参考、预测窗口、前馈模型和回退等。
+本次文档任务只核对实现、补充图文并编译文档，不修改控制代码。
+
+\textbf{证据边界：}构建和单元测试不能证明轨迹动力学可行、气动近似准确、异步调度稳定或整机安全。
+本轮接口调整尚无完整 MuJoCo 联调或真实飞行验证；接通角加速度前馈后仍需检查闭环响应、限幅与终端切换。
+
+\note{阅读代码时可按“FSM 建窗 → 公共参考解析 → 所选控制器适配 → 输出消息 → 角速度内环”的顺序追踪。
+只关心结构可看图 1、图 2；只关心前馈可看图 4 与第 \ref{sec:nmpc} 节；后续 omtraj 改造重点见第 \ref{sec:benefits} 节。}
+\end{document}

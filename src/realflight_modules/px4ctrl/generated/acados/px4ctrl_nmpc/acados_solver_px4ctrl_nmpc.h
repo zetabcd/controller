@@ -39,7 +39,7 @@
 #define PX4CTRL_NMPC_NX     13
 #define PX4CTRL_NMPC_NZ     0
 #define PX4CTRL_NMPC_NU     4
-#define PX4CTRL_NMPC_NP     12
+#define PX4CTRL_NMPC_NP     15
 #define PX4CTRL_NMPC_NP_GLOBAL     0
 #define PX4CTRL_NMPC_NBX    0
 #define PX4CTRL_NMPC_NBX0   13

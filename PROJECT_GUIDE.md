@@ -123,7 +123,7 @@ acados 的 `nmpc.*` 数值参数从 YAML 在启动时读取，修改后重启即
 | 3 | 最小 jerk QP 多圈翻滚 | `params.yaml → trajectory.five_turn`；启动时生成模板，改参数后重启 |
 | 4 | OmTrajectoryOptimizer 离线优化轨迹 | 先通过 `omtraj_visualizer` 生成 CSV，再由控制节点启动时读取 |
 
-五种轨迹都通过 `OmTrajectoryResult` 提供位置、速度、姿态、质量归一化推力和机体系角速度参考，控制器缓存整条轨迹并按当前时刻采样预测窗口。
+五种现有轨迹仍输出 `OmTrajectoryResult`，由 FSM 边界的 `LegacyTrajectoryReference` 缓存并采样为公共 `ReferenceWindow`。传统控制器和 MPC/NMPC 都通过公共参考入口接入，但现有 CMD 轨迹选择路径暂时保留。控制器不再持有规划器结果，角加速度前馈可传递到内环，详见 [控制参考接口](src/realflight_modules/px4ctrl/CONTROL_REFERENCE.md)。
 
 Minimum-snap 当前设置 10 个相对航点，名义分段速度 0.65 m/s，七次多项式最小化 snap 平方积分并保证段间 v/a/jerk 连续；名义分段速度不是全轨迹的严格最大速度约束。航点加在进入 CMD 时的位置上。
 
