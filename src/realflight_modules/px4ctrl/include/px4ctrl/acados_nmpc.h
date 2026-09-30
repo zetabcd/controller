@@ -13,6 +13,14 @@ public:
   const AcadosNmpcOptions & options() const;
   const AcadosNmpcDiagnostics & diagnostics() const;
   void reset();
+  // Common FSM entry. Mass remains the value supplied to configure().
+  px4debug_msgs::msg::Px4ctrlDebug calculateControl(
+    const px4ctrl::ReferenceWindow & window, const px4ctrl::ControlModeReference & reference,
+    const LocalPose_Data_t & pose, const Attitude_Data_t & attitude,
+    const Sensor_Data_t & sensor, double now_seconds, double elapsed_seconds,
+    Control_Setpoint_t & output, const Parameter_t & parameters);
+
+  // Explicit-state entry for use without a ROS node (including adapter tests).
   px4debug_msgs::msg::Px4ctrlDebug calculate(
     const px4ctrl::ReferenceWindow & window, const px4ctrl::ControlModeReference & reference,
     const AcadosNmpcState & state,

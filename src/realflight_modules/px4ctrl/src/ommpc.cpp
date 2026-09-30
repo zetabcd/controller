@@ -13,7 +13,7 @@ bool OmMpcControl::estimateThrustModel(const Eigen::Vector3d &) {return false;}
 px4debug_msgs::msg::Px4ctrlDebug OmMpcControl::calculateControl(
   const px4ctrl::ReferenceWindow & window, const px4ctrl::ControlModeReference & reference,
   const LocalPose_Data_t & pose, const Attitude_Data_t & attitude,
-  const Sensor_Data_t & sensor, const double & dt,
+  const Sensor_Data_t & sensor, double /* now_seconds */, double dt,
   Control_Setpoint_t & out, const Parameter_t & parameters)
 {
   out.rate_dot_ref.setZero();out.rate_dot_ref_valid = false;

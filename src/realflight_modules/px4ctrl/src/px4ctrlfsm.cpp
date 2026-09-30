@@ -1169,13 +1169,8 @@ void PX4CtrlFSM::calculate_control_()
     mode.velocity_valid = ref_.flag_valid_v;
     mode.acceleration_valid = ref_.flag_valid_a;
     const auto calculate = [&](const px4ctrl::ReferenceWindow &window) {
-#if PX4CTRL_PRIMARY_CONTROLLER == 2
-        debug_msg = controller.calculate(window, mode,
-            {pose_data.p, pose_data.v, att_data.q, sens_data.w}, now, dt_, control_sp_);
-#else
         debug_msg = controller.calculateControl(window, mode, pose_data, att_data,
-            sens_data, dt_, control_sp_, px4controlnode_.param);
-#endif
+            sens_data, now, dt_, control_sp_, px4controlnode_.param);
     };
     try {
         calculate(make_reference());

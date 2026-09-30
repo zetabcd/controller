@@ -118,10 +118,12 @@ class QuadControl
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     QuadControl(PX4ControlNode &);
+    // Common controller call: now_seconds is reference evaluation time; dt is
+    // elapsed control time. QuadControl keeps its node-based debug timestamp.
     px4debug_msgs::msg::Px4ctrlDebug calculateControl(
         const px4ctrl::ReferenceWindow &window, const px4ctrl::ControlModeReference &mode,
         const LocalPose_Data_t &pose, const Attitude_Data_t &att,
-        const Sensor_Data_t &sens, const double &dt,
+        const Sensor_Data_t &sens, double now_seconds, double dt,
         Control_Setpoint_t &control_sp, const Parameter_t &param);
 
 	// sun: 状态切换或重新进入闭环控制时清空积分量和滤波器历史，避免旧状态造成瞬态冲击。

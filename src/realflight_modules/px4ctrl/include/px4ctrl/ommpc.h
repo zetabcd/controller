@@ -19,7 +19,7 @@ public:
     const LocalPose_Data_t & pose,
     const Attitude_Data_t & attitude,
     const Sensor_Data_t & sensor,
-    const double & dt,
+    double now_seconds, double dt,
     Control_Setpoint_t & control_setpoint,
     const Parameter_t & parameters);
 

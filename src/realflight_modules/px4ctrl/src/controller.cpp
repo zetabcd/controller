@@ -38,7 +38,7 @@ void QuadControl::resetControlParams()
 px4debug_msgs::msg::Px4ctrlDebug QuadControl::calculateControl(
     const px4ctrl::ReferenceWindow &window, const px4ctrl::ControlModeReference &mode,
     const LocalPose_Data_t &pose, const Attitude_Data_t &att,
-    const Sensor_Data_t &sens, const double &dt,
+    const Sensor_Data_t &sens, double /* now_seconds */, double dt,
     Control_Setpoint_t &output, const Parameter_t &param)
 {
     Ref_State_t ref;

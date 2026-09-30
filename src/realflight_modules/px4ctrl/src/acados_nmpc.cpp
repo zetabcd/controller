@@ -73,6 +73,16 @@ void AcadosNmpcControl::prepareReferences(
   }
 }
 
+px4debug_msgs::msg::Px4ctrlDebug AcadosNmpcControl::calculateControl(
+  const px4ctrl::ReferenceWindow & window, const px4ctrl::ControlModeReference & reference,
+  const LocalPose_Data_t & pose, const Attitude_Data_t & attitude,
+  const Sensor_Data_t & sensor, double now, double elapsed,
+  Control_Setpoint_t & output, const Parameter_t & /* parameters */)
+{
+  return calculate(window, reference, {pose.p, pose.v, attitude.q, sensor.w},
+    now, elapsed, output);
+}
+
 px4debug_msgs::msg::Px4ctrlDebug AcadosNmpcControl::calculate(
   const px4ctrl::ReferenceWindow & window,
   const px4ctrl::ControlModeReference & ref, const AcadosNmpcState & current,
