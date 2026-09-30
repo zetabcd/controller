@@ -5,6 +5,7 @@ use the same simulation step. Raw states,
 source-stamped debug messages and actuator messages are saved independently.
 """
 import argparse
+import copy
 import time
 from pathlib import Path
 import numpy as np
@@ -22,6 +23,22 @@ class RecordedSim(QuadSimNode):
         self.motor_rows = []
         self.solver_rows = []
         super().__init__('quadsim_node')
+        self.position_noise_std = 0.0
+        self.velocity_noise_std = 0.0
+        self.feedback_noise = np.random.default_rng(0)
+
+    def local_pose_topic_pub(self, quad):
+        if self.position_noise_std or self.velocity_noise_std:
+            # Perturb only controller observations. Physics and recorded truth
+            # must never be overwritten by this estimation-error experiment.
+            observed = copy.copy(quad)
+            observed.state = copy.copy(quad.state)
+            observed.state.pos = quad.state.pos + self.feedback_noise.normal(
+                0, self.position_noise_std, 3)
+            observed.state.vel = quad.state.vel + self.feedback_noise.normal(
+                0, self.velocity_noise_std, 3)
+            return super().local_pose_topic_pub(observed)
+        return super().local_pose_topic_pub(quad)
 
     def px4ctrldebug_callback(self, msg):
         super().px4ctrldebug_callback(msg)
@@ -51,6 +68,8 @@ def main():
     parser.add_argument('--duration', type=float, default=43)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--initial-altitude', type=float, default=0.5)
+    parser.add_argument('--position-noise-std', type=float, default=0.0)
+    parser.add_argument('--velocity-noise-std', type=float, default=0.0)
     parser.add_argument('--real-time-factor', type=float, default=1.0)
     parser.add_argument('--stall-ms', type=float, default=0.0)
     parser.add_argument('--stall-period', type=float, default=0.25)
@@ -59,9 +78,15 @@ def main():
         parser.error('--real-time-factor must be in (0, 1]')
     if not 0 <= args.stall_ms <= 1000 or not 0 < args.stall_period <= 1000:
         parser.error('stall-ms must be in [0, 1000] and stall-period in (0, 1000]')
+    if not all(np.isfinite(v) and v >= 0 for v in
+               (args.position_noise_std, args.velocity_noise_std)):
+        parser.error('Feedback noise standard deviations must be finite and nonnegative')
     rclpy.init(args=ros_args)
     node = RecordedSim()
     node.noise = np.random.default_rng(args.seed)
+    node.feedback_noise = np.random.default_rng(args.seed + 100000)
+    node.position_noise_std = args.position_noise_std
+    node.velocity_noise_std = args.velocity_noise_std
     quad = QUAD()
     node.parameter_set(quad)
     quad.wind_model.reset(U0=quad.param.noise.wind_mean,

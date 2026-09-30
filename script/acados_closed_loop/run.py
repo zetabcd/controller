@@ -18,7 +18,12 @@ def main():
     p.add_argument('--duration', default=43, type=float)
     p.add_argument('--seed', default=42, type=int)
     p.add_argument('--controller-label', default='configured controller')
+    p.add_argument('--controller-executable', default=str(
+        ROOT/'install/px4ctrl/lib/px4ctrl/px4ctrl_node'),
+        help='Outer-loop binary; permits isolated backend builds without replacing the installed controller')
     p.add_argument('--initial-altitude', default=0.5, type=float)
+    p.add_argument('--position-noise-std', default=0.0, type=float)
+    p.add_argument('--velocity-noise-std', default=0.0, type=float)
     p.add_argument('--real-time-factor', default=1.0, type=float,
         help='Physics seconds per wall second; <1 emulates a slow GUI with a shared /clock')
     p.add_argument('--stall-ms', default=0.0, type=float,
@@ -41,19 +46,26 @@ def main():
     config = Path(a.config).resolve()
     # Freeze the exact startup parameters and binary fingerprint for every run.
     (out/'params.yaml').write_bytes(config.read_bytes())
-    executable = ROOT/'install/px4ctrl/lib/px4ctrl/px4ctrl_node'
+    executable = Path(a.controller_executable).resolve()
     sources = ['src/realflight_modules/px4ctrl/src/ommpc_solver.cpp',
         'src/realflight_modules/px4ctrl/src/ommpc.cpp',
+        'src/realflight_modules/px4ctrl/src/controller.cpp',
+        'src/realflight_modules/px4ctrl/src/acados_nmpc.cpp',
+        'src/realflight_modules/px4ctrl/src/acados_nmpc_solver.cpp',
+        'src/realflight_modules/px4ctrl/src/px4ctrlfsm.cpp',
         'src/realflight_modules/px4ctrl/src/px4ctrlrate_node.cpp',
         'src/uav_simulator/quadsim_mujoco/quadsim_mujoco/quad.py',
+        'src/uav_simulator/quadsim_mujoco/quadsim_mujoco/quadsim_node.py',
         'script/acados_closed_loop/headless.py']
     (out/'simulator.yaml').write_bytes(Path(a.simulator_config).read_bytes())
     (out/'ratectrl.yaml').write_bytes((ROOT/
         'src/realflight_modules/px4ctrl/config/ratectrl_diagnostics.yaml').read_bytes())
     (out/'manifest.json').write_text(json.dumps(dict(
         config=str(config), duration_s=a.duration, seed=a.seed, initial_altitude=a.initial_altitude,
+        position_noise_std_m=a.position_noise_std, velocity_noise_std_m_s=a.velocity_noise_std,
         real_time_factor=a.real_time_factor,
         stall_ms=a.stall_ms, stall_period_s=a.stall_period,
+        executable=str(executable),
         executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
         inner_executable_sha256=hashlib.sha256((ROOT/'install/px4ctrl/lib/px4ctrl/px4ctrlrate_node').read_bytes()).hexdigest(),
         source_sha256={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest()
@@ -62,14 +74,16 @@ def main():
         timing='fixed physics and motor step, ROS simulation clock'), indent=2)+'\n')
     config = out/'params.yaml'
     commands = [
-        [str(ROOT/'install/px4ctrl/lib/px4ctrl/px4ctrl_node'), '--ros-args', '--params-file', str(config), '-p', 'use_sim_time:=true'],
+        [str(executable), '--ros-args', '--params-file', str(config), '-p', 'use_sim_time:=true'],
         [str(ROOT/'install/px4ctrl/lib/px4ctrl/px4ctrlrate_node'), '--ros-args', '--params-file',
          str(out/'ratectrl.yaml'), '-p', 'use_sim_time:=true'],
         [sys.executable, str(HERE/'headless.py'), '--output', str(out/'raw.npz'),
          '--duration', str(a.duration), '--seed', str(a.seed),
          '--real-time-factor', str(a.real_time_factor),
          '--stall-ms', str(a.stall_ms), '--stall-period', str(a.stall_period),
-         '--initial-altitude', str(a.initial_altitude), '--ros-args',
+         '--initial-altitude', str(a.initial_altitude),
+         '--position-noise-std', str(a.position_noise_std),
+         '--velocity-noise-std', str(a.velocity_noise_std), '--ros-args',
          '--params-file', str(out/'simulator.yaml')]]
     children, logs = [], []
     try:

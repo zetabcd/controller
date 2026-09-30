@@ -83,6 +83,8 @@ def load(folder):
     mw = (m[:, 0] >= start+info['motion_start']) & (m[:, 0] <= start+info['duration'])
     metrics['output_throttle_min_max'] = [float(m[mw, 1:].min()), float(m[mw, 1:].max())]
     metrics['output_throttle_rail_fraction'] = float(np.mean((m[mw, 1:] <= 0) | (m[mw, 1:] >= .9999)))
+    metrics['motor_command_step_rms'] = float(np.sqrt(np.mean(np.diff(m[mw, 1:], axis=0)**2)))
+    metrics['rate_command_step_rms_rad_s'] = float(np.sqrt(np.mean(np.diff(d[dw, 8:11], axis=0)**2)))
     # Held body-rate command versus physical body rate, in FLU. This is an
     # inner-loop diagnostic, not the trajectory's attitude error or latency.
     command_index = np.clip(np.searchsorted(d[:, 0], s[:, 0], side='right')-1, 0, len(d)-1)
@@ -100,11 +102,21 @@ def load(folder):
         metrics['maneuver_attitude_rmse_deg'] = float(np.sqrt(np.mean(angle[motion]**2)))
         metrics['maneuver_attitude_max_deg'] = float(angle[motion].max())
     if 'solver' in raw and raw['solver'].size:
+        all_solver = raw['solver']
+        after = all_solver[all_solver[:, 0] >= start+info['duration']]
+        metrics['hold_solver_fallback_fraction'] = float(np.mean(after[:, 5])) if len(after) else None
         q = raw['solver']
         q = q[(q[:, 0] >= start) & (q[:, 0] <= start+info['duration'])]
         metrics['solver_fallback_fraction'] = float(np.mean(q[:, 5]))
         metrics['solver_time_ms_percentiles'] = np.quantile(q[:, 3], [.5,.95,.99,1]).tolist()
         metrics['solver_status_counts'] = {str(int(v)):int(n) for v,n in zip(*np.unique(q[:, 1], return_counts=True))}
+    hold = t >= info['duration']+3
+    metrics['hold_duration_s'] = float(max(0, t[-1]-info['duration']))
+    metrics['hold_rmse_m'] = float(np.sqrt(np.mean(norm[hold]**2))) if hold.any() else None
+    metrics['hold_max_m'] = float(norm[hold].max()) if hold.any() else None
+    metrics['hold_body_rate_max_rad_s'] = float(np.max(abs(s[hold, 9:12]))) if hold.any() else None
+    metrics['maneuver_body_rate_max_rad_s'] = float(np.max(abs(s[motion, 9:12])))
+    metrics['cmd_exit_samples'] = int(np.sum(d[d[:, 0] >= start, 1] != 3))
     (folder/'metrics.json').write_text(json.dumps(metrics, indent=2)+'\n')
     return metrics, (t,s,ref,norm,motion,info)
 

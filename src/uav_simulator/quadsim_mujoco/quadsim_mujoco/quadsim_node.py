@@ -435,15 +435,16 @@ class QuadSimNode(Node):
             msg.gyro_rad[1] = -state.omega[1]
             msg.gyro_rad[2] = -state.omega[2]
         
-        # 加速度处理
+        # MuJoCo accelerometer is body-FLU specific force. SensorCombined needs
+        # body-FRD, not state.acc (already rotated into the world frame).
         if quad.param.noise.accel_is_valid:
-            msg.accelerometer_m_s2[0] = state.acc[0] + self.noise.normal(0.0,quad.param.noise.accel_std[0])
-            msg.accelerometer_m_s2[1] = - state.acc[1] + self.noise.normal(0.0,quad.param.noise.accel_std[1])
-            msg.accelerometer_m_s2[2] = - state.acc[2] + self.noise.normal(0.0,quad.param.noise.accel_std[2])
+            msg.accelerometer_m_s2[0] = state.acc_B[0] + self.noise.normal(0.0,quad.param.noise.accel_std[0])
+            msg.accelerometer_m_s2[1] = - state.acc_B[1] + self.noise.normal(0.0,quad.param.noise.accel_std[1])
+            msg.accelerometer_m_s2[2] = - state.acc_B[2] + self.noise.normal(0.0,quad.param.noise.accel_std[2])
         else:
-            msg.accelerometer_m_s2[0] = state.acc[0]
-            msg.accelerometer_m_s2[1] = - state.acc[1]
-            msg.accelerometer_m_s2[2] = - state.acc[2]
+            msg.accelerometer_m_s2[0] = state.acc_B[0]
+            msg.accelerometer_m_s2[1] = - state.acc_B[1]
+            msg.accelerometer_m_s2[2] = - state.acc_B[2]
         
         self.sensor_combined_publisher.publish(msg)
     

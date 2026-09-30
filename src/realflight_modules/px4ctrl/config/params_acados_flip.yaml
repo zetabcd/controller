@@ -1,0 +1,158 @@
+# Acados NMPC 垂直圆/螺旋翻转参数；PX4CTRL_PRIMARY_CONTROLLER=2。
+# 旧值相对本轮开始时 params_ommpc_flip.yaml；验证结果见 CONTROLLER_TUNING_20260930.md。
+# 垂直圆仅改 trajectory.type 为 vertical_circle，重启内外环。
+px4ctrl_node:
+  ros__parameters:
+    ctrl_freq_max: 100.0
+    ratectrl_freq_max: 400.0
+    gra: 9.805
+    trajectory:
+      type: helix
+      takeoff_height: 1.5
+      takeoff_duration: 3.0
+      settle_duration: 0.5
+      horizontal_circle:
+        radius: 1.0
+        turns: 2
+        speed: 1.5
+        ramp_duration: 3.0
+      vertical_circle:
+        radius: 1.0
+        turns: 1
+        centripetal_g: 1.8
+        entry_duration: 0.85
+        exit_duration: 0.85
+        entry_distance: 1.43
+        exit_distance: 1.43
+        connector_height: 1.1
+      helix:
+        radius: 1.0
+        turns: 2
+        axis_transition_duration: 1.0
+        pitch: 0.5
+        centripetal_g: 1.8
+        entry_duration: 0.85
+        exit_duration: 0.85
+        entry_distance: 1.43
+        exit_distance: 1.43
+        connector_height: 1.1
+      figure_eight:
+        length: 2.0
+        width: 1.2
+        turns: 2
+        speed: 1.5
+        ramp_duration: 3.0
+      limits:
+        motor_fraction: 0.7
+        angular_acceleration: 100.0
+        minimum_relative_altitude: -0.01
+      point_to_point:
+        max_speed: 1.0
+        max_acceleration: 1.5
+      omtraj:
+        file: datalog/omtraj/omtraj_optimized.csv
+    mpc:
+      horizon: 16
+      prediction_dt: 0.03
+      rate_time_constant: [0.08, 0.06666666666666667, 0.125]
+      thrust_time_constant: 0.033
+      drag_compensation: true
+      body_rate_max: [14.0, 14.0, 14.0]
+      state_weight: [300.0, 300.0, 300.0, 6.0, 6.0, 8.0, 3.0, 3.0, 2.0]
+      rate_weight: 0.05
+      thrust_weight: 0.01
+      input_weight: [0.1, 0.12, 0.12, 0.12]
+      command_change_weight: [0.02, 0.08, 0.08, 0.08]
+      terminal_weight_scale: 2.0
+      maximum_iterations: 200
+      tolerance: 0.0001
+      solve_time_budget_ms: 6.0
+    nmpc:
+      horizon: 12
+      prediction_dt: 0.04
+      rate_time_constant: [0.08, 0.06666666666666667, 0.125]  # 旧: [0.1, 0.083, 0.25]
+      drag_compensation: true
+      maximum_iterations: 60
+      tolerance: 1.0e-05
+      solve_time_budget_ms: 8.0
+      body_rate_max: [14.0, 14.0, 14.0]
+      state_weight: [3200.0, 3200.0, 3200.0, 6.0, 6.0, 6.0, 5.0, 5.0, 5.0, 5.0]  # 旧: [100.0, 100.0, 100.0, 3.0, 3.0, 3.0, 5.0, 5.0, 5.0, 5.0]
+      terminal_weight: [6400.0, 6400.0, 6400.0, 12.0, 12.0, 12.0, 10.0, 10.0, 10.0, 10.0]  # 旧: [35.0, 35.0, 35.0, 6.0, 6.0, 6.0, 10.0, 10.0, 10.0, 10.0]
+      input_weight: [0.1, 0.5, 0.5, 0.2]  # 旧: [0.1, 0.12, 0.12, 0.12]
+      command_change_weight: [0.02, 0.12, 0.12, 0.12]
+      fallback_position_gain: [2.5, 2.5, 2.5]
+      fallback_velocity_gain: [3.0, 3.0, 3.0]
+      fallback_attitude_gain: 4.0
+    uav:
+      mass: 0.811
+      Jvx: 0.00191
+      Jvy: 0.00237
+      Jvz: 0.0036
+      l: 0.1216
+      rp: 0.06475
+      beta_deg: 45.0
+    motor:
+      Cq_a: -0.0275
+      Cq_b: 0.0017
+      Cq_c: 0.0164
+      Ct_a: -0.1861
+      Ct_b: -0.1392
+      Ct_c: 0.1862
+      rc2speed_a: -92.209
+      rc2speed_b: 3995.891
+      rc2speed_c: 291.082
+    filter:
+      lpf_acc_x_cutoff_hz: 10.0
+      lpf_acc_y_cutoff_hz: 10.0
+      lpf_acc_z_cutoff_hz: 10.0
+      lpf_gyro_x_cutoff_hz: 10.0
+      lpf_gyro_y_cutoff_hz: 10.0
+      lpf_gyro_z_cutoff_hz: 10.0
+    gain:
+      gain_pos_x: 2.5
+      gain_pos_y: 1.5
+      gain_pos_z: 1.5
+      gain_vel_p_x: 4.0
+      gain_vel_p_y: 3.0
+      gain_vel_p_z: 2.5
+      gain_vel_i_x: 0.8
+      gain_vel_i_y: 0.8
+      gain_vel_i_z: 0.5
+      gain_vel_d_x: 0.2
+      gain_vel_d_y: 0.2
+      gain_vel_d_z: 0.0
+      gain_quat_x: 12.0
+      gain_quat_y: 13.0
+      gain_quat_z: 2.0
+      gain_rate_p_x: 20.0
+      gain_rate_p_y: 24.0
+      gain_rate_p_z: 8.0
+      gain_rate_i_x: 3.0
+      gain_rate_i_y: 3.0
+      gain_rate_i_z: 0.5
+      gain_rate_d_x: 0.6
+      gain_rate_d_y: 0.6
+      gain_rate_d_z: 0.0
+      gain_rate_ff_x: 1.6
+      gain_rate_ff_y: 1.6
+      gain_rate_ff_z: 1.0
+    aero:
+      rho: 1.1
+      kdx: 0.26
+      kdy: 0.28
+      kdz: 0.42
+      kh: 0.01
+    rc_reverse:
+      roll: true
+      pitch: true
+      yaw: false
+      throttle: true
+    tuning:
+      attitude_loop: false
+      euler_des_x_deg: 0.0
+      euler_des_y_deg: 0.0
+      euler_des_z_deg: 0.0
+      angular_rate_loop: false
+      rate_des_x_deg: 57.3
+      rate_des_y_deg: 0.0
+      rate_des_z_deg: 0.0

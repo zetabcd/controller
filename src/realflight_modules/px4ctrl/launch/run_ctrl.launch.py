@@ -17,7 +17,7 @@ def generate_launch_description():
     config = os.path.join(
         get_package_share_directory('px4ctrl'),  # 替换为您的包名
         'config',
-        'params.yaml'
+        'params_ommpc_flip.yaml'
     )
     return LaunchDescription([
         DeclareLaunchArgument(
