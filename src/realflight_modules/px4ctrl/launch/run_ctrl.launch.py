@@ -21,6 +21,12 @@ def generate_launch_description():
     )
     return LaunchDescription([
         DeclareLaunchArgument(
+            'params_file', default_value=config,
+            description='Controller YAML; restart nodes after changing parameters'),
+        DeclareLaunchArgument(
+            'use_sim_time', default_value='false',
+            description='Use the simulator /clock; keep false for real flight'),
+        DeclareLaunchArgument(
             'record_data', default_value='true',
             description='Start the ROS numeric flight-data ULog recorder'),
         DeclareLaunchArgument(
@@ -30,7 +36,8 @@ def generate_launch_description():
             package='px4ctrl',
             executable='px4ctrl_node',
             name='px4ctrl_node',
-            parameters=[config],  # 加载参数文件
+            parameters=[LaunchConfiguration('params_file'),
+                        {'use_sim_time': LaunchConfiguration('use_sim_time')}],
             output='screen'
         ),
         Node(
@@ -38,7 +45,8 @@ def generate_launch_description():
             executable='px4ctrlrate_node',
             name='px4ctrlrate_node',
             parameters=[os.path.join(
-                get_package_share_directory('px4ctrl'), 'config', 'ratectrl_diagnostics.yaml')],
+                get_package_share_directory('px4ctrl'), 'config', 'ratectrl_diagnostics.yaml'),
+                {'use_sim_time': LaunchConfiguration('use_sim_time')}],
             output='screen'
         ),
         IncludeLaunchDescription(

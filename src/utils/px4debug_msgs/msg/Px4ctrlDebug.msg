@@ -61,3 +61,15 @@ int32 nmpc_consecutive_failures
 float64 nmpc_solve_time_ms
 float64 nmpc_objective
 float64 nmpc_residual
+
+# OMMPC: OSQP status 1/2 = solved; negative = input/model/budget failure.
+bool ommpc_active
+bool ommpc_solved
+bool ommpc_fallback
+int32 ommpc_status
+int32 ommpc_iterations
+int32 ommpc_consecutive_failures
+float64 ommpc_cycle_time_ms
+float64 ommpc_solve_time_ms
+float64 ommpc_objective
+float64 ommpc_residual

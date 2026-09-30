@@ -1,3 +1,7 @@
+> OMMPC 分支更新（2026-09-29）：控制器 1 已扩展角速度/推力响应、气动补偿和 OSQP 复用。
+> 默认参数与仿真启动方式见 [OMMPC.md](src/realflight_modules/px4ctrl/OMMPC.md)。
+> 仿真建议使用 `ros2 launch px4ctrl run_sim.launch.py`，统一 `/clock`；下文旧 OMMPC 参数描述以新说明为准。
+
 **工程模块与使用手册**
 
 轨迹与接口重构更新：2026-09-29；其余内容核对日期：2026-09-28。基于 `trajectory-tracking` 分支、提交 `3a78c7f` 的源码、配置、launch 和本地 Git 历史整理。文中的“当前”指源码配置，不代表已经核实正在运行的节点或旧的 install 构建产物。本次整理没有启动飞行、仿真或修改控制参数。
@@ -42,8 +46,8 @@ PX4 原生位置任务是另一条链路：`px4_native_position_node → traject
 
 | 项目 | 当前值 | 位置 |
 |---|---|---|
-| 顶层控制器 | `PX4CTRL_PRIMARY_CONTROLLER=2`，acados NMPC | [px4ctrlfsm.h](src/realflight_modules/px4ctrl/include/px4ctrl/px4ctrlfsm.h) |
-| CMD 轨迹 | `trajectory.type=figure_eight`，新水平八字 | `params.yaml` |
+| 顶层控制器 | `PX4CTRL_PRIMARY_CONTROLLER=1`，OMMPC | [px4ctrlfsm.h](src/realflight_modules/px4ctrl/include/px4ctrl/px4ctrlfsm.h) |
+| CMD 轨迹 | `trajectory.type=figure_eight`，八字专项参数；翻转配置保存在 `params_ommpc_flip.yaml` | `params.yaml` |
 | 仿真编译模式 | `SIMULATION` 已定义 | [input.h](src/realflight_modules/px4ctrl/include/px4ctrl/input.h) |
 | 无遥控自动流程 | `USE_WITHOUT_RC` 已定义 | 同上 |
 | IMU 来源 | `PX4CTRL_USE_FILTERED_IMU=0`，sensor_combined | 同上 |
@@ -55,7 +59,7 @@ PX4 原生位置任务是另一条链路：`px4_native_position_node → traject
 
 无遥控流程按控制循环的启动相对时间合成挡位：约 0.1 s 后请求 AUTO_HOVER，约 2.1 s 后请求 CMD；状态转移仍取决于输入是否就绪。启用调参开关时延后悬停请求且不自动进入 CMD。
 
-控制器默认值为 acados（2），CMD 默认 `figure_eight`；轨迹由 YAML 选择，重启后生效，无需修改轨迹编译宏。
+本分支控制器默认值为 OMMPC（1），CMD 默认 `figure_eight`；轨迹由 YAML 选择，重启后生效，无需修改轨迹编译宏。八字与翻转的内环和模型参数须成组切换，见 [调参及切换说明](src/realflight_modules/px4ctrl/OMMPC_FULL_TUNING.md)。
 
 **3. 编译、环境与最短仿真流程**
 

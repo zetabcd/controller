@@ -221,6 +221,9 @@ void PX4ControlNode::config_from_ros_handle()
 	this->declare_parameter<double>("gain.gain_rate_d_x",0.0);
     this->declare_parameter<double>("gain.gain_rate_d_y",0.0);
     this->declare_parameter<double>("gain.gain_rate_d_z",0.0);
+    this->declare_parameter<double>("gain.gain_rate_ff_x",1.0);
+    this->declare_parameter<double>("gain.gain_rate_ff_y",1.0);
+    this->declare_parameter<double>("gain.gain_rate_ff_z",1.0);
 
     this->declare_parameter<double>("aero.rho",0.0);
     this->declare_parameter<double>("aero.kdx",0.0);
@@ -279,16 +282,26 @@ void PX4ControlNode::config_from_ros_handle()
     this->declare_parameter<double>("trajectory.point_to_point.max_acceleration", 1.5);
 
     // MPC/NMPC 的求解参数由 YAML 管理，在 main() 中读取后只配置一次控制器。
-    this->declare_parameter<int>("mpc.horizon", 8);
-    this->declare_parameter<double>("mpc.prediction_dt", 0.01);
-    this->declare_parameter<std::vector<double>>(
-        "mpc.body_rate_max", {14.0, 14.0, 14.0});
-    this->declare_parameter<std::vector<double>>(
-        "mpc.state_weight",
-        {15000.0, 15000.0, 15000.0, 40.0, 40.0, 40.0, 80.0, 80.0, 80.0});
-    this->declare_parameter<std::vector<double>>(
-        "mpc.input_weight", {0.5, 0.6, 0.6, 0.6});
-    this->declare_parameter<double>("mpc.terminal_weight_scale", 1.0);
+    const OmMpcOptions mpc;
+    this->declare_parameter<int>("mpc.horizon", mpc.horizon);
+    this->declare_parameter<double>("mpc.prediction_dt", mpc.prediction_dt);
+    const auto mpc_vector = [&](const char *name, const auto &value) {
+        this->declare_parameter<std::vector<double>>(name,
+            std::vector<double>(value.data(), value.data()+value.size()));
+    };
+    mpc_vector("mpc.body_rate_max", mpc.body_rate_max);
+    mpc_vector("mpc.state_weight", mpc.state_weight);
+    mpc_vector("mpc.input_weight", mpc.input_weight);
+    mpc_vector("mpc.command_change_weight", mpc.command_change_weight);
+    mpc_vector("mpc.rate_time_constant", mpc.rate_time_constant);
+    this->declare_parameter<double>("mpc.thrust_time_constant", mpc.thrust_time_constant);
+    this->declare_parameter<double>("mpc.rate_weight", mpc.rate_weight);
+    this->declare_parameter<double>("mpc.thrust_weight", mpc.thrust_weight);
+    this->declare_parameter<double>("mpc.terminal_weight_scale", mpc.terminal_weight_scale);
+    this->declare_parameter<double>("mpc.tolerance", mpc.tolerance);
+    this->declare_parameter<double>("mpc.solve_time_budget_ms", mpc.solve_time_budget_ms);
+    this->declare_parameter<int>("mpc.maximum_iterations", mpc.maximum_iterations);
+    this->declare_parameter<bool>("mpc.drag_compensation", true);
 
     rcl_interfaces::msg::ParameterDescriptor nmpc_descriptor;
     nmpc_descriptor.read_only = true;
@@ -482,26 +495,31 @@ int main(int argc, char *argv[])
 		node->get_parameter("mpc.horizon").as_int());
 	controller_options.prediction_dt =
 		node->get_parameter("mpc.prediction_dt").as_double();
-	const auto body_rate_max =
-		node->get_parameter("mpc.body_rate_max").as_double_array();
-	const auto state_weight =
-		node->get_parameter("mpc.state_weight").as_double_array();
-	const auto input_weight =
-		node->get_parameter("mpc.input_weight").as_double_array();
-	if (body_rate_max.size() == 3) {
-		controller_options.body_rate_max =
-			Eigen::Map<const Eigen::Vector3d>(body_rate_max.data());
-	}
-	if (state_weight.size() == 9) {
-		controller_options.state_weight =
-			Eigen::Map<const Eigen::Matrix<double, 9, 1>>(state_weight.data());
-	}
-	if (input_weight.size() == 4) {
-		controller_options.input_weight =
-			Eigen::Map<const Eigen::Matrix<double, 4, 1>>(input_weight.data());
-	}
-	controller_options.terminal_weight_scale =
-		node->get_parameter("mpc.terminal_weight_scale").as_double();
+    const auto read_mpc_vector = [&](const char *name, auto &value) {
+        const auto data=node->get_parameter(name).as_double_array();
+        if (data.size()!=static_cast<std::size_t>(value.size())) {
+            throw std::invalid_argument(std::string(name)+" has wrong length");
+        }
+        for (int i=0;i<value.size();++i) {value(i)=data[i];}
+    };
+    try {
+        read_mpc_vector("mpc.body_rate_max",controller_options.body_rate_max);
+        read_mpc_vector("mpc.state_weight",controller_options.state_weight);
+        read_mpc_vector("mpc.input_weight",controller_options.input_weight);
+        read_mpc_vector("mpc.command_change_weight",controller_options.command_change_weight);
+        read_mpc_vector("mpc.rate_time_constant",controller_options.rate_time_constant);
+        controller_options.thrust_time_constant=node->get_parameter("mpc.thrust_time_constant").as_double();
+        controller_options.rate_weight=node->get_parameter("mpc.rate_weight").as_double();
+        controller_options.thrust_weight=node->get_parameter("mpc.thrust_weight").as_double();
+        controller_options.terminal_weight_scale=node->get_parameter("mpc.terminal_weight_scale").as_double();
+        controller_options.tolerance=node->get_parameter("mpc.tolerance").as_double();
+        controller_options.solve_time_budget_ms=node->get_parameter("mpc.solve_time_budget_ms").as_double();
+        controller_options.maximum_iterations=node->get_parameter("mpc.maximum_iterations").as_int();
+    } catch (const std::exception &e) {
+        RCLCPP_FATAL(node->get_logger(),"[OMMPC] Configuration failed: %s",e.what());
+        rclcpp::shutdown();return 1;
+    }
+
 #else
 	AcadosNmpcOptions controller_options;
 	controller_options.horizon = static_cast<int>(
@@ -560,7 +578,20 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 #else
-	node->fsm.controller.setOptions(controller_options);
+	if (node->get_parameter("mpc.drag_compensation").as_bool()) {
+        controller_options.linear_drag=Eigen::Vector3d(
+            node->param.aero.kdx,node->param.aero.kdy,node->param.aero.kdz)/node->param.uav.mass;
+        controller_options.horizontal_lift=node->param.aero.kh/node->param.uav.mass;
+    }
+    try {
+        node->fsm.controller.setOptions(controller_options);
+        RCLCPP_INFO(node->get_logger(),"[OMMPC] N=%d, dt=%.3f, preview=%.3f s, rate/thrust dynamics enabled",
+            controller_options.horizon,controller_options.prediction_dt,
+            controller_options.horizon*controller_options.prediction_dt);
+    } catch (const std::exception &e) {
+        RCLCPP_FATAL(node->get_logger(),"[OMMPC] Configuration failed: %s",e.what());
+        rclcpp::shutdown();return 1;
+    }
 #endif
 #endif
     if (!node->fsm.prepare_cmd_trajectory()) {

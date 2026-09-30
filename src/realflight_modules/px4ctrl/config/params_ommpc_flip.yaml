@@ -1,6 +1,6 @@
-# OMMPC 八字专用配置；本轮改动行标注旧翻转值。
-# 切回翻转请整套加载 params_ommpc_flip.yaml，再选 vertical_circle / helix。
-# 仅改 trajectory.type 不会自动切换 PID、前馈和预测模型。
+# OMMPC 翻转参数备份（本轮八字调参前的完整配置）。
+# 默认 vertical_circle；飞螺旋只需将 trajectory.type 改为 helix。
+# 使用此文件须保持 PX4CTRL_PRIMARY_CONTROLLER=1，并重启两个控制节点。
 px4ctrl_node:
   ros__parameters:
     # sun: 外环与内环频率分别对应两个 ROS 2 节点，滤波器设计也使用这两个采样频率。
@@ -12,7 +12,7 @@ px4ctrl_node:
 
     # All controllers use the same source. Selection/parameters take effect after restart.
     trajectory:
-      type: figure_eight  # 旧: vertical_circle；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj
+      type: vertical_circle  # horizontal_circle | vertical_circle | helix | figure_eight | omtraj
       takeoff_height: 1.5 # relative to CMD activation position [m]
       takeoff_duration: 3.0
       settle_duration: 0.5
@@ -61,8 +61,8 @@ px4ctrl_node:
     mpc:
       horizon: 16
       prediction_dt: 0.03       # 0.48 s 预瞄，外环仍为 100 Hz
-      # 与下方内环成组验证的八字模型；近似匹配公式不能替代闭环复测。
-      rate_time_constant: [0.10, 0.083, 0.25] # 旧翻转: [0.08, 0.06666666666666667, 0.125]
+      # 与下方内环 P/D/前馈匹配：tau ≈ (1+D)/P；见 OMMPC_FULL_TUNING.md。
+      rate_time_constant: [0.08, 0.06666666666666667, 0.125]
       thrust_time_constant: 0.033
       drag_compensation: true  # aero 系数与预测/参考补偿共用，假定无风
       body_rate_max: [14.0, 14.0, 14.0]
@@ -105,7 +105,7 @@ px4ctrl_node:
       Jvx   : 1.91e-3 # kgm^2
       Jvy   : 2.37e-3
       Jvz   : 3.60e-3
-      l     : 0.1216  # m 
+      l     : 0.1216  # m
       rp    : 0.06475 # m（5.1寸桨半径）
       beta_deg  : 45.0  # deg（机架和x轴夹角）
 
@@ -153,18 +153,18 @@ px4ctrl_node:
       gain_quat_y   : 13.0 # 8.0
       gain_quat_z   : 2.0 # 2.0
       # 与 mpc.rate_time_constant 联合验证；不要只改 P 而保留旧响应模型。
-      gain_rate_p_x : 10.0 # 旧翻转: 20.0
-      gain_rate_p_y : 12.0 # 旧翻转: 24.0
-      gain_rate_p_z : 4.0 # 旧翻转: 8.0
+      gain_rate_p_x : 20.0
+      gain_rate_p_y : 24.0
+      gain_rate_p_z : 8.0
       gain_rate_i_x : 3.0
       gain_rate_i_y : 3.0
       gain_rate_i_z : 0.5
-      gain_rate_d_x : 0.05 # 旧翻转: 0.6
-      gain_rate_d_y : 0.05 # 旧翻转: 0.6
+      gain_rate_d_x : 0.6
+      gain_rate_d_y : 0.6
       gain_rate_d_z : 0.0
-      # 八字采用单位前馈；翻转原值为 [1.6,1.6,1.0]，须与 P/D/tau 成组切换。
-      gain_rate_ff_x : 1.0 # 旧翻转: 1.6
-      gain_rate_ff_y : 1.0 # 旧翻转: 1.6
+      # 角加速度前馈：F=1+D，使其与 OMMPC 模型的 alpha_ff 近似一致。
+      gain_rate_ff_x : 1.6
+      gain_rate_ff_y : 1.6
       gain_rate_ff_z : 1.0
 
     # sun: 气动力在机体系计算；kdx/kdy/kdz 为线性阻力项，kh 为水平速度耦合竖直项。
@@ -172,18 +172,18 @@ px4ctrl_node:
       rho   : 1.1
       kdx   : 0.26  # kg/s
       kdy   : 0.28  # kg/m
-      kdz   : 0.42  
+      kdz   : 0.42
       kh    : 0.01
     # kdx   : 0.0  # kg/s
     # kdy   : 0.0  # kg/m
-    # kdz   : 0.0  
+    # kdz   : 0.0
     # kh    : 0.0
 
     # RC
     rc_reverse:
-      roll: true 
-      pitch: true 
-      yaw: false 
+      roll: true
+      pitch: true
+      yaw: false
       throttle: true
 
     tuning:

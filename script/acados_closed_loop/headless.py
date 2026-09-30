@@ -1,7 +1,7 @@
 """Headless experiment adapter: original QuadSimNode/QUAD/MuJoCo and ROS controllers.
 
-No plant/controller equations changed. Fixed deadline pacing replaces viewer sync
-and the original relative sleep. Motor ODE retains measured wall dt. Raw states,
+Fixed deadline pacing replaces viewer sync. Motor and rigid-body integration
+use the same simulation step. Raw states,
 source-stamped debug messages and actuator messages are saved independently.
 """
 import argparse
@@ -28,12 +28,17 @@ class RecordedSim(QuadSimNode):
         self.debug_rows.append([msg.timestamp * 1e-6, msg.state,
             msg.ref_p_x, -msg.ref_p_y, -msg.ref_p_z,
             msg.ref_v_x, -msg.ref_v_y, -msg.ref_v_z,
-            msg.des_rate_x, -msg.des_rate_y, -msg.des_rate_z, msg.des_thrust])
+            msg.des_rate_x, -msg.des_rate_y, -msg.des_rate_z, msg.des_thrust,
+            msg.des_q_w, msg.des_q_x, -msg.des_q_y, -msg.des_q_z])
 
         if getattr(msg, 'nmpc_active', False):
             self.solver_rows.append([msg.timestamp * 1e-6, msg.nmpc_status,
                 msg.nmpc_iterations, msg.nmpc_solve_time_ms, msg.nmpc_residual,
                 msg.nmpc_fallback])
+        if getattr(msg, 'ommpc_active', False):
+            self.solver_rows.append([msg.timestamp * 1e-6, msg.ommpc_status,
+                msg.ommpc_iterations, msg.ommpc_cycle_time_ms, msg.ommpc_residual,
+                msg.ommpc_fallback])
 
     def actuator_motors_callback(self, msg):
         super().actuator_motors_callback(msg)
@@ -45,7 +50,15 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--duration', type=float, default=43)
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--initial-altitude', type=float, default=0.5)
+    parser.add_argument('--real-time-factor', type=float, default=1.0)
+    parser.add_argument('--stall-ms', type=float, default=0.0)
+    parser.add_argument('--stall-period', type=float, default=0.25)
     args, ros_args = parser.parse_known_args()
+    if not 0 < args.real_time_factor <= 1:
+        parser.error('--real-time-factor must be in (0, 1]')
+    if not 0 <= args.stall_ms <= 1000 or not 0 < args.stall_period <= 1000:
+        parser.error('stall-ms must be in [0, 1000] and stall-period in (0, 1000]')
     rclpy.init(args=ros_args)
     node = RecordedSim()
     node.noise = np.random.default_rng(args.seed)
@@ -61,19 +74,22 @@ def main():
         get_package_share_directory('quadsim_mujoco')) / 'mjcf/quad.xml'))
     init_mujoco(model, quad, node)
     data = mujoco.MjData(model)
-    # Match the FSM's hard-coded AUTO_HOVER altitude, avoiding a 4.5 m drop.
-    data.qpos[2] = 0.5
+    # Default starts in hover; 0.0023 reproduces the GUI model's ground start.
+    data.qpos[2] = args.initial_altitude
     mujoco.mj_forward(model, data)
     clock_pub = node.create_publisher(Clock, '/clock', 10)
     body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, 'quad')
     step = float(model.opt.timestep)
+    stall_steps = max(1, round(args.stall_period/step))
     start = time.perf_counter()
     quad.start_time = 1000.0
     last = start - step
     rows = []
     i = 0
     try:
-        while rclpy.ok() and time.perf_counter() - start < args.duration:
+        while rclpy.ok() and data.time < args.duration:
+            if args.stall_ms and i > 0 and i % stall_steps == 0:
+                time.sleep(args.stall_ms/1000.0)
             tick = time.perf_counter()
             dt = tick-last
             last = tick
@@ -88,12 +104,12 @@ def main():
             force, torque = quad.get_body_force_moment()
             data.xfrc_applied[body, :3] = force
             data.xfrc_applied[body, 3:] = torque
-            quad.step(dt)
+            quad.step(step)
             mujoco.mj_step(model, data)
+            quad.state.quat = data.sensor('body_quat').data.copy()
             Rbi = R.from_quat(quat_mujoco2scipy(quad.state.quat)).as_matrix()
             quad.state.Rbi = Rbi
             quad.state.omega = data.sensor('body_angvel').data.copy()
-            quad.state.quat = data.sensor('body_quat').data.copy()
             quad.state.acc_B = data.sensor('body_linacc').data.copy()
             quad.state.acc = Rbi @ quad.state.acc_B
             quad.state.vel = data.sensor('body_vel').data.copy()
@@ -108,7 +124,7 @@ def main():
             if not np.isfinite(rows[-1]).all() or np.linalg.norm(quad.state.pos)>100:
                 raise RuntimeError('Experiment diverged')
             i += 1
-            remaining = start + i*step - time.perf_counter()
+            remaining = start + i*step/args.real_time_factor - time.perf_counter()
             if remaining > 0:
                 time.sleep(remaining)
     finally:

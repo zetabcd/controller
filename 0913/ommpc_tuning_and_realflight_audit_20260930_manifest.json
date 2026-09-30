@@ -1,0 +1,5404 @@
+{
+  "audit_date": "2026-09-30",
+  "branch": "ommpcmodif",
+  "head": "ef04df3c86502b0b5c25b94eaa3e1c0322367ab0",
+  "working_tree_contains_uncommitted_changes": true,
+  "audit_changes_controller_code": false,
+  "new_closed_loop_or_realflight_tests": false,
+  "source_sha256": {
+    "datalog/ommpc_tuning_v2/all_metrics.json": "7227a18cd102b0a2f979156eacdd1054869904052cef5a80b0f28412bc550599",
+    "datalog/ommpc_tuning_v2/variants.json": "7cf7deb2580033afecd38fce242be822020d21bd3c087aa8d9344e38969cd8ef",
+    "datalog/ommpc_tuning_v3/all_metrics.json": "0e8eb98fde5a6e93210206c9219771c65863e0aa3331dc1061928113ae6c9f95",
+    "datalog/ommpc_tuning_v3/baseline.yaml": "a0fcee44006d138c5bbfd52230f68e83f8f800befe55bf0e42416b5cdee1106e",
+    "datalog/ommpc_tuning_v3/configs/p20_ff16.yaml": "b97d8ccaab19302b3df868b6092139092dca0b089d521e53a21ad06a3f85b60c",
+    "datalog/ommpc_tuning_v3/parameter_differences.json": "cd7815976c271053c03273d0f0cc2f48f8f79c0611b97e11307014180127135f",
+    "script/acados_closed_loop/analyze.py": "8b39f5b09f3f9e439c4766aaa50b4fe8b4943b56dfb19f22e1708433b1518d4a",
+    "script/acados_closed_loop/headless.py": "e26fcb23fd091e67364099500216887e29a3e05617dcbed478e5d7dc9ce4397f",
+    "script/acados_closed_loop/run.py": "efab3ba77ff528f5a9edf511b0c6df2e228740028562ca32281f7b84fbfca069",
+    "script/acados_closed_loop/simulator.yaml": "bb689a4ac2fae66ae9be83a3fc614f2a94cbd8ba8d1ec71f675c3aad4b9410ef",
+    "src/realflight_modules/px4ctrl/OMMPC.md": "38892343413198534290e855d3434c549aa71868cd26820a20e5f4fd3a719067",
+    "src/realflight_modules/px4ctrl/OMMPC_FULL_TUNING.md": "3c5bcb06f334f5cb253288e0c19dc88f74504b32ca460119d2d07cb727448e32",
+    "src/realflight_modules/px4ctrl/OMMPC_TUNING.md": "b4d8dcc23e33fef1c87a651657bd33b05e173ff9d232bcee99f4dced29054c13",
+    "src/realflight_modules/px4ctrl/config/params.yaml": "d880463ce2216ae6732efac566553f4fde11e4415b3ffb9d62eb21b7e0780865",
+    "src/realflight_modules/px4ctrl/include/px4ctrl/control_reference.h": "b9a76a70394efce42849e9922fd0ba750a86741406f70301db163723159abd0b",
+    "src/realflight_modules/px4ctrl/include/px4ctrl/input.h": "11363c1afa05cbb4ee896c8d1b94d94d0a0f2b4f5d04d19b1cd6200f3534e863",
+    "src/realflight_modules/px4ctrl/include/px4ctrl/motor_calculate.h": "bf259895259828a40f7959d94750197134a20cb0c67d937db7cab1c5aaa124d2",
+    "src/realflight_modules/px4ctrl/include/px4ctrl/ommpc_solver.h": "be09a1137ec0671da2a6e6ebf3d86b27335fd92644e98f8c8703bb85b5824ca7",
+    "src/realflight_modules/px4ctrl/src/control_reference.cpp": "abb990411a88b25f441c002c44663920a0b80ee8125a0e0cd1a66e41bdca8d2a",
+    "src/realflight_modules/px4ctrl/src/input.cpp": "7a7f6c954bbd83c5c7e5eb4a1c0ffa21af25e3f6eaa3ae4c4e0b2aeacb5774bb",
+    "src/realflight_modules/px4ctrl/src/ommpc.cpp": "eeb33431c967dd5dec8046eccf100b8d082401f45eafff1ffe3038b8eb3d7094",
+    "src/realflight_modules/px4ctrl/src/ommpc_solver.cpp": "4777dabbf37ebbc8fb851e114ba8afbfe83208bc12868dfd6d343ee561606bcd",
+    "src/realflight_modules/px4ctrl/src/px4ctrl_node.cpp": "9659e48a0a7f9504f41a6ac87d1e6b605fda39cc2cf9e4baaf30ed8da8a75ee4",
+    "src/realflight_modules/px4ctrl/src/px4ctrlfsm.cpp": "bc787baabb1af9468d5639e390598c7e8a063c58976b80ee3ee10c29a148609b",
+    "src/realflight_modules/px4ctrl/src/px4ctrlrate_node.cpp": "c831a640b2d49c6a879efd598a80dd0399a671aa67e19b90c0894dd34ed391f6",
+    "src/uav_simulator/quadsim_mujoco/quadsim_mujoco/quad.py": "aa3b159e25715ebb1fb7f2a2c48066667bedc360186cabd78f2ec3cae6fd801b",
+    "src/uav_simulator/quadsim_mujoco/quadsim_mujoco/quadsim_node.py": "e79dc16b9f52cb6f95eda7c188a207ca31cfe17fb9a0285088fbb48d99b7d613",
+    "src/utils/px4_msgs/msg/VehicleLocalPosition.msg": "5bf55da4743f1d9c6d69a56473ee6a813d573890c051d6ab442dc01f18433fdd",
+    "src/utils/ratectrl_msgs/msg/RatesThrustSetpoint.msg": "2c59d9d336d7e0c907b6bc2ca0d3b7bb54d37c2282da4d64daacc065f0f88016"
+  },
+  "v3_current_parameters_equal_tested_p20_ff16": false,
+  "only_difference_from_tested_p20_ff16": {
+    "trajectory.type": {
+      "tested": "helix",
+      "current": "vertical_circle"
+    }
+  },
+  "v3_baseline_parameters": {
+    "ctrl_freq_max": 100.0,
+    "ratectrl_freq_max": 400.0,
+    "gra": 9.805,
+    "trajectory": {
+      "type": "helix",
+      "takeoff_height": 1.5,
+      "takeoff_duration": 3.0,
+      "settle_duration": 0.5,
+      "horizontal_circle": {
+        "radius": 1.0,
+        "turns": 2,
+        "speed": 1.5,
+        "ramp_duration": 3.0
+      },
+      "vertical_circle": {
+        "radius": 1.0,
+        "turns": 1,
+        "centripetal_g": 1.8,
+        "entry_duration": 0.85,
+        "exit_duration": 0.85,
+        "entry_distance": 1.43,
+        "exit_distance": 1.43,
+        "connector_height": 1.1
+      },
+      "helix": {
+        "radius": 1.0,
+        "turns": 2,
+        "axis_transition_duration": 1.0,
+        "pitch": 0.5,
+        "centripetal_g": 1.8,
+        "entry_duration": 0.85,
+        "exit_duration": 0.85,
+        "entry_distance": 1.43,
+        "exit_distance": 1.43,
+        "connector_height": 1.1
+      },
+      "figure_eight": {
+        "length": 2.0,
+        "width": 1.2,
+        "turns": 2,
+        "speed": 1.5,
+        "ramp_duration": 3.0
+      },
+      "limits": {
+        "motor_fraction": 0.7,
+        "angular_acceleration": 100.0,
+        "minimum_relative_altitude": -0.01
+      },
+      "point_to_point": {
+        "max_speed": 1.0,
+        "max_acceleration": 1.5
+      },
+      "omtraj": {
+        "file": "datalog/omtraj/omtraj_optimized.csv"
+      }
+    },
+    "mpc": {
+      "horizon": 16,
+      "prediction_dt": 0.03,
+      "rate_time_constant": [
+        0.1,
+        0.083,
+        0.25
+      ],
+      "thrust_time_constant": 0.033,
+      "drag_compensation": true,
+      "body_rate_max": [
+        14.0,
+        14.0,
+        14.0
+      ],
+      "state_weight": [
+        300.0,
+        300.0,
+        300.0,
+        6.0,
+        6.0,
+        8.0,
+        3.0,
+        3.0,
+        2.0
+      ],
+      "rate_weight": 0.05,
+      "thrust_weight": 0.01,
+      "input_weight": [
+        0.1,
+        0.12,
+        0.12,
+        0.12
+      ],
+      "command_change_weight": [
+        0.02,
+        0.08,
+        0.08,
+        0.08
+      ],
+      "terminal_weight_scale": 2.0,
+      "maximum_iterations": 200,
+      "tolerance": 0.0001,
+      "solve_time_budget_ms": 6.0
+    },
+    "nmpc": {
+      "horizon": 12,
+      "prediction_dt": 0.04,
+      "rate_time_constant": [
+        0.1,
+        0.083,
+        0.25
+      ],
+      "drag_compensation": true,
+      "maximum_iterations": 60,
+      "tolerance": 1e-05,
+      "solve_time_budget_ms": 8.0,
+      "body_rate_max": [
+        14.0,
+        14.0,
+        14.0
+      ],
+      "state_weight": [
+        100.0,
+        100.0,
+        100.0,
+        3.0,
+        3.0,
+        3.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ],
+      "terminal_weight": [
+        35.0,
+        35.0,
+        35.0,
+        6.0,
+        6.0,
+        6.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "input_weight": [
+        0.1,
+        0.12,
+        0.12,
+        0.12
+      ],
+      "command_change_weight": [
+        0.02,
+        0.12,
+        0.12,
+        0.12
+      ],
+      "fallback_position_gain": [
+        2.5,
+        2.5,
+        2.5
+      ],
+      "fallback_velocity_gain": [
+        3.0,
+        3.0,
+        3.0
+      ],
+      "fallback_attitude_gain": 4.0
+    },
+    "uav": {
+      "mass": 0.811,
+      "Jvx": 0.00191,
+      "Jvy": 0.00237,
+      "Jvz": 0.0036,
+      "l": 0.1216,
+      "rp": 0.06475,
+      "beta_deg": 45.0
+    },
+    "motor": {
+      "Cq_a": -0.0275,
+      "Cq_b": 0.0017,
+      "Cq_c": 0.0164,
+      "Ct_a": -0.1861,
+      "Ct_b": -0.1392,
+      "Ct_c": 0.1862,
+      "rc2speed_a": -92.209,
+      "rc2speed_b": 3995.891,
+      "rc2speed_c": 291.082
+    },
+    "filter": {
+      "lpf_acc_x_cutoff_hz": 10.0,
+      "lpf_acc_y_cutoff_hz": 10.0,
+      "lpf_acc_z_cutoff_hz": 10.0,
+      "lpf_gyro_x_cutoff_hz": 10.0,
+      "lpf_gyro_y_cutoff_hz": 10.0,
+      "lpf_gyro_z_cutoff_hz": 10.0
+    },
+    "gain": {
+      "gain_pos_x": 2.5,
+      "gain_pos_y": 1.5,
+      "gain_pos_z": 1.5,
+      "gain_vel_p_x": 4.0,
+      "gain_vel_p_y": 3.0,
+      "gain_vel_p_z": 2.5,
+      "gain_vel_i_x": 0.8,
+      "gain_vel_i_y": 0.8,
+      "gain_vel_i_z": 0.5,
+      "gain_vel_d_x": 0.2,
+      "gain_vel_d_y": 0.2,
+      "gain_vel_d_z": 0.0,
+      "gain_quat_x": 12.0,
+      "gain_quat_y": 13.0,
+      "gain_quat_z": 2.0,
+      "gain_rate_p_x": 10.0,
+      "gain_rate_p_y": 12.0,
+      "gain_rate_p_z": 4.0,
+      "gain_rate_i_x": 3.0,
+      "gain_rate_i_y": 3.0,
+      "gain_rate_i_z": 0.5,
+      "gain_rate_d_x": 0.05,
+      "gain_rate_d_y": 0.05,
+      "gain_rate_d_z": 0.0
+    },
+    "aero": {
+      "rho": 1.1,
+      "kdx": 0.26,
+      "kdy": 0.28,
+      "kdz": 0.42,
+      "kh": 0.01
+    },
+    "rc_reverse": {
+      "roll": true,
+      "pitch": true,
+      "yaw": false,
+      "throttle": true
+    },
+    "tuning": {
+      "attitude_loop": false,
+      "euler_des_x_deg": 0.0,
+      "euler_des_y_deg": 0.0,
+      "euler_des_z_deg": 0.0,
+      "angular_rate_loop": false,
+      "rate_des_x_deg": 57.3,
+      "rate_des_y_deg": 0.0,
+      "rate_des_z_deg": 0.0
+    }
+  },
+  "v3_current_parameters": {
+    "ctrl_freq_max": 100.0,
+    "ratectrl_freq_max": 400.0,
+    "gra": 9.805,
+    "trajectory": {
+      "type": "vertical_circle",
+      "takeoff_height": 1.5,
+      "takeoff_duration": 3.0,
+      "settle_duration": 0.5,
+      "horizontal_circle": {
+        "radius": 1.0,
+        "turns": 2,
+        "speed": 1.5,
+        "ramp_duration": 3.0
+      },
+      "vertical_circle": {
+        "radius": 1.0,
+        "turns": 1,
+        "centripetal_g": 1.8,
+        "entry_duration": 0.85,
+        "exit_duration": 0.85,
+        "entry_distance": 1.43,
+        "exit_distance": 1.43,
+        "connector_height": 1.1
+      },
+      "helix": {
+        "radius": 1.0,
+        "turns": 2,
+        "axis_transition_duration": 1.0,
+        "pitch": 0.5,
+        "centripetal_g": 1.8,
+        "entry_duration": 0.85,
+        "exit_duration": 0.85,
+        "entry_distance": 1.43,
+        "exit_distance": 1.43,
+        "connector_height": 1.1
+      },
+      "figure_eight": {
+        "length": 2.0,
+        "width": 1.2,
+        "turns": 2,
+        "speed": 1.5,
+        "ramp_duration": 3.0
+      },
+      "limits": {
+        "motor_fraction": 0.7,
+        "angular_acceleration": 100.0,
+        "minimum_relative_altitude": -0.01
+      },
+      "point_to_point": {
+        "max_speed": 1.0,
+        "max_acceleration": 1.5
+      },
+      "omtraj": {
+        "file": "datalog/omtraj/omtraj_optimized.csv"
+      }
+    },
+    "mpc": {
+      "horizon": 16,
+      "prediction_dt": 0.03,
+      "rate_time_constant": [
+        0.08,
+        0.06666666666666667,
+        0.125
+      ],
+      "thrust_time_constant": 0.033,
+      "drag_compensation": true,
+      "body_rate_max": [
+        14.0,
+        14.0,
+        14.0
+      ],
+      "state_weight": [
+        300.0,
+        300.0,
+        300.0,
+        6.0,
+        6.0,
+        8.0,
+        3.0,
+        3.0,
+        2.0
+      ],
+      "rate_weight": 0.05,
+      "thrust_weight": 0.01,
+      "input_weight": [
+        0.1,
+        0.12,
+        0.12,
+        0.12
+      ],
+      "command_change_weight": [
+        0.02,
+        0.08,
+        0.08,
+        0.08
+      ],
+      "terminal_weight_scale": 2.0,
+      "maximum_iterations": 200,
+      "tolerance": 0.0001,
+      "solve_time_budget_ms": 6.0
+    },
+    "nmpc": {
+      "horizon": 12,
+      "prediction_dt": 0.04,
+      "rate_time_constant": [
+        0.1,
+        0.083,
+        0.25
+      ],
+      "drag_compensation": true,
+      "maximum_iterations": 60,
+      "tolerance": 1e-05,
+      "solve_time_budget_ms": 8.0,
+      "body_rate_max": [
+        14.0,
+        14.0,
+        14.0
+      ],
+      "state_weight": [
+        100.0,
+        100.0,
+        100.0,
+        3.0,
+        3.0,
+        3.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ],
+      "terminal_weight": [
+        35.0,
+        35.0,
+        35.0,
+        6.0,
+        6.0,
+        6.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "input_weight": [
+        0.1,
+        0.12,
+        0.12,
+        0.12
+      ],
+      "command_change_weight": [
+        0.02,
+        0.12,
+        0.12,
+        0.12
+      ],
+      "fallback_position_gain": [
+        2.5,
+        2.5,
+        2.5
+      ],
+      "fallback_velocity_gain": [
+        3.0,
+        3.0,
+        3.0
+      ],
+      "fallback_attitude_gain": 4.0
+    },
+    "uav": {
+      "mass": 0.811,
+      "Jvx": 0.00191,
+      "Jvy": 0.00237,
+      "Jvz": 0.0036,
+      "l": 0.1216,
+      "rp": 0.06475,
+      "beta_deg": 45.0
+    },
+    "motor": {
+      "Cq_a": -0.0275,
+      "Cq_b": 0.0017,
+      "Cq_c": 0.0164,
+      "Ct_a": -0.1861,
+      "Ct_b": -0.1392,
+      "Ct_c": 0.1862,
+      "rc2speed_a": -92.209,
+      "rc2speed_b": 3995.891,
+      "rc2speed_c": 291.082
+    },
+    "filter": {
+      "lpf_acc_x_cutoff_hz": 10.0,
+      "lpf_acc_y_cutoff_hz": 10.0,
+      "lpf_acc_z_cutoff_hz": 10.0,
+      "lpf_gyro_x_cutoff_hz": 10.0,
+      "lpf_gyro_y_cutoff_hz": 10.0,
+      "lpf_gyro_z_cutoff_hz": 10.0
+    },
+    "gain": {
+      "gain_pos_x": 2.5,
+      "gain_pos_y": 1.5,
+      "gain_pos_z": 1.5,
+      "gain_vel_p_x": 4.0,
+      "gain_vel_p_y": 3.0,
+      "gain_vel_p_z": 2.5,
+      "gain_vel_i_x": 0.8,
+      "gain_vel_i_y": 0.8,
+      "gain_vel_i_z": 0.5,
+      "gain_vel_d_x": 0.2,
+      "gain_vel_d_y": 0.2,
+      "gain_vel_d_z": 0.0,
+      "gain_quat_x": 12.0,
+      "gain_quat_y": 13.0,
+      "gain_quat_z": 2.0,
+      "gain_rate_p_x": 20.0,
+      "gain_rate_p_y": 24.0,
+      "gain_rate_p_z": 8.0,
+      "gain_rate_i_x": 3.0,
+      "gain_rate_i_y": 3.0,
+      "gain_rate_i_z": 0.5,
+      "gain_rate_d_x": 0.6,
+      "gain_rate_d_y": 0.6,
+      "gain_rate_d_z": 0.0,
+      "gain_rate_ff_x": 1.6,
+      "gain_rate_ff_y": 1.6,
+      "gain_rate_ff_z": 1.0
+    },
+    "aero": {
+      "rho": 1.1,
+      "kdx": 0.26,
+      "kdy": 0.28,
+      "kdz": 0.42,
+      "kh": 0.01
+    },
+    "rc_reverse": {
+      "roll": true,
+      "pitch": true,
+      "yaw": false,
+      "throttle": true
+    },
+    "tuning": {
+      "attitude_loop": false,
+      "euler_des_x_deg": 0.0,
+      "euler_des_y_deg": 0.0,
+      "euler_des_z_deg": 0.0,
+      "angular_rate_loop": false,
+      "rate_des_x_deg": 57.3,
+      "rate_des_y_deg": 0.0,
+      "rate_des_z_deg": 0.0
+    }
+  },
+  "v3_parameter_differences": {
+    "baseline": {},
+    "d0": {
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.0
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.0
+      }
+    },
+    "d015": {
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.15
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.15
+      }
+    },
+    "d03": {
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.3
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.3
+      }
+    },
+    "i0": {
+      "gain.gain_rate_i_x": {
+        "before": 3.0,
+        "after": 0.0
+      },
+      "gain.gain_rate_i_y": {
+        "before": 3.0,
+        "after": 0.0
+      },
+      "gain.gain_rate_i_z": {
+        "before": 0.5,
+        "after": 0.0
+      }
+    },
+    "i2": {
+      "gain.gain_rate_i_x": {
+        "before": 3.0,
+        "after": 6.0
+      },
+      "gain.gain_rate_i_y": {
+        "before": 3.0,
+        "after": 6.0
+      },
+      "gain.gain_rate_i_z": {
+        "before": 0.5,
+        "after": 1.0
+      }
+    },
+    "outer200": {
+      "ctrl_freq_max": {
+        "before": 100.0,
+        "after": 200.0
+      }
+    },
+    "outer200_p20": {
+      "ctrl_freq_max": {
+        "before": 100.0,
+        "after": 200.0
+      },
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.05,
+          0.0415,
+          0.125
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 20.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 24.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 8.0
+      }
+    },
+    "p15": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.06666666666666667,
+          0.05533333333333334,
+          0.16666666666666666
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 15.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 18.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 6.0
+      }
+    },
+    "p20": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.05,
+          0.0415,
+          0.125
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 20.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 24.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 8.0
+      }
+    },
+    "p20_d015": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.05,
+          0.0415,
+          0.125
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 20.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 24.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 8.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.15
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.15
+      }
+    },
+    "p20_d03": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.05,
+          0.0415,
+          0.125
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 20.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 24.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 8.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.3
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.3
+      }
+    },
+    "p20_d06": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.05,
+          0.0415,
+          0.125
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 20.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 24.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 8.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.6
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.6
+      }
+    },
+    "p20_ff13": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.065,
+          0.05416666666666667,
+          0.125
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 20.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 24.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 8.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.3
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.3
+      },
+      "gain.gain_rate_ff_x": {
+        "before": 1.0,
+        "after": 1.3
+      },
+      "gain.gain_rate_ff_y": {
+        "before": 1.0,
+        "after": 1.3
+      }
+    },
+    "p20_ff16": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.08,
+          0.06666666666666667,
+          0.125
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 20.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 24.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 8.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.6
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.6
+      },
+      "gain.gain_rate_ff_x": {
+        "before": 1.0,
+        "after": 1.6
+      },
+      "gain.gain_rate_ff_y": {
+        "before": 1.0,
+        "after": 1.6
+      }
+    },
+    "p20_oldtau": {
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 20.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 24.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 8.0
+      }
+    },
+    "p30": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      }
+    },
+    "p30_d015": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.15
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.15
+      }
+    },
+    "p30_d03": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.3
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.3
+      }
+    },
+    "p30_d06": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.6
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.6
+      }
+    },
+    "p30_ff13": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.043333333333333335,
+          0.036111111111111115,
+          0.08333333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      },
+      "gain.gain_rate_d_x": {
+        "before": 0.05,
+        "after": 0.3
+      },
+      "gain.gain_rate_d_y": {
+        "before": 0.05,
+        "after": 0.3
+      },
+      "gain.gain_rate_ff_x": {
+        "before": 1.0,
+        "after": 1.3
+      },
+      "gain.gain_rate_ff_y": {
+        "before": 1.0,
+        "after": 1.3
+      }
+    },
+    "p30_fine": {
+      "mpc.horizon": {
+        "before": 16,
+        "after": 24
+      },
+      "mpc.prediction_dt": {
+        "before": 0.03,
+        "after": 0.02
+      },
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      }
+    },
+    "p30_i0": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      },
+      "gain.gain_rate_i_x": {
+        "before": 3.0,
+        "after": 0.0
+      },
+      "gain.gain_rate_i_y": {
+        "before": 3.0,
+        "after": 0.0
+      },
+      "gain.gain_rate_i_z": {
+        "before": 0.5,
+        "after": 0.0
+      }
+    },
+    "p30_outer200": {
+      "ctrl_freq_max": {
+        "before": 100.0,
+        "after": 200.0
+      },
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      }
+    },
+    "p30_q150": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "mpc.state_weight": {
+        "before": [
+          300.0,
+          300.0,
+          300.0,
+          6.0,
+          6.0,
+          8.0,
+          3.0,
+          3.0,
+          2.0
+        ],
+        "after": [
+          150.0,
+          150.0,
+          150.0,
+          6.0,
+          6.0,
+          8.0,
+          3.0,
+          3.0,
+          2.0
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      }
+    },
+    "p30_q600": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "mpc.state_weight": {
+        "before": [
+          300.0,
+          300.0,
+          300.0,
+          6.0,
+          6.0,
+          8.0,
+          3.0,
+          3.0,
+          2.0
+        ],
+        "after": [
+          600.0,
+          600.0,
+          600.0,
+          6.0,
+          6.0,
+          8.0,
+          3.0,
+          3.0,
+          2.0
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      }
+    },
+    "p30_rate_low": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "mpc.input_weight": {
+        "before": [
+          0.1,
+          0.12,
+          0.12,
+          0.12
+        ],
+        "after": [
+          0.1,
+          0.04,
+          0.04,
+          0.04
+        ]
+      },
+      "mpc.command_change_weight": {
+        "before": [
+          0.02,
+          0.08,
+          0.08,
+          0.08
+        ],
+        "after": [
+          0.02,
+          0.02,
+          0.02,
+          0.02
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      }
+    },
+    "p30_tau_slow": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.043333333333333,
+          0.035966666666667,
+          0.108333333333333
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      }
+    },
+    "p30_tight": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.03333333333333333,
+          0.02766666666666667,
+          0.08333333333333333
+        ]
+      },
+      "mpc.maximum_iterations": {
+        "before": 200,
+        "after": 400
+      },
+      "mpc.tolerance": {
+        "before": 0.0001,
+        "after": 1e-06
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 30.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 36.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 12.0
+      }
+    },
+    "p45": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.022222222222222223,
+          0.018444444444444447,
+          0.05555555555555555
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 45.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 54.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 18.0
+      }
+    },
+    "p60": {
+      "mpc.rate_time_constant": {
+        "before": [
+          0.1,
+          0.083,
+          0.25
+        ],
+        "after": [
+          0.016666666666666666,
+          0.013833333333333335,
+          0.041666666666666664
+        ]
+      },
+      "gain.gain_rate_p_x": {
+        "before": 10.0,
+        "after": 60.0
+      },
+      "gain.gain_rate_p_y": {
+        "before": 12.0,
+        "after": 72.0
+      },
+      "gain.gain_rate_p_z": {
+        "before": 4.0,
+        "after": 24.0
+      }
+    },
+    "rate_cost_low": {
+      "mpc.input_weight": {
+        "before": [
+          0.1,
+          0.12,
+          0.12,
+          0.12
+        ],
+        "after": [
+          0.1,
+          0.04,
+          0.04,
+          0.04
+        ]
+      },
+      "mpc.command_change_weight": {
+        "before": [
+          0.02,
+          0.08,
+          0.08,
+          0.08
+        ],
+        "after": [
+          0.02,
+          0.02,
+          0.02,
+          0.02
+        ]
+      }
+    },
+    "thrust_cost_low": {
+      "mpc.input_weight": {
+        "before": [
+          0.1,
+          0.12,
+          0.12,
+          0.12
+        ],
+        "after": [
+          0.03,
+          0.12,
+          0.12,
+          0.12
+        ]
+      },
+      "mpc.command_change_weight": {
+        "before": [
+          0.02,
+          0.08,
+          0.08,
+          0.08
+        ],
+        "after": [
+          0.005,
+          0.08,
+          0.08,
+          0.08
+        ]
+      }
+    }
+  },
+  "v3_metrics": [
+    {
+      "name": "p20_d03_eight51",
+      "seed": 51,
+      "trajectory": "figure_eight",
+      "main_window_s": [
+        3.5,
+        19.5861989357
+      ],
+      "main_rmse_m": 0.0009135633938419346,
+      "main_max_m": 0.0018660572312257694,
+      "maneuver_rmse_m": 0.0009135633938419346,
+      "maneuver_max_m": 0.0018660572312257694,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        null
+      ],
+      "final_hover_rmse_m": 0.0007738407424555254,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49921688605840436,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999925233878917,
+      "output_throttle_min_max": [
+        0.15996825695037842,
+        0.27336177229881287
+      ],
+      "output_throttle_rail_fraction": 0.0,
+      "maneuver_rate_rmse_rad_s": [
+        0.12822910348817107,
+        0.15862758313338568,
+        0.1218096918181092
+      ],
+      "maneuver_position_p95_m": 0.0013564475707596745,
+      "maneuver_attitude_rmse_deg": 0.5808484588243882,
+      "maneuver_attitude_max_deg": 1.4380015123578305,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.317122,
+        0.33726255,
+        0.3638257800000001,
+        0.6448670000000001
+      ],
+      "solver_status_counts": {
+        "1": 1958
+      }
+    },
+    {
+      "name": "baseline_eight51",
+      "seed": 51,
+      "trajectory": "figure_eight",
+      "main_window_s": [
+        3.5,
+        19.5861989357
+      ],
+      "main_rmse_m": 0.0009691714044201959,
+      "main_max_m": 0.0018743203392821211,
+      "maneuver_rmse_m": 0.0009691714044201959,
+      "maneuver_max_m": 0.0018743203392821211,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        null
+      ],
+      "final_hover_rmse_m": 0.0005708645681364989,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49979502829974926,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999975887546355,
+      "output_throttle_min_max": [
+        0.18966726958751678,
+        0.25460800528526306
+      ],
+      "output_throttle_rail_fraction": 0.0,
+      "maneuver_rate_rmse_rad_s": [
+        0.1558305841694309,
+        0.11056932108151649,
+        0.14712174472691855
+      ],
+      "maneuver_position_p95_m": 0.0016390834247381615,
+      "maneuver_attitude_rmse_deg": 0.7097906281783514,
+      "maneuver_attitude_max_deg": 1.777251169183756,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.322163,
+        0.3617118,
+        0.3908050400000001,
+        0.6116020000000001
+      ],
+      "solver_status_counts": {
+        "1": 1958
+      }
+    },
+    {
+      "name": "p20_ff13_eight51",
+      "seed": 51,
+      "trajectory": "figure_eight",
+      "main_window_s": [
+        3.5,
+        19.5861989357
+      ],
+      "main_rmse_m": 0.0009867577776537597,
+      "main_max_m": 0.002354859664899908,
+      "maneuver_rmse_m": 0.0009867577776537597,
+      "maneuver_max_m": 0.002354859664899908,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        null
+      ],
+      "final_hover_rmse_m": 0.0010320012105205075,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49933396349206155,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        19.99999999998181
+      ],
+      "physics_wall_ratio": 0.9999973558773515,
+      "output_throttle_min_max": [
+        0.15239663422107697,
+        0.2795485258102417
+      ],
+      "output_throttle_rail_fraction": 0.0,
+      "maneuver_rate_rmse_rad_s": [
+        0.1408556960449235,
+        0.0930834703334564,
+        0.1252963423911383
+      ],
+      "maneuver_position_p95_m": 0.0014255623844820666,
+      "maneuver_attitude_rmse_deg": 0.5966120208983735,
+      "maneuver_attitude_max_deg": 1.575618872127854,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3246215,
+        0.35270840000000003,
+        0.42477477,
+        0.6383559999999999
+      ],
+      "solver_status_counts": {
+        "1": 1958
+      }
+    },
+    {
+      "name": "p20_ff16_eight51",
+      "seed": 51,
+      "trajectory": "figure_eight",
+      "main_window_s": [
+        3.5,
+        19.5861989357
+      ],
+      "main_rmse_m": 0.0038104498331752263,
+      "main_max_m": 0.011718475939892371,
+      "maneuver_rmse_m": 0.0038104498331752263,
+      "maneuver_max_m": 0.011718475939892371,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        null
+      ],
+      "final_hover_rmse_m": 0.000782817332627743,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4994460492701792,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999931705798379,
+      "output_throttle_min_max": [
+        0.1565517634153366,
+        0.276121586561203
+      ],
+      "output_throttle_rail_fraction": 0.0,
+      "maneuver_rate_rmse_rad_s": [
+        0.14753804202509446,
+        0.11185369746907584,
+        0.13001341651211787
+      ],
+      "maneuver_position_p95_m": 0.009143106878946502,
+      "maneuver_attitude_rmse_deg": 0.7915816489683357,
+      "maneuver_attitude_max_deg": 1.9939645344096564,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3248765,
+        0.5235624999999999,
+        0.6003163400000002,
+        0.71989
+      ],
+      "solver_status_counts": {
+        "1": 1958
+      }
+    },
+    {
+      "name": "p20_ff1645",
+      "seed": 45,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.006922392731118963,
+      "main_max_m": 0.009108131718616592,
+      "maneuver_rmse_m": 0.005817085014198381,
+      "maneuver_max_m": 0.0123237460290231,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0009815830569985897,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49918256941761235,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        20.000000000095497
+      ],
+      "physics_wall_ratio": 0.9999903046320509,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46347999572753906
+      ],
+      "output_throttle_rail_fraction": 0.0009970089730807576,
+      "maneuver_rate_rmse_rad_s": [
+        1.1378457754811226,
+        0.20606249277339966,
+        0.15574567494395256
+      ],
+      "maneuver_position_p95_m": 0.009171575748328933,
+      "maneuver_attitude_rmse_deg": 1.6564429028486856,
+      "maneuver_attitude_max_deg": 5.284794373323883,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.319828,
+        0.3444124999999999,
+        0.3827014199999996,
+        0.457522
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_d0642",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.006322558957590761,
+      "main_max_m": 0.011656541725824053,
+      "maneuver_rmse_m": 0.006286321790985798,
+      "maneuver_max_m": 0.01187314706856035,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0009301062483595313,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.498948136543759,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999958447486932,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4485742449760437
+      ],
+      "output_throttle_rail_fraction": 0.0009970089730807576,
+      "maneuver_rate_rmse_rad_s": [
+        0.9946998422357016,
+        0.15245144664240284,
+        0.1526190411166548
+      ],
+      "maneuver_position_p95_m": 0.010729872935675984,
+      "maneuver_attitude_rmse_deg": 2.5001859886634135,
+      "maneuver_attitude_max_deg": 10.493586633863677,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3001325,
+        0.3258455,
+        0.5073343699999995,
+        0.624786
+      ],
+      "solver_status_counts": {
+        "1": 1020
+      }
+    },
+    {
+      "name": "p20_d0644",
+      "seed": 44,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.006175863376823979,
+      "main_max_m": 0.011992302614014645,
+      "maneuver_rmse_m": 0.006201086712207858,
+      "maneuver_max_m": 0.012301146074810735,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0007580309615159795,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49920426517523797,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        29.999999999972715
+      ],
+      "physics_wall_ratio": 0.9999915138114582,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4465351700782776
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        1.07831350710402,
+        0.17364990859149804,
+        0.1533430885356395
+      ],
+      "maneuver_position_p95_m": 0.011383951364533497,
+      "maneuver_attitude_rmse_deg": 2.6339424803834914,
+      "maneuver_attitude_max_deg": 10.714095875665869,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3233105,
+        0.3583415,
+        0.5323947000000006,
+        0.6721360000000001
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_ff16_stall48",
+      "seed": 48,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.007241463002282117,
+      "main_max_m": 0.009421001268728833,
+      "maneuver_rmse_m": 0.006143213255757161,
+      "maneuver_max_m": 0.013236547284953543,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0011969807678188363,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4994066890609956,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        17.500000000040927,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999905201046897,
+      "output_throttle_min_max": [
+        -0.0,
+        0.45020443201065063
+      ],
+      "output_throttle_rail_fraction": 0.000502008032128514,
+      "maneuver_rate_rmse_rad_s": [
+        1.1013682526293107,
+        0.1852442412824869,
+        0.14600921217624555
+      ],
+      "maneuver_position_p95_m": 0.009663118100349973,
+      "maneuver_attitude_rmse_deg": 1.6827695806545167,
+      "maneuver_attitude_max_deg": 5.644582740660418,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3264635,
+        0.46380179999999993,
+        0.5812115200000001,
+        0.6776840000000001
+      ],
+      "solver_status_counts": {
+        "1": 990
+      }
+    },
+    {
+      "name": "p30_d0342",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.007753365077493233,
+      "main_max_m": 0.010225528163328716,
+      "maneuver_rmse_m": 0.006391552173059587,
+      "maneuver_max_m": 0.012615625987245017,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0015803243783494266,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4981176625935204,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999933513643546,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4710582196712494
+      ],
+      "output_throttle_rail_fraction": 0.0012462612163509472,
+      "maneuver_rate_rmse_rad_s": [
+        0.9360651685241127,
+        0.23715675319846274,
+        0.15173364158673958
+      ],
+      "maneuver_position_p95_m": 0.009988919960164573,
+      "maneuver_attitude_rmse_deg": 1.8361869847010623,
+      "maneuver_attitude_max_deg": 7.239036613876062,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3028605,
+        0.3383235,
+        0.3798207300000002,
+        0.49372399999999994
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_d0342",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.007634586680937377,
+      "main_max_m": 0.010166199043935559,
+      "maneuver_rmse_m": 0.006581807508641347,
+      "maneuver_max_m": 0.01209389061882718,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0007433089744449998,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49943469583566363,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.499999999922693
+      ],
+      "physics_wall_ratio": 0.9999966113885237,
+      "output_throttle_min_max": [
+        -0.0,
+        0.45847782492637634
+      ],
+      "output_throttle_rail_fraction": 0.0012462612163509472,
+      "maneuver_rate_rmse_rad_s": [
+        1.118851518310161,
+        0.1651169582332716,
+        0.15297142783033763
+      ],
+      "maneuver_position_p95_m": 0.01030116346098415,
+      "maneuver_attitude_rmse_deg": 2.317192542823735,
+      "maneuver_attitude_max_deg": 10.42497566136407,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.296076,
+        0.35229209999999994,
+        0.3930597999999999,
+        0.5197189999999999
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_d0345",
+      "seed": 45,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.007930501314534317,
+      "main_max_m": 0.010099972430120233,
+      "maneuver_rmse_m": 0.006775993227783072,
+      "maneuver_max_m": 0.01159665752846131,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0007775167498173345,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4992192187981072,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999944371848468,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4506509602069855
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        1.1879680369180403,
+        0.17069223823769092,
+        0.14747503233436407
+      ],
+      "maneuver_position_p95_m": 0.010085737330153837,
+      "maneuver_attitude_rmse_deg": 2.478598779494421,
+      "maneuver_attitude_max_deg": 10.665284711013136,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.325418,
+        0.3854632999999999,
+        0.5153565399999999,
+        0.650779
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_ff1643",
+      "seed": 43,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.008106020411704077,
+      "main_max_m": 0.010652630784205091,
+      "maneuver_rmse_m": 0.006658500111966947,
+      "maneuver_max_m": 0.012743590936646506,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0012215923204338828,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4991078115413118,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999918899013667,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46797555685043335
+      ],
+      "output_throttle_rail_fraction": 0.0004985044865403788,
+      "maneuver_rate_rmse_rad_s": [
+        1.418677146839748,
+        0.26973854318061224,
+        0.16242023997415533
+      ],
+      "maneuver_position_p95_m": 0.010572474258376768,
+      "maneuver_attitude_rmse_deg": 1.8558555534211196,
+      "maneuver_attitude_max_deg": 5.894954391222828,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.330109,
+        0.5133329,
+        0.5653152199999999,
+        0.616461
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_ff16_vertical50",
+      "seed": 50,
+      "trajectory": "vertical_circle",
+      "main_window_s": [
+        4.35,
+        5.84561501592
+      ],
+      "main_rmse_m": 0.007329007399156571,
+      "main_max_m": 0.009289202699764161,
+      "maneuver_rmse_m": 0.006835500609214927,
+      "maneuver_max_m": 0.012030646228629514,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        null,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0008535742635024212,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49944347329937033,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        19.99999999998181
+      ],
+      "physics_wall_ratio": 0.999987617986855,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46403801441192627
+      ],
+      "output_throttle_rail_fraction": 0.005219206680584551,
+      "maneuver_rate_rmse_rad_s": [
+        0.21882181462313005,
+        1.382451791781743,
+        0.1502520176956279
+      ],
+      "maneuver_position_p95_m": 0.010397342701693688,
+      "maneuver_attitude_rmse_deg": 1.855599693355205,
+      "maneuver_attitude_max_deg": 5.113593305105649,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3246985,
+        0.3618088,
+        0.42398385999999955,
+        0.6095379999999999
+      ],
+      "solver_status_counts": {
+        "1": 670
+      }
+    },
+    {
+      "name": "p20_ff1344",
+      "seed": 44,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.008292224584569647,
+      "main_max_m": 0.010503467517341134,
+      "maneuver_rmse_m": 0.00675071513432853,
+      "maneuver_max_m": 0.013660062196327007,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0007260165191499319,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49918231703002974,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999897208206551,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46021199226379395
+      ],
+      "output_throttle_rail_fraction": 0.0012462612163509472,
+      "maneuver_rate_rmse_rad_s": [
+        1.1592560827424538,
+        0.22647028661205107,
+        0.16856881975078294
+      ],
+      "maneuver_position_p95_m": 0.010402753117987149,
+      "maneuver_attitude_rmse_deg": 1.8375495669086097,
+      "maneuver_attitude_max_deg": 6.526973353932949,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.320023,
+        0.3501084,
+        0.3874291400000001,
+        0.513564
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_ff1343",
+      "seed": 43,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.00844204020641452,
+      "main_max_m": 0.011052420989917447,
+      "maneuver_rmse_m": 0.006857031995912329,
+      "maneuver_max_m": 0.013330801963353294,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0008899998526632892,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4990984263770785,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        17.49999999992724
+      ],
+      "physics_wall_ratio": 0.9999898088805889,
+      "output_throttle_min_max": [
+        -0.0,
+        0.45945191383361816
+      ],
+      "output_throttle_rail_fraction": 0.0004985044865403788,
+      "maneuver_rate_rmse_rad_s": [
+        1.3414937404652119,
+        0.2820053037429145,
+        0.16133426992191224
+      ],
+      "maneuver_position_p95_m": 0.010677825147693307,
+      "maneuver_attitude_rmse_deg": 1.9219307938601253,
+      "maneuver_attitude_max_deg": 6.335173835871258,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.325656,
+        0.36265499999999995,
+        0.4250154399999997,
+        0.593683
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_ff1342",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.008476217570529548,
+      "main_max_m": 0.010795460365974353,
+      "maneuver_rmse_m": 0.006853342160680428,
+      "maneuver_max_m": 0.01362383213006389,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0007443119326580085,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49926551677748,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999962620475378,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4573208689689636
+      ],
+      "output_throttle_rail_fraction": 0.0007477567298105683,
+      "maneuver_rate_rmse_rad_s": [
+        1.2269298624668712,
+        0.19668237157832438,
+        0.1533345802235868
+      ],
+      "maneuver_position_p95_m": 0.010608351198949198,
+      "maneuver_attitude_rmse_deg": 1.8755791736828678,
+      "maneuver_attitude_max_deg": 7.132433527073862,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.29893200000000003,
+        0.5137771,
+        0.5401922199999996,
+        0.64092
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p30_d01542",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.008704150077904173,
+      "main_max_m": 0.0115923211407135,
+      "maneuver_rmse_m": 0.006959006002723273,
+      "maneuver_max_m": 0.013478213138989762,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0014662866970549604,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49854433814565713,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        25.00000000009095
+      ],
+      "physics_wall_ratio": 0.9999955659641169,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4805823564529419
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        1.1404753718700522,
+        0.2716189412583017,
+        0.12945503527642271
+      ],
+      "maneuver_position_p95_m": 0.011018275491525556,
+      "maneuver_attitude_rmse_deg": 1.9181515969787928,
+      "maneuver_attitude_max_deg": 6.399260105640467,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.308926,
+        0.33568299999999995,
+        0.3719831999999999,
+        0.429487
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_ff16_wind49",
+      "seed": 49,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.008667436040497738,
+      "main_max_m": 0.014079033826357827,
+      "maneuver_rmse_m": 0.00725815589814178,
+      "maneuver_max_m": 0.014079033826357827,
+      "effective_lag_xyz_ms": [
+        -4.999999999999726,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.006154292542420726,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49862277888250073,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999899672467581,
+      "output_throttle_min_max": [
+        -0.0,
+        0.49371257424354553
+      ],
+      "output_throttle_rail_fraction": 0.0027417746759720836,
+      "maneuver_rate_rmse_rad_s": [
+        3.162029653480363,
+        1.3414559630650549,
+        0.2096413558057494
+      ],
+      "maneuver_position_p95_m": 0.011543618873441616,
+      "maneuver_attitude_rmse_deg": 3.159032399292989,
+      "maneuver_attitude_max_deg": 10.75648705560327,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.324146,
+        0.35910759999999997,
+        0.4515092799999964,
+        0.660998
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_d0645",
+      "seed": 45,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.007069695223277532,
+      "main_max_m": 0.017525168960928646,
+      "maneuver_rmse_m": 0.006682850237098652,
+      "maneuver_max_m": 0.017525168960928646,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0009434078268270107,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49912001196802164,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        12.500000000045475,
+        19.99999999998181
+      ],
+      "physics_wall_ratio": 0.9999897315217962,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4476550221443176
+      ],
+      "output_throttle_rail_fraction": 0.000747011952191235,
+      "maneuver_rate_rmse_rad_s": [
+        1.0779702513303702,
+        0.13290399624636354,
+        0.1415171809654843
+      ],
+      "maneuver_position_p95_m": 0.011665707121756054,
+      "maneuver_attitude_rmse_deg": 2.6839043022188025,
+      "maneuver_attitude_max_deg": 11.957865053458512,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.326339,
+        0.44276519999999914,
+        0.57451824,
+        0.59616
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p3042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.009459500496504084,
+      "main_max_m": 0.012205552754974033,
+      "maneuver_rmse_m": 0.007460645775822843,
+      "maneuver_max_m": 0.014677892956737479,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0015094347322934347,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49802812177970035,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        19.99999999998181
+      ],
+      "physics_wall_ratio": 0.9999965329284238,
+      "output_throttle_min_max": [
+        -0.0,
+        0.47172167897224426
+      ],
+      "output_throttle_rail_fraction": 0.0004985044865403788,
+      "maneuver_rate_rmse_rad_s": [
+        1.2690365230878027,
+        0.34706024944278585,
+        0.1451611621113822
+      ],
+      "maneuver_position_p95_m": 0.011689155091058992,
+      "maneuver_attitude_rmse_deg": 1.9931255207062955,
+      "maneuver_attitude_max_deg": 6.339676979836065,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.294735,
+        0.3100619,
+        0.3297401999999999,
+        0.5407390000000001
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_d03_wind49",
+      "seed": 49,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.009009460738388727,
+      "main_max_m": 0.011837204188174888,
+      "maneuver_rmse_m": 0.00774234533566073,
+      "maneuver_max_m": 0.013459697289630645,
+      "effective_lag_xyz_ms": [
+        -4.999999999999726,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.005698119495341359,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4986732406630569,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        30.000000000086402
+      ],
+      "physics_wall_ratio": 0.9999964035641029,
+      "output_throttle_min_max": [
+        -0.0,
+        0.45354795455932617
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        1.1720697658742572,
+        0.2763247267313852,
+        0.17312801051418203
+      ],
+      "maneuver_position_p95_m": 0.012096883468975429,
+      "maneuver_attitude_rmse_deg": 2.4161464359611355,
+      "maneuver_attitude_max_deg": 10.408675221726167,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3198175,
+        0.5041718000000001,
+        0.5509544200000001,
+        0.646221
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_ff13_wind49",
+      "seed": 49,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.009823807014423204,
+      "main_max_m": 0.013240560692745882,
+      "maneuver_rmse_m": 0.007810239789203457,
+      "maneuver_max_m": 0.01369235694901286,
+      "effective_lag_xyz_ms": [
+        -4.999999999999726,
+        2.7755575615628914e-13,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.005973762192968452,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4986460503507608,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999889669940273,
+      "output_throttle_min_max": [
+        -0.0,
+        0.457294225692749
+      ],
+      "output_throttle_rail_fraction": 0.0009970089730807576,
+      "maneuver_rate_rmse_rad_s": [
+        1.26591447463368,
+        0.285648967733873,
+        0.1677548991044161
+      ],
+      "maneuver_position_p95_m": 0.012692242605521618,
+      "maneuver_attitude_rmse_deg": 1.9538753675468685,
+      "maneuver_attitude_max_deg": 6.273496203429856,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.32670199999999994,
+        0.37227395,
+        0.5433793400000009,
+        0.629235
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_d06_noise46",
+      "seed": 46,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.007229891947881296,
+      "main_max_m": 0.014526093302899007,
+      "maneuver_rmse_m": 0.007631562588007333,
+      "maneuver_max_m": 0.015058949617858964,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0027971989673743138,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4976004085035074,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000011369,
+        12.500000000045475,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.999993788261844,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46685338020324707
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        1.0919460471042095,
+        0.22936563363871804,
+        0.3145241446435582
+      ],
+      "maneuver_position_p95_m": 0.013871203073681183,
+      "maneuver_attitude_rmse_deg": 2.731928259349527,
+      "maneuver_attitude_max_deg": 11.28444509294994,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3272325,
+        0.35092660000000003,
+        0.5237888500000011,
+        0.676902
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_d06_stall48",
+      "seed": 48,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.00729476669968938,
+      "main_max_m": 0.017633737269030905,
+      "maneuver_rmse_m": 0.00756846339081543,
+      "maneuver_max_m": 0.017633737269030905,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0008408784044510189,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49923400245486477,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        17.500000000040927,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999905631087062,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4441695213317871
+      ],
+      "output_throttle_rail_fraction": 0.0017676767676767678,
+      "maneuver_rate_rmse_rad_s": [
+        1.1523930341736814,
+        0.1584023289776516,
+        0.1638612326698219
+      ],
+      "maneuver_position_p95_m": 0.013672023645222128,
+      "maneuver_attitude_rmse_deg": 2.8886035042214258,
+      "maneuver_attitude_max_deg": 12.812419507841943,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.323327,
+        0.45084359999999996,
+        0.55776526,
+        0.597642
+      ],
+      "solver_status_counts": {
+        "1": 1007
+      }
+    },
+    {
+      "name": "p20_d06_slow47",
+      "seed": 47,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.007695198656176625,
+      "main_max_m": 0.018140438721229838,
+      "maneuver_rmse_m": 0.00735472606154453,
+      "maneuver_max_m": 0.019134873008714727,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0007520630244672392,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49949499168083145,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        7.500000000050022,
+        9.999999999990905,
+        10.000000000104592,
+        14.999999999986358
+      ],
+      "physics_wall_ratio": 0.7999975034714947,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4556194245815277
+      ],
+      "output_throttle_rail_fraction": 0.0002714440825190011,
+      "maneuver_rate_rmse_rad_s": [
+        1.0768784475871447,
+        0.14756412249875123,
+        0.1552553199053031
+      ],
+      "maneuver_position_p95_m": 0.012390482654854162,
+      "maneuver_attitude_rmse_deg": 2.7425412720376965,
+      "maneuver_attitude_max_deg": 11.362532348066281,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.321258,
+        0.40231595000000014,
+        0.5675739799999999,
+        0.718838
+      ],
+      "solver_status_counts": {
+        "1": 1272
+      }
+    },
+    {
+      "name": "p30_tight42",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.010417299296343035,
+      "main_max_m": 0.013488097884171971,
+      "maneuver_rmse_m": 0.00811847854216275,
+      "maneuver_max_m": 0.01630013535614516,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.00151216947498817,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49810815153365223,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999952078247578,
+      "output_throttle_min_max": [
+        -0.0,
+        0.47576525807380676
+      ],
+      "output_throttle_rail_fraction": 0.0002492522432701894,
+      "maneuver_rate_rmse_rad_s": [
+        1.9758226147832112,
+        0.45942805518956675,
+        0.13371231201739722
+      ],
+      "maneuver_position_p95_m": 0.012729446494635744,
+      "maneuver_attitude_rmse_deg": 2.7007967188006456,
+      "maneuver_attitude_max_deg": 8.471513013016633,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.323211,
+        0.37941709999999995,
+        0.5289612799999993,
+        0.6735369999999999
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p30_d0343",
+      "seed": 43,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.009870469699684022,
+      "main_max_m": 0.018830425716628352,
+      "maneuver_rmse_m": 0.007682249130569509,
+      "maneuver_max_m": 0.018830425716628352,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.001615571389333799,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.498224861848733,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        12.500000000045475,
+        14.999999999986358
+      ],
+      "physics_wall_ratio": 0.9999898528348836,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4867359697818756
+      ],
+      "output_throttle_rail_fraction": 0.0024925224327018943,
+      "maneuver_rate_rmse_rad_s": [
+        1.4324414171829958,
+        0.6841266646021996,
+        0.16893987031143878
+      ],
+      "maneuver_position_p95_m": 0.012535428796381578,
+      "maneuver_attitude_rmse_deg": 2.4834925491019044,
+      "maneuver_attitude_max_deg": 8.110440346087183,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.317282,
+        0.3517726,
+        0.5245562199999991,
+        0.605541
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "outer200_p2042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.01082157372563882,
+      "main_max_m": 0.014494674084603493,
+      "maneuver_rmse_m": 0.008519811302504652,
+      "maneuver_max_m": 0.015979636637061343,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        2.7755575615628914e-13,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0009246065104892469,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4991479831959543,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        9.999999999990905,
+        10.000000000104592,
+        14.999999999986358
+      ],
+      "physics_wall_ratio": 0.9999966815967232,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46422192454338074
+      ],
+      "output_throttle_rail_fraction": 0.002242152466367713,
+      "maneuver_rate_rmse_rad_s": [
+        1.6863655102341546,
+        0.3214592182370964,
+        0.16100551173206337
+      ],
+      "maneuver_position_p95_m": 0.0138791157482374,
+      "maneuver_attitude_rmse_deg": 2.4747618887590863,
+      "maneuver_attitude_max_deg": 8.295919070150356,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.29107500000000003,
+        0.313476,
+        0.3417961000000001,
+        0.569321
+      ],
+      "solver_status_counts": {
+        "1": 1358
+      }
+    },
+    {
+      "name": "p1542",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.010120917433688517,
+      "main_max_m": 0.014335664572805594,
+      "maneuver_rmse_m": 0.008548109965837849,
+      "maneuver_max_m": 0.01630853109348663,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0006854523169380672,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49947297124054824,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        20.000000000095497
+      ],
+      "physics_wall_ratio": 0.9999962103909016,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46719974279403687
+      ],
+      "output_throttle_rail_fraction": 0.0012462612163509472,
+      "maneuver_rate_rmse_rad_s": [
+        2.3048370346744074,
+        0.29143769788214946,
+        0.168693433510607
+      ],
+      "maneuver_position_p95_m": 0.013088342200510658,
+      "maneuver_attitude_rmse_deg": 3.2263400552646186,
+      "maneuver_attitude_max_deg": 11.469842063595333,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.29717550000000004,
+        0.30892605,
+        0.32149128999999993,
+        0.503454
+      ],
+      "solver_status_counts": {
+        "1": 1020
+      }
+    },
+    {
+      "name": "p20_ff1644",
+      "seed": 44,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.01057825268859173,
+      "main_max_m": 0.01822777052077293,
+      "maneuver_rmse_m": 0.008266378173115483,
+      "maneuver_max_m": 0.01822777052077293,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0024352347763530006,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4995473980379774,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        12.500000000045475,
+        25.00000000009095
+      ],
+      "physics_wall_ratio": 0.9999913197902228,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4666789174079895
+      ],
+      "output_throttle_rail_fraction": 0.00199203187250996,
+      "maneuver_rate_rmse_rad_s": [
+        1.6181137016366798,
+        0.3177071228546179,
+        0.16862680102176472
+      ],
+      "maneuver_position_p95_m": 0.014573681719970762,
+      "maneuver_attitude_rmse_deg": 2.1997345525650607,
+      "maneuver_attitude_max_deg": 7.1765683188060025,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3286895,
+        0.55000645,
+        0.6042543400000004,
+        0.669676
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p30_d0642",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.00984645229928439,
+      "main_max_m": 0.01896416364967634,
+      "maneuver_rmse_m": 0.008295388963374959,
+      "maneuver_max_m": 0.01896416364967634,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0014347685224169386,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49849436905833944,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        12.500000000045475,
+        25.00000000009095
+      ],
+      "physics_wall_ratio": 0.9999969067226318,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46964508295059204
+      ],
+      "output_throttle_rail_fraction": 0.0012462612163509472,
+      "maneuver_rate_rmse_rad_s": [
+        0.8483045042840189,
+        0.16407986440718597,
+        0.15603695386062208
+      ],
+      "maneuver_position_p95_m": 0.013898118787403128,
+      "maneuver_attitude_rmse_deg": 2.4545248862018414,
+      "maneuver_attitude_max_deg": 10.259044507358833,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.31928049999999997,
+        0.35147799999999996,
+        0.5415939000000002,
+        0.5929449999999999
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_d06_vertical50",
+      "seed": 50,
+      "trajectory": "vertical_circle",
+      "main_window_s": [
+        4.35,
+        5.84561501592
+      ],
+      "main_rmse_m": 0.00809316426149585,
+      "main_max_m": 0.018773042472113897,
+      "maneuver_rmse_m": 0.008537585997690346,
+      "maneuver_max_m": 0.018773042472113897,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        null,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0008551094462386971,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4994630976653615,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        12.500000000045475,
+        17.500000000040927
+      ],
+      "physics_wall_ratio": 0.9999882036387762,
+      "output_throttle_min_max": [
+        -0.0,
+        0.45035937428474426
+      ],
+      "output_throttle_rail_fraction": 0.006263048016701462,
+      "maneuver_rate_rmse_rad_s": [
+        0.1682932048197544,
+        1.2149514563792716,
+        0.1376769310704419
+      ],
+      "maneuver_position_p95_m": 0.012792342716848116,
+      "maneuver_attitude_rmse_deg": 3.3151874695971877,
+      "maneuver_attitude_max_deg": 10.854882115347648,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.32863499999999995,
+        0.3607416,
+        0.5580452000000001,
+        0.595964
+      ],
+      "solver_status_counts": {
+        "1": 669
+      }
+    },
+    {
+      "name": "p20_ff16_slow47",
+      "seed": 47,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.009953511641694422,
+      "main_max_m": 0.020876499516580636,
+      "maneuver_rmse_m": 0.00817879043024713,
+      "maneuver_max_m": 0.020876499516580636,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0011212905829487702,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49934279426852735,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        7.500000000050022,
+        9.999999999990905,
+        10.000000000104592,
+        17.49999999992724
+      ],
+      "physics_wall_ratio": 0.7999975432204081,
+      "output_throttle_min_max": [
+        -0.0,
+        0.45482996106147766
+      ],
+      "output_throttle_rail_fraction": 0.004343105320304018,
+      "maneuver_rate_rmse_rad_s": [
+        1.4131296385173109,
+        0.3080398101593467,
+        0.15616259390975534
+      ],
+      "maneuver_position_p95_m": 0.014661416361389687,
+      "maneuver_attitude_rmse_deg": 2.423104059220525,
+      "maneuver_attitude_max_deg": 12.966376736328314,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.321833,
+        0.5102629999999999,
+        0.57380049,
+        0.605277
+      ],
+      "solver_status_counts": {
+        "1": 1274
+      }
+    },
+    {
+      "name": "p20_ff1345",
+      "seed": 45,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.011490303622138749,
+      "main_max_m": 0.019048526212898098,
+      "maneuver_rmse_m": 0.008675229202860056,
+      "maneuver_max_m": 0.019048526212898098,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0008856758250599351,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4991002682738492,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        12.500000000045475,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999964996733723,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46252429485321045
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        1.6450769355115604,
+        0.4017620409933019,
+        0.1604708690132167
+      ],
+      "maneuver_position_p95_m": 0.015614115266303309,
+      "maneuver_attitude_rmse_deg": 2.3799989375286246,
+      "maneuver_attitude_max_deg": 7.697480852466844,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.328782,
+        0.5532089499999999,
+        0.6317050200000003,
+        0.715924
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_d06_eight51",
+      "seed": 51,
+      "trajectory": "figure_eight",
+      "main_window_s": [
+        3.5,
+        19.5861989357
+      ],
+      "main_rmse_m": 0.009199201072049233,
+      "main_max_m": 0.017980595879394327,
+      "maneuver_rmse_m": 0.009199201072049233,
+      "maneuver_max_m": 0.017980595879394327,
+      "effective_lag_xyz_ms": [
+        -9.999999999999732,
+        -9.999999999999732,
+        null
+      ],
+      "final_hover_rmse_m": 0.0008899508938346016,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49937591283749744,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        25.00000000009095
+      ],
+      "physics_wall_ratio": 0.999991793513005,
+      "output_throttle_min_max": [
+        0.15758909285068512,
+        0.27519601583480835
+      ],
+      "output_throttle_rail_fraction": 0.0,
+      "maneuver_rate_rmse_rad_s": [
+        0.09576866620523458,
+        0.06638401874217292,
+        0.11763027366705398
+      ],
+      "maneuver_position_p95_m": 0.01424952763622284,
+      "maneuver_attitude_rmse_deg": 0.6133287303157412,
+      "maneuver_attitude_max_deg": 1.3498396870789569,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.32675600000000005,
+        0.5172579999999999,
+        0.5931446,
+        0.714548
+      ],
+      "solver_status_counts": {
+        "1": 1958
+      }
+    },
+    {
+      "name": "outer20042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.010711762707104,
+      "main_max_m": 0.014555547801588738,
+      "maneuver_rmse_m": 0.009369507609614115,
+      "maneuver_max_m": 0.01720694685672917,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0005645332505737317,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4997288876820249,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        8.750000000020464,
+        9.999999999990905,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999962645463953,
+      "output_throttle_min_max": [
+        -0.0,
+        0.45337244868278503
+      ],
+      "output_throttle_rail_fraction": 0.0005611672278338945,
+      "maneuver_rate_rmse_rad_s": [
+        2.2607589570538567,
+        0.17547889337253103,
+        0.19017091593265018
+      ],
+      "maneuver_position_p95_m": 0.014642938899190024,
+      "maneuver_attitude_rmse_deg": 3.0438001977332094,
+      "maneuver_attitude_max_deg": 11.378314929703688,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.2934105,
+        0.33209499999999986,
+        0.51813896,
+        0.59643
+      ],
+      "solver_status_counts": {
+        "1": 1358
+      }
+    },
+    {
+      "name": "p2042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.01088621545881566,
+      "main_max_m": 0.01973758492460154,
+      "maneuver_rmse_m": 0.008804024552096406,
+      "maneuver_max_m": 0.02038843992659362,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0008355083750341191,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49925203656061645,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        12.500000000045475,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999967100985684,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4651185870170593
+      ],
+      "output_throttle_rail_fraction": 0.001744765702891326,
+      "maneuver_rate_rmse_rad_s": [
+        2.0481608241715126,
+        0.2651683269266169,
+        0.1619219159524424
+      ],
+      "maneuver_position_p95_m": 0.014277114463824635,
+      "maneuver_attitude_rmse_deg": 3.129972328769157,
+      "maneuver_attitude_max_deg": 11.160094759699025,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.31589500000000004,
+        0.5462709,
+        0.5653075999999999,
+        0.650682
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p30_q15042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.011457869096773404,
+      "main_max_m": 0.015329463965331613,
+      "maneuver_rmse_m": 0.009561633590488094,
+      "maneuver_max_m": 0.020931297710747657,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0022908051679108622,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4969869279602572,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999965534315832,
+      "output_throttle_min_max": [
+        -0.0,
+        0.48649799823760986
+      ],
+      "output_throttle_rail_fraction": 0.000499001996007984,
+      "maneuver_rate_rmse_rad_s": [
+        2.0396959029741444,
+        0.7131115795781086,
+        0.15068972443666462
+      ],
+      "maneuver_position_p95_m": 0.015266877476244924,
+      "maneuver_attitude_rmse_deg": 2.8159089647946254,
+      "maneuver_attitude_max_deg": 8.844403634316484,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.299685,
+        0.31731989999999993,
+        0.38430121999999967,
+        0.5715629999999999
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "thrust_cost_low42",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.009660223022251795,
+      "main_max_m": 0.013357593909217,
+      "maneuver_rmse_m": 0.00967752168919155,
+      "maneuver_max_m": 0.02099698974127804,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0007779220319832255,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4998851326420287,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999966385907252,
+      "output_throttle_min_max": [
+        -0.0,
+        0.47034600377082825
+      ],
+      "output_throttle_rail_fraction": 0.0019940179461615153,
+      "maneuver_rate_rmse_rad_s": [
+        3.009788683960952,
+        0.249339686430383,
+        0.20255332055380154
+      ],
+      "maneuver_position_p95_m": 0.017728813872929076,
+      "maneuver_attitude_rmse_deg": 4.006938812806616,
+      "maneuver_attitude_max_deg": 14.586564395590296,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.298465,
+        0.32317850000000004,
+        0.3977632,
+        0.454278
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "d0342",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.007956154849610795,
+      "main_max_m": 0.02054282947781255,
+      "maneuver_rmse_m": 0.009440918521915094,
+      "maneuver_max_m": 0.02336752877765915,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0008461345594211799,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4998627557585952,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999965927351291,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4519088566303253
+      ],
+      "output_throttle_rail_fraction": 0.0007485029940119761,
+      "maneuver_rate_rmse_rad_s": [
+        2.247631858482945,
+        0.16981110080859443,
+        0.17218741576119292
+      ],
+      "maneuver_position_p95_m": 0.01891370262718786,
+      "maneuver_attitude_rmse_deg": 3.7922930875092296,
+      "maneuver_attitude_max_deg": 16.172924664585537,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.29700499999999996,
+        0.3175279,
+        0.41719419999999957,
+        0.54301
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "baseline_vertical50",
+      "seed": 50,
+      "trajectory": "vertical_circle",
+      "main_window_s": [
+        4.35,
+        5.84561501592
+      ],
+      "main_rmse_m": 0.009756086065527749,
+      "main_max_m": 0.014196482515321223,
+      "maneuver_rmse_m": 0.010630671731758775,
+      "maneuver_max_m": 0.017838118099192248,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        null,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0007615106233883207,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49982680180775785,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        20.000000000095497
+      ],
+      "physics_wall_ratio": 0.999995700574286,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4751628041267395
+      ],
+      "output_throttle_rail_fraction": 0.009916492693110648,
+      "maneuver_rate_rmse_rad_s": [
+        0.20263907157833858,
+        3.9651440070462534,
+        0.18423907056620656
+      ],
+      "maneuver_position_p95_m": 0.015051564799038339,
+      "maneuver_attitude_rmse_deg": 5.213827432996856,
+      "maneuver_attitude_max_deg": 14.215246189061505,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3210685,
+        0.3488705,
+        0.4174736699999993,
+        0.546411
+      ],
+      "solver_status_counts": {
+        "1": 670
+      }
+    },
+    {
+      "name": "d01542",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.009764379350169435,
+      "main_max_m": 0.01358068365364313,
+      "maneuver_rmse_m": 0.0100034389083785,
+      "maneuver_max_m": 0.021872618858288777,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0009857048548888156,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4997779967025797,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999968191620932,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46126845479011536
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        2.760087622007576,
+        0.22351081334134967,
+        0.20802265296138214
+      ],
+      "maneuver_position_p95_m": 0.017288385252246356,
+      "maneuver_attitude_rmse_deg": 3.8741746702326347,
+      "maneuver_attitude_max_deg": 14.933785491528567,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.299375,
+        0.3308339999999999,
+        0.43107339999999983,
+        0.573162
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "i242",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.010613567068416447,
+      "main_max_m": 0.015172889092987103,
+      "maneuver_rmse_m": 0.010296555681690632,
+      "maneuver_max_m": 0.02187277466929985,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0008792504378402806,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49977633303301217,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        19.99999999998181
+      ],
+      "physics_wall_ratio": 0.9999969385267119,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4640762507915497
+      ],
+      "output_throttle_rail_fraction": 0.0017430278884462151,
+      "maneuver_rate_rmse_rad_s": [
+        3.2952767710148554,
+        0.31651552365055735,
+        0.20314075555151792
+      ],
+      "maneuver_position_p95_m": 0.016656634060927253,
+      "maneuver_attitude_rmse_deg": 4.202277144783925,
+      "maneuver_attitude_max_deg": 14.575785134451126,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.299295,
+        0.35597,
+        0.4227632199999996,
+        0.5177689999999999
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "i042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.01091929903083517,
+      "main_max_m": 0.014596736450257445,
+      "maneuver_rmse_m": 0.010469494702072391,
+      "maneuver_max_m": 0.021646567137335163,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.000668456344050114,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4998643876322649,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        19.99999999998181
+      ],
+      "physics_wall_ratio": 0.9999963723101839,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4637099504470825
+      ],
+      "output_throttle_rail_fraction": 0.00149402390438247,
+      "maneuver_rate_rmse_rad_s": [
+        3.0651731696999485,
+        0.22487206545582733,
+        0.20104172492344272
+      ],
+      "maneuver_position_p95_m": 0.01701010558421702,
+      "maneuver_attitude_rmse_deg": 4.054495323123739,
+      "maneuver_attitude_max_deg": 14.857011860076273,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.313946,
+        0.34024899999999997,
+        0.5098538,
+        0.549779
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "baseline_slow47",
+      "seed": 47,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.011654462863973132,
+      "main_max_m": 0.022747466467008575,
+      "maneuver_rmse_m": 0.010793903239818476,
+      "maneuver_max_m": 0.022747466467008575,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        -2.4999999999997247,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0005002350401620097,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4998808022540574,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        7.500000000050022,
+        9.999999999990905,
+        10.000000000104592,
+        14.999999999986358
+      ],
+      "physics_wall_ratio": 0.799992294022866,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4604910612106323
+      ],
+      "output_throttle_rail_fraction": 0.0013572204125950054,
+      "maneuver_rate_rmse_rad_s": [
+        3.0391303059483,
+        0.2389951541697798,
+        0.18235997048993693
+      ],
+      "maneuver_position_p95_m": 0.017981387508630497,
+      "maneuver_attitude_rmse_deg": 4.085552047379354,
+      "maneuver_attitude_max_deg": 14.537498181460775,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3179645,
+        0.5440735,
+        0.5814270099999999,
+        0.723941
+      ],
+      "solver_status_counts": {
+        "1": 1272
+      }
+    },
+    {
+      "name": "baseline43",
+      "seed": 43,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.011425665616460384,
+      "main_max_m": 0.023008346465175487,
+      "maneuver_rmse_m": 0.010808289184522542,
+      "maneuver_max_m": 0.023008346465175487,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0008576286673466243,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4998681761049989,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        12.500000000045475,
+        25.00000000009095
+      ],
+      "physics_wall_ratio": 0.999990048655811,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4684799909591675
+      ],
+      "output_throttle_rail_fraction": 0.000499001996007984,
+      "maneuver_rate_rmse_rad_s": [
+        3.14618278070898,
+        0.21000964437602246,
+        0.18514303989257663
+      ],
+      "maneuver_position_p95_m": 0.017647715063742287,
+      "maneuver_attitude_rmse_deg": 4.119744833858324,
+      "maneuver_attitude_max_deg": 14.734805739459757,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.317065,
+        0.34775929999999994,
+        0.45133133999999936,
+        0.766692
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "baseline42",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.01144656859720973,
+      "main_max_m": 0.017211325002470666,
+      "maneuver_rmse_m": 0.011075148065902131,
+      "maneuver_max_m": 0.023391803482855692,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.000748616658821878,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49977101122117346,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999966707440755,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46963778138160706
+      ],
+      "output_throttle_rail_fraction": 0.0022410358565737054,
+      "maneuver_rate_rmse_rad_s": [
+        3.3289962221333296,
+        0.267539706587203,
+        0.21004242420760733
+      ],
+      "maneuver_position_p95_m": 0.018369753927033734,
+      "maneuver_attitude_rmse_deg": 4.289754311422353,
+      "maneuver_attitude_max_deg": 15.255240877099151,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.300595,
+        0.332185,
+        0.5134442199999998,
+        0.555519
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_ff1652",
+      "seed": 52,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.014240205966715186,
+      "main_max_m": 0.02668774092269224,
+      "maneuver_rmse_m": 0.010737141783374787,
+      "maneuver_max_m": 0.02668774092269224,
+      "effective_lag_xyz_ms": [
+        -4.999999999999726,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0010727635444831368,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4992591567664976,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.499999999931788,
+        12.500000000045475,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999963247532933,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4686889350414276
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        1.5267781388979493,
+        0.1968570339806396,
+        0.1735607045947368
+      ],
+      "maneuver_position_p95_m": 0.016973844780479364,
+      "maneuver_attitude_rmse_deg": 2.3903970214776122,
+      "maneuver_attitude_max_deg": 7.757860257924728,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.328777,
+        0.5579653,
+        0.62427234,
+        0.724852
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "rate_cost_low42",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.013992632518549887,
+      "main_max_m": 0.02574540151585662,
+      "maneuver_rmse_m": 0.01098390939990706,
+      "maneuver_max_m": 0.02574540151585662,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0006061934708097246,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4996619050120152,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999959765636988,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4761524200439453
+      ],
+      "output_throttle_rail_fraction": 0.005239520958083832,
+      "maneuver_rate_rmse_rad_s": [
+        7.284500817226567,
+        0.6111947114690198,
+        0.3145786352125619
+      ],
+      "maneuver_position_p95_m": 0.02082941879304369,
+      "maneuver_attitude_rmse_deg": 6.724791854405444,
+      "maneuver_attitude_max_deg": 17.590398162953473,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.300115,
+        0.32392599999999994,
+        0.53925038,
+        0.57111
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p30_ff1342",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.015159864955761099,
+      "main_max_m": 0.024443558154896006,
+      "maneuver_rmse_m": 0.011469162690391745,
+      "maneuver_max_m": 0.024443558154896006,
+      "effective_lag_xyz_ms": [
+        -4.999999999999726,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0014896625403159574,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49854754849111454,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999959316585144,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4909258782863617
+      ],
+      "output_throttle_rail_fraction": 0.00448654037886341,
+      "maneuver_rate_rmse_rad_s": [
+        2.627961059119869,
+        0.5332630222523753,
+        0.16712300406707795
+      ],
+      "maneuver_position_p95_m": 0.020230309955566867,
+      "maneuver_attitude_rmse_deg": 3.261935822062695,
+      "maneuver_attitude_max_deg": 9.844012484967697,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.314947,
+        0.5156775,
+        0.5523974399999999,
+        0.620896
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p30_outer20042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.01571871782476581,
+      "main_max_m": 0.0229903261720713,
+      "maneuver_rmse_m": 0.011801936151852164,
+      "maneuver_max_m": 0.0229903261720713,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0014833375020406935,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4979794663012923,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        8.750000000020464,
+        9.999999999990905,
+        10.000000000104592,
+        14.999999999986358
+      ],
+      "physics_wall_ratio": 0.9999944126839081,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4791834354400635
+      ],
+      "output_throttle_rail_fraction": 0.0011198208286674132,
+      "maneuver_rate_rmse_rad_s": [
+        1.2834159323175611,
+        0.20064680619145359,
+        0.12931934280724036
+      ],
+      "maneuver_position_p95_m": 0.02107245681472122,
+      "maneuver_attitude_rmse_deg": 2.17074646243594,
+      "maneuver_attitude_max_deg": 6.631401377968639,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.323934,
+        0.557859,
+        0.5799821600000001,
+        0.6532089999999999
+      ],
+      "solver_status_counts": {
+        "1": 1357
+      }
+    },
+    {
+      "name": "p30_q60042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.009192223530437525,
+      "main_max_m": 0.015336881427511497,
+      "maneuver_rmse_m": 0.01038376424647103,
+      "maneuver_max_m": 0.030150897596673318,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        2.7755575615628914e-13,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0011555441508184453,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4985817252835264,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999888178783214,
+      "output_throttle_min_max": [
+        -0.0,
+        0.5543729662895203
+      ],
+      "output_throttle_rail_fraction": 0.01122754491017964,
+      "maneuver_rate_rmse_rad_s": [
+        4.468733967926772,
+        1.9137010449182985,
+        0.2617108495309227
+      ],
+      "maneuver_position_p95_m": 0.020333546239525182,
+      "maneuver_attitude_rmse_deg": 6.248992051286961,
+      "maneuver_attitude_max_deg": 25.93901989111677,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.29479099999999997,
+        0.315184,
+        0.35024863999999994,
+        0.563531
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "baseline52",
+      "seed": 52,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.012258067927092053,
+      "main_max_m": 0.024031022216963894,
+      "maneuver_rmse_m": 0.011345901307465999,
+      "maneuver_max_m": 0.027055010799577978,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0005302961533485803,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49978467776850566,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000017053,
+        12.500000000045475,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999905409568856,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4818078279495239
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        4.076598707484879,
+        0.2577364508596839,
+        0.2078087501142487
+      ],
+      "maneuver_position_p95_m": 0.019011060579231624,
+      "maneuver_attitude_rmse_deg": 5.02958894051537,
+      "maneuver_attitude_max_deg": 14.972716308964142,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3231,
+        0.5335768,
+        0.5764095600000004,
+        0.7146560000000001
+      ],
+      "solver_status_counts": {
+        "1": 1017
+      }
+    },
+    {
+      "name": "p20_d0643",
+      "seed": 43,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.013278974908962205,
+      "main_max_m": 0.029264134668223248,
+      "maneuver_rmse_m": 0.011116578632710553,
+      "maneuver_max_m": 0.029264134668223248,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0008448738703173398,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4991848459652273,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        25.00000000009095
+      ],
+      "physics_wall_ratio": 0.999996522526942,
+      "output_throttle_min_max": [
+        -0.0,
+        0.44983842968940735
+      ],
+      "output_throttle_rail_fraction": 0.0004985044865403788,
+      "maneuver_rate_rmse_rad_s": [
+        1.11479888853273,
+        0.17533876117333708,
+        0.16484623876358315
+      ],
+      "maneuver_position_p95_m": 0.018797493845882276,
+      "maneuver_attitude_rmse_deg": 3.1182456067349804,
+      "maneuver_attitude_max_deg": 12.816300477186962,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.322363,
+        0.55273895,
+        0.60382003,
+        0.65478
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_d0344",
+      "seed": 44,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.016344466393031904,
+      "main_max_m": 0.02619348505719492,
+      "maneuver_rmse_m": 0.01221402213660296,
+      "maneuver_max_m": 0.02619348505719492,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0009919598510635269,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4995294925882755,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        12.500000000045475,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999953752944584,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46011412143707275
+      ],
+      "output_throttle_rail_fraction": 0.001996007984031936,
+      "maneuver_rate_rmse_rad_s": [
+        1.3848448926261294,
+        0.25132038598280937,
+        0.15582561318689
+      ],
+      "maneuver_position_p95_m": 0.021334892773906634,
+      "maneuver_attitude_rmse_deg": 2.9529023935202052,
+      "maneuver_attitude_max_deg": 11.680101154605895,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.331335,
+        0.55056465,
+        0.6008376200000001,
+        0.677891
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_d01542",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.016555784087727694,
+      "main_max_m": 0.02404378605972757,
+      "maneuver_rmse_m": 0.01268912149364249,
+      "maneuver_max_m": 0.02404378605972757,
+      "effective_lag_xyz_ms": [
+        -4.999999999999726,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0008750184382920909,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49914334373492325,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999960120177671,
+      "output_throttle_min_max": [
+        -0.0,
+        0.45878949761390686
+      ],
+      "output_throttle_rail_fraction": 0.0014955134596211367,
+      "maneuver_rate_rmse_rad_s": [
+        1.8357609462040116,
+        0.33078827322035775,
+        0.17014896443108135
+      ],
+      "maneuver_position_p95_m": 0.018932391710836972,
+      "maneuver_attitude_rmse_deg": 3.1030579821814097,
+      "maneuver_attitude_max_deg": 10.791725434805832,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.308075,
+        0.508606,
+        0.5612331999999999,
+        0.766078
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "d042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.01792280272615704,
+      "main_max_m": 0.030308547634377063,
+      "maneuver_rmse_m": 0.015204224473406688,
+      "maneuver_max_m": 0.03250713679472,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0005382933064439651,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4998582536848976,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999960761744872,
+      "output_throttle_min_max": [
+        -0.0,
+        0.47532179951667786
+      ],
+      "output_throttle_rail_fraction": 0.0019940179461615153,
+      "maneuver_rate_rmse_rad_s": [
+        4.093401528875097,
+        0.22805920578102548,
+        0.1774838275219351
+      ],
+      "maneuver_position_p95_m": 0.022976205075392525,
+      "maneuver_attitude_rmse_deg": 5.254935408521684,
+      "maneuver_attitude_max_deg": 16.336266486768903,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.2989155,
+        0.504306,
+        0.54494188,
+        0.629771
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "baseline_wind49",
+      "seed": 49,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.01774978423053495,
+      "main_max_m": 0.03162066978551637,
+      "maneuver_rmse_m": 0.015594693784975437,
+      "maneuver_max_m": 0.03162066978551637,
+      "effective_lag_xyz_ms": [
+        -4.999999999999726,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.006241740008865142,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4992410852516634,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999960820759801,
+      "output_throttle_min_max": [
+        -0.0,
+        0.47573378682136536
+      ],
+      "output_throttle_rail_fraction": 0.0024925224327018943,
+      "maneuver_rate_rmse_rad_s": [
+        3.6308128485875724,
+        0.21556487571885186,
+        0.2099607687452455
+      ],
+      "maneuver_position_p95_m": 0.025554932795124555,
+      "maneuver_attitude_rmse_deg": 4.846523749784974,
+      "maneuver_attitude_max_deg": 15.777999303147263,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.3314635,
+        0.5668772,
+        0.6120254800000001,
+        0.773104
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p20_d0343",
+      "seed": 43,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.018372823166348036,
+      "main_max_m": 0.041168579722102354,
+      "maneuver_rmse_m": 0.015809114193695916,
+      "maneuver_max_m": 0.04223428319338031,
+      "effective_lag_xyz_ms": [
+        -2.4999999999997247,
+        -2.4999999999997247,
+        -2.4999999999997247
+      ],
+      "final_hover_rmse_m": 0.0008052271779523624,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49925686547683434,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.499999999931788,
+        12.500000000045475,
+        17.500000000040927
+      ],
+      "physics_wall_ratio": 0.9999910577621286,
+      "output_throttle_min_max": [
+        -0.0,
+        0.4610856771469116
+      ],
+      "output_throttle_rail_fraction": 0.000747011952191235,
+      "maneuver_rate_rmse_rad_s": [
+        1.9615066730391757,
+        0.37628017967639427,
+        0.17021854907681405
+      ],
+      "maneuver_position_p95_m": 0.032762054608149786,
+      "maneuver_attitude_rmse_deg": 4.003532866646423,
+      "maneuver_attitude_max_deg": 16.555737140417502,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.323115,
+        0.5379769,
+        0.5828225799999994,
+        0.734263
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_ff16_noise46",
+      "seed": 46,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.032737749683992304,
+      "main_max_m": 0.03890380737417384,
+      "maneuver_rmse_m": 0.024429430011499744,
+      "maneuver_max_m": 0.03890380737417384,
+      "effective_lag_xyz_ms": [
+        -7.499999999999729,
+        -7.499999999999729,
+        -7.499999999999729
+      ],
+      "final_hover_rmse_m": 0.0028430144916016284,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4955565007257699,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.999988431088155,
+      "output_throttle_min_max": [
+        -0.0,
+        0.5074337720870972
+      ],
+      "output_throttle_rail_fraction": 0.0032402791625124627,
+      "maneuver_rate_rmse_rad_s": [
+        1.9938820059888245,
+        1.4069421451653663,
+        0.36189608633407416
+      ],
+      "maneuver_position_p95_m": 0.037514692617619264,
+      "maneuver_attitude_rmse_deg": 4.058907267604283,
+      "maneuver_attitude_max_deg": 10.279882389508366,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.317892,
+        0.3539728999999999,
+        0.37495201999999994,
+        0.558178
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_d06_wind49",
+      "seed": 49,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.03237804973093864,
+      "main_max_m": 0.04912375113000822,
+      "maneuver_rmse_m": 0.025384106000021816,
+      "maneuver_max_m": 0.04912375113000822,
+      "effective_lag_xyz_ms": [
+        -12.499999999999734,
+        -7.499999999999729,
+        -7.499999999999729
+      ],
+      "final_hover_rmse_m": 0.005694849371377273,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49866049979463634,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        12.499999999931788,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999938617703935,
+      "output_throttle_min_max": [
+        -0.0,
+        0.46050912141799927
+      ],
+      "output_throttle_rail_fraction": 0.0019940179461615153,
+      "maneuver_rate_rmse_rad_s": [
+        1.5434752650604877,
+        0.23933485595639184,
+        0.16409361940434358
+      ],
+      "maneuver_position_p95_m": 0.04244112217951375,
+      "maneuver_attitude_rmse_deg": 4.571499008515116,
+      "maneuver_attitude_max_deg": 17.77720162240484,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.32994100000000004,
+        0.35370165,
+        0.4102799400000004,
+        0.666697
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p30_d0345",
+      "seed": 45,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.037099264377611636,
+      "main_max_m": 0.052723641762177226,
+      "maneuver_rmse_m": 0.02781477640542302,
+      "maneuver_max_m": 0.052723641762177226,
+      "effective_lag_xyz_ms": [
+        -9.999999999999732,
+        -7.499999999999729,
+        -7.499999999999729
+      ],
+      "final_hover_rmse_m": 0.0015884297660332272,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4986056919187068,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        12.500000000045475,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999966662440908,
+      "output_throttle_min_max": [
+        -0.0,
+        0.47268146276474
+      ],
+      "output_throttle_rail_fraction": 0.0029910269192422734,
+      "maneuver_rate_rmse_rad_s": [
+        1.5922808986580224,
+        0.25604822823368784,
+        0.1430346638941541
+      ],
+      "maneuver_position_p95_m": 0.04254680190414072,
+      "maneuver_attitude_rmse_deg": 4.162595499252836,
+      "maneuver_attitude_max_deg": 14.413501208566684,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.318802,
+        0.3755074999999998,
+        0.5438959999999998,
+        0.602209
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_ff13_noise46",
+      "seed": 46,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.028264333357855113,
+      "main_max_m": 0.05789016084579101,
+      "maneuver_rmse_m": 0.029329188220826807,
+      "maneuver_max_m": 0.07255389295477108,
+      "effective_lag_xyz_ms": [
+        -4.999999999999726,
+        -4.999999999999726,
+        -4.999999999999726
+      ],
+      "final_hover_rmse_m": 0.028426194428211867,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4971019375769203,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.499999999931788,
+        12.500000000045475,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999910209593046,
+      "output_throttle_min_max": [
+        -0.0,
+        0.5652561187744141
+      ],
+      "output_throttle_rail_fraction": 0.024153386454183266,
+      "maneuver_rate_rmse_rad_s": [
+        4.942093635472718,
+        3.6156227475134877,
+        0.3953654354609974
+      ],
+      "maneuver_position_p95_m": 0.05788916658130239,
+      "maneuver_attitude_rmse_deg": 9.262991764699153,
+      "maneuver_attitude_max_deg": 37.965402892407575,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.324476,
+        0.5127086,
+        0.5996028399999996,
+        0.6613559999999999
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "baseline_stall48",
+      "seed": 48,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.04392003038382706,
+      "main_max_m": 0.09294773574645056,
+      "maneuver_rmse_m": 0.032921903695105205,
+      "maneuver_max_m": 0.09294773574645056,
+      "effective_lag_xyz_ms": [
+        -12.499999999999734,
+        -7.499999999999729,
+        -4.999999999999726
+      ],
+      "final_hover_rmse_m": 0.0008374737021402556,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4997915520590401,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        12.500000000045475,
+        19.99999999998181,
+        19.99999999998181
+      ],
+      "physics_wall_ratio": 0.9999887347696311,
+      "output_throttle_min_max": [
+        -0.0,
+        0.524467408657074
+      ],
+      "output_throttle_rail_fraction": 0.005040322580645161,
+      "maneuver_rate_rmse_rad_s": [
+        6.737890151889461,
+        1.9734243616809655,
+        0.3026970344428822
+      ],
+      "maneuver_position_p95_m": 0.05378953867248035,
+      "maneuver_attitude_rmse_deg": 10.098507376226701,
+      "maneuver_attitude_max_deg": 29.399032408752596,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.32196749999999996,
+        0.5270194499999995,
+        0.59929763,
+        0.842906
+      ],
+      "solver_status_counts": {
+        "1": 978
+      }
+    },
+    {
+      "name": "p30_fine42",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.05655327701534259,
+      "main_max_m": 0.13864787552304472,
+      "maneuver_rmse_m": 0.048038334574600876,
+      "maneuver_max_m": 0.13864787552304472,
+      "effective_lag_xyz_ms": [
+        2.7755575615628914e-13,
+        7.500000000000284,
+        5.000000000000282
+      ],
+      "final_hover_rmse_m": 0.09834257828057237,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4983764835330014,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        19.99999999998181
+      ],
+      "physics_wall_ratio": 0.9999928255553852,
+      "output_throttle_min_max": [
+        -0.0,
+        0.6833251118659973
+      ],
+      "output_throttle_rail_fraction": 0.01693227091633466,
+      "maneuver_rate_rmse_rad_s": [
+        9.257846883565312,
+        3.3407129261980804,
+        0.4444089821413296
+      ],
+      "maneuver_position_p95_m": 0.11560276716917985,
+      "maneuver_attitude_rmse_deg": 15.280644121322657,
+      "maneuver_attitude_max_deg": 55.92225946267482,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.676408,
+        0.7678897,
+        0.8802024499999995,
+        1.0767280000000001
+      ],
+      "solver_status_counts": {
+        "1": 1020
+      }
+    },
+    {
+      "name": "baseline_noise46",
+      "seed": 46,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.05505478414447811,
+      "main_max_m": 0.08514908222977959,
+      "maneuver_rmse_m": 0.05769925179084112,
+      "maneuver_max_m": 0.1394650397477199,
+      "effective_lag_xyz_ms": [
+        -29.999999999999748,
+        7.500000000000284,
+        7.500000000000284
+      ],
+      "final_hover_rmse_m": 0.0013994756103158541,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.49926655629723754,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999937772113309,
+      "output_throttle_min_max": [
+        -0.0,
+        0.5486235022544861
+      ],
+      "output_throttle_rail_fraction": 0.02141434262948207,
+      "maneuver_rate_rmse_rad_s": [
+        8.517437308388297,
+        7.152847357064764,
+        1.1971120602626821
+      ],
+      "maneuver_position_p95_m": 0.11478884716302183,
+      "maneuver_attitude_rmse_deg": 19.548285206547206,
+      "maneuver_attitude_max_deg": 52.700257749392385,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.316257,
+        0.4715500999999993,
+        0.5491465599999998,
+        0.629045
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p20_oldtau42",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.06832954491371643,
+      "main_max_m": 0.12707696976130362,
+      "maneuver_rmse_m": 0.06274860613724714,
+      "maneuver_max_m": 0.12719172041174517,
+      "effective_lag_xyz_ms": [
+        -12.499999999999734,
+        7.500000000000284,
+        7.500000000000284
+      ],
+      "final_hover_rmse_m": 0.020554548656583366,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.499145098671438,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        12.500000000045475,
+        30.000000000086402
+      ],
+      "physics_wall_ratio": 0.9999959755624098,
+      "output_throttle_min_max": [
+        -0.0,
+        0.7557597756385803
+      ],
+      "output_throttle_rail_fraction": 0.04740518962075848,
+      "maneuver_rate_rmse_rad_s": [
+        9.385034570353852,
+        13.239321605430094,
+        1.8739728540802318
+      ],
+      "maneuver_position_p95_m": 0.1154757645614663,
+      "maneuver_attitude_rmse_deg": 20.252751657313752,
+      "maneuver_attitude_max_deg": 44.10070190804097,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.307851,
+        0.51409635,
+        0.5455613700000002,
+        0.695703
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "baseline44",
+      "seed": 44,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.06128442901233292,
+      "main_max_m": 0.12752717916764517,
+      "maneuver_rmse_m": 0.07169479586962921,
+      "maneuver_max_m": 0.19394138772969946,
+      "effective_lag_xyz_ms": [
+        -52.49999999999977,
+        -2.4999999999997247,
+        2.7755575615628914e-13
+      ],
+      "final_hover_rmse_m": 0.0012254199787005268,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4998100072499902,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        25.00000000009095
+      ],
+      "physics_wall_ratio": 0.9999923804563773,
+      "output_throttle_min_max": [
+        -0.0,
+        0.5784310698509216
+      ],
+      "output_throttle_rail_fraction": 0.018177290836653388,
+      "maneuver_rate_rmse_rad_s": [
+        9.013493074902001,
+        7.879801088505977,
+        1.9108324378795016
+      ],
+      "maneuver_position_p95_m": 0.1413479724206648,
+      "maneuver_attitude_rmse_deg": 20.70557073287728,
+      "maneuver_attitude_max_deg": 51.393982606361334,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.31417,
+        0.4431812999999991,
+        0.5569060999999995,
+        0.669327
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p30_tau_slow42",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.15520684612155997,
+      "main_max_m": 0.3532071876921765,
+      "maneuver_rmse_m": 0.11335497964470935,
+      "maneuver_max_m": 0.3532071876921765,
+      "effective_lag_xyz_ms": [
+        -14.999999999999735,
+        17.50000000000029,
+        5.000000000000282
+      ],
+      "final_hover_rmse_m": 0.15594909698276493,
+      "remained_airborne": true,
+      "minimum_altitude_m": 0.4979488610067947,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        20.000000000095497
+      ],
+      "physics_wall_ratio": 0.9999957883912834,
+      "output_throttle_min_max": [
+        -0.0,
+        0.7785094380378723
+      ],
+      "output_throttle_rail_fraction": 0.043369890329012964,
+      "maneuver_rate_rmse_rad_s": [
+        10.515392438051968,
+        8.013767121862395,
+        1.359151386105343
+      ],
+      "maneuver_position_p95_m": 0.3101634639440526,
+      "maneuver_attitude_rmse_deg": 28.13981531099324,
+      "maneuver_attitude_max_deg": 94.81476743427335,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.306722,
+        0.5131789999999999,
+        0.5630570999999999,
+        0.699802
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p30_i042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.22060563483128962,
+      "main_max_m": 0.5455148982489592,
+      "maneuver_rmse_m": 1.1111500910431191,
+      "maneuver_max_m": 3.5196041662327398,
+      "effective_lag_xyz_ms": [
+        null,
+        null,
+        null
+      ],
+      "final_hover_rmse_m": 3.4985676268591823,
+      "remained_airborne": false,
+      "minimum_altitude_m": 0.0054609519541166844,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        32.500000000027285
+      ],
+      "physics_wall_ratio": 0.9999899890987524,
+      "output_throttle_min_max": [
+        -0.0,
+        1.0
+      ],
+      "output_throttle_rail_fraction": 0.047856430707876374,
+      "maneuver_rate_rmse_rad_s": [
+        11.494958882703132,
+        8.901393107646847,
+        3.270514161269088
+      ],
+      "maneuver_position_p95_m": 3.50654274381849,
+      "maneuver_attitude_rmse_deg": 69.48586338291436,
+      "maneuver_attitude_max_deg": 179.9838020857951,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.325126,
+        0.40419665,
+        0.5183996800000003,
+        0.730121
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "baseline45",
+      "seed": 45,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 0.8988872149072585,
+      "main_max_m": 1.861550062440042,
+      "maneuver_rmse_m": 1.372679670394721,
+      "maneuver_max_m": 2.52448079687742,
+      "effective_lag_xyz_ms": [
+        null,
+        null,
+        null
+      ],
+      "final_hover_rmse_m": 2.5244815498092286,
+      "remained_airborne": false,
+      "minimum_altitude_m": 0.011707513880977025,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.850000000045918,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999934095697897,
+      "output_throttle_min_max": [
+        -0.0,
+        1.0
+      ],
+      "output_throttle_rail_fraction": 0.04307768924302789,
+      "maneuver_rate_rmse_rad_s": [
+        13.439032820763533,
+        11.470372770854997,
+        6.614542191324214
+      ],
+      "maneuver_position_p95_m": 2.5216032999097404,
+      "maneuver_attitude_rmse_deg": 107.66509921529749,
+      "maneuver_attitude_max_deg": 179.98808893954418,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.338229,
+        0.5653153,
+        0.6813101600000001,
+        0.829617
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    },
+    {
+      "name": "p30_d0344",
+      "seed": 44,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 2.2951332514545393,
+      "main_max_m": 3.060258758673125,
+      "maneuver_rmse_m": 2.206658561884039,
+      "maneuver_max_m": 3.1769432980977936,
+      "effective_lag_xyz_ms": [
+        null,
+        null,
+        null
+      ],
+      "final_hover_rmse_m": 3.1768673280782043,
+      "remained_airborne": false,
+      "minimum_altitude_m": 0.01823819854830799,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        12.500000000045475,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999922280389177,
+      "output_throttle_min_max": [
+        -0.0,
+        1.0
+      ],
+      "output_throttle_rail_fraction": 0.15029910269192423,
+      "maneuver_rate_rmse_rad_s": [
+        14.9644707396658,
+        12.55434677230533,
+        9.627957909146518
+      ],
+      "maneuver_position_p95_m": 3.1753525627572428,
+      "maneuver_attitude_rmse_deg": 140.8182991990036,
+      "maneuver_attitude_max_deg": 179.99471541390753,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.343772,
+        0.5461813999999999,
+        0.6681458999999998,
+        0.834255
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p6042",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 3.0560580965680737,
+      "main_max_m": 5.793719591489475,
+      "maneuver_rmse_m": 2.6409240715374205,
+      "maneuver_max_m": 5.793719591489475,
+      "effective_lag_xyz_ms": [
+        null,
+        null,
+        null
+      ],
+      "final_hover_rmse_m": 3.8306864326680863,
+      "remained_airborne": false,
+      "minimum_altitude_m": -0.031119108076800676,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        24.999999999977263
+      ],
+      "physics_wall_ratio": 0.9999961687850026,
+      "output_throttle_min_max": [
+        -0.0,
+        1.0
+      ],
+      "output_throttle_rail_fraction": 0.2260717846460618,
+      "maneuver_rate_rmse_rad_s": [
+        13.008443063165322,
+        11.124173099569415,
+        5.942581815818552
+      ],
+      "maneuver_position_p95_m": 5.386431711920703,
+      "maneuver_attitude_rmse_deg": 104.53124430034104,
+      "maneuver_attitude_max_deg": 179.99653257956422,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.312926,
+        0.4437689999999995,
+        0.5044927999999999,
+        0.691102
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p30_rate_low42",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 4.11687522927553,
+      "main_max_m": 11.737914660569263,
+      "maneuver_rmse_m": 10.03100240716088,
+      "maneuver_max_m": 20.727350953194417,
+      "effective_lag_xyz_ms": [
+        null,
+        null,
+        null
+      ],
+      "final_hover_rmse_m": 20.785120112760758,
+      "remained_airborne": false,
+      "minimum_altitude_m": 0.027835346568406107,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        22.50000000003638
+      ],
+      "physics_wall_ratio": 0.9999964662713313,
+      "output_throttle_min_max": [
+        -0.0,
+        1.0
+      ],
+      "output_throttle_rail_fraction": 0.15288844621513945,
+      "maneuver_rate_rmse_rad_s": [
+        13.766007234073495,
+        12.420456141876446,
+        10.103987254051098
+      ],
+      "maneuver_position_p95_m": 20.70932632433792,
+      "maneuver_attitude_rmse_deg": 102.09380307513963,
+      "maneuver_attitude_max_deg": 179.99302160523803,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.329316,
+        0.4828403999999998,
+        0.56193206,
+        0.746193
+      ],
+      "solver_status_counts": {
+        "1": 1019
+      }
+    },
+    {
+      "name": "p4542",
+      "seed": 42,
+      "trajectory": "helix",
+      "main_window_s": [
+        5.35,
+        8.34123003184
+      ],
+      "main_rmse_m": 15.784727202404778,
+      "main_max_m": 24.170812113871246,
+      "maneuver_rmse_m": 16.466542421397534,
+      "maneuver_max_m": 24.174994078641287,
+      "effective_lag_xyz_ms": [
+        null,
+        null,
+        null
+      ],
+      "final_hover_rmse_m": 24.175551541833286,
+      "remained_airborne": false,
+      "minimum_altitude_m": -0.126207086849798,
+      "finite": true,
+      "outer_interval_ms_percentiles": [
+        9.999999999990905,
+        10.000000000104592,
+        10.000000000104592,
+        27.500000000031832
+      ],
+      "physics_wall_ratio": 0.9999962139405306,
+      "output_throttle_min_max": [
+        -0.0,
+        1.0
+      ],
+      "output_throttle_rail_fraction": 0.2430209371884347,
+      "maneuver_rate_rmse_rad_s": [
+        11.854985861442582,
+        10.713651375001628,
+        7.024915557799783
+      ],
+      "maneuver_position_p95_m": 24.170467508406535,
+      "maneuver_attitude_rmse_deg": 123.18741359361134,
+      "maneuver_attitude_max_deg": 179.99882767118575,
+      "solver_fallback_fraction": 0.0,
+      "solver_time_ms_percentiles": [
+        0.31031,
+        0.510559,
+        0.58513663,
+        0.7258129999999999
+      ],
+      "solver_status_counts": {
+        "1": 1018
+      }
+    }
+  ],
+  "document_validation": {
+    "latexmk_xelatex_succeeded": true,
+    "pdf_pages": 20,
+    "overfull_boxes": 0,
+    "missing_characters": 0,
+    "rendered_pages_inspected": [
+      5,
+      16
+    ],
+    "all_33_parameter_sets_and_75_metrics_present": true,
+    "all_audited_source_hashes_rechecked": true
+  },
+  "document_sha256": {
+    "0913/ommpc_tuning_and_realflight_audit_20260930.tex": "8962e8fd23f7a7b38fad75eb8455ea562db79838921c29ec29d4756f82096275",
+    "0913/ommpc_tuning_and_realflight_audit_20260930.pdf": "d133e636c79cfe3b73fba98f266bfa596481f8ab35e0781c7b42363eeef732fa"
+  }
+}

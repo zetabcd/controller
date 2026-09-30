@@ -156,6 +156,12 @@ public:
 		param.gain.gain_rate_d_x = parameter_client->get_parameters({"gain.gain_rate_d_x"}).front().as_double();
 		param.gain.gain_rate_d_y = parameter_client->get_parameters({"gain.gain_rate_d_y"}).front().as_double();
 		param.gain.gain_rate_d_z = parameter_client->get_parameters({"gain.gain_rate_d_z"}).front().as_double();
+        const auto ff = parameter_client->get_parameters(
+            {"gain.gain_rate_ff_x", "gain.gain_rate_ff_y", "gain.gain_rate_ff_z"});
+        for (size_t axis = 0; axis < 3; ++axis) angular_ff_gain_[axis] = ff[axis].as_double();
+        if (!angular_ff_gain_.allFinite() || (angular_ff_gain_.array() < 0).any()) {
+            throw std::invalid_argument("angular acceleration feedforward gains must be finite and nonnegative");
+        }
 
 		param.gra = parameter_client->get_parameters({"gra"}).front().as_double();
 		param.uav.mass = parameter_client->get_parameters({"uav.mass"}).front().as_double();
@@ -351,7 +357,8 @@ public:
 		copyVector(debug_msg_.i_term, ome_int_);
 		copyVector(debug_msg_.saturation_positive_used, saturation_positive_);
 		copyVector(debug_msg_.saturation_negative_used, saturation_negative_);
-		Eigen::Vector3d ome_dot_des = gain_rate_p * rate_err + ome_int_ + gain_rate_d * (Eigen::Vector3d::Zero() - rate_dot_cur) + desired_data_.rate_dot_ref;
+        const Eigen::Vector3d angular_ff = angular_ff_gain_.cwiseProduct(desired_data_.rate_dot_ref);
+		Eigen::Vector3d ome_dot_des = gain_rate_p * rate_err + ome_int_ + gain_rate_d * (Eigen::Vector3d::Zero() - rate_dot_cur) + angular_ff;
 		Eigen::Vector3d tau_des = Jv * ome_dot_des + rate_cur.cross(Jv * rate_cur);
 		for (size_t i = 0; i < 3; i++) {
 			// sun: 已饱和方向禁止误差继续推高积分量，并在大角速度误差时平滑衰减积分增益。
@@ -479,7 +486,8 @@ public:
 		copyVector(debug_msg_.rate_cur_lpf, rate_cur_lpf);
 		copyVector(debug_msg_.rate_des, desired_data_.rate_des);
 		copyVector(debug_msg_.rate_err_integrator, rate_err);
-		copyVector(debug_msg_.rate_dot_ref, desired_data_.rate_dot_ref);
+        // Report the applied feedforward term so P + I + D + FF remains exact.
+		copyVector(debug_msg_.rate_dot_ref, angular_ff);
 		copyVector(debug_msg_.rate_dot_cur, rate_dot_cur);
 		copyVector(debug_msg_.ome_dot_des, ome_dot_des);
 		copyVector(debug_msg_.ome_int_after, ome_int_);
@@ -627,6 +635,7 @@ public:
 	bool has_new_message = false;
 
 private:
+    Eigen::Vector3d angular_ff_gain_{Eigen::Vector3d::Ones()};
     template<typename T, size_t N, typename Vector>
     static void copyVector(std::array<T, N> & destination, const Vector & source)
     {

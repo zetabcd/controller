@@ -21,6 +21,7 @@ from px4_msgs.msg import ActuatorMotors
 from px4debug_msgs.msg import Px4ctrlDebug
 from rcl_interfaces.srv import GetParameters
 from rcl_interfaces.msg import ParameterType
+from rosgraph_msgs.msg import Clock
 
 from .quad import QUAD
 from .quad import Control_t
@@ -719,6 +720,7 @@ def main(args=None):
     model = mujoco.MjModel.from_xml_path(mjcf_path)
     init_mujoco(model, quad, node)
     data = mujoco.MjData(model) # 用来存储仿真数据
+    clock_pub = node.create_publisher(Clock, '/clock', 10)
     
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
@@ -730,8 +732,8 @@ def main(args=None):
         viewer.cam.elevation = -35     # 俯仰角 (-90 到 90度)
         viewer.cam.lookat[:] = data.qpos[:3] # 相机初始看向无人机的实际起点
         
-        last_time = time.time()
-        quad.start_time = time.time()
+        wall_start = time.perf_counter()
+        quad.start_time = 1000.0
         
         # 可视化设置
         # 箭头设置
@@ -748,7 +750,7 @@ def main(args=None):
             traj_num = 2
             traj_line_length = quad.param.visual.traj_line_length
             traj_line_width = quad.param.visual.traj_line_width
-            traj_draw_last_time = time.time() - draw_traj_dt*1.2
+            traj_draw_last_time = quad.start_time - draw_traj_dt*1.2
         else:
             traj_num = 0
         traj_current_idx = arrow_num
@@ -766,12 +768,16 @@ def main(args=None):
             while rclpy.ok() and viewer.is_running():
 
                 # sun: 每周期先处理最新 ROS 指令并计算外力，再推进电机和 MuJoCo 刚体动力学。
-                now_time = time.time()    # time.time() 比 node.get_clock().now().nanosecends / 1e9 精确
-                dt = now_time - last_time
-                t = now_time - quad.start_time
-                last_time = now_time
+                # All dynamics and controller references use physics time.
+                # Rendering affects wall duration only, never motor/rigid-body dt.
+                now_time = quad.start_time + data.time
+                dt = model.opt.timestep
+                t = data.time
                 rclpy.spin_once(node, timeout_sec=0) 
                 quad.now_time = now_time
+                clock = Clock()
+                clock.clock.sec, clock.clock.nanosec = divmod(round(now_time*1e9), 10**9)
+                clock_pub.publish(clock)
                 # 施加力
                 quad.set_input(node.control)
                 quad_force_global, quad_moment_global = quad.get_body_force_moment()
@@ -887,10 +893,10 @@ def main(args=None):
 
                 viewer.sync()
                 # sun: 积分完成后从 MuJoCo 传感器读取新状态，下一周期动力学和本周期消息均使用该快照。
-                Rbi = R.from_quat(quat_mujoco2scipy(quad.state.quat)).as_matrix() 
+                quad.state.quat = data.sensor("body_quat").data.copy()
+                Rbi = R.from_quat(quat_mujoco2scipy(quad.state.quat)).as_matrix()
                 quad.state.Rbi = Rbi
                 quad.state.omega = data.sensor("body_angvel").data.copy() # 体轴系
-                quad.state.quat = data.sensor("body_quat").data.copy()
                 quad.state.acc = Rbi @ data.sensor("body_linacc").data.copy()
                 quad.state.acc_B = data.sensor("body_linacc").data.copy() #带有重力加速度的acc
                 quad.state.vel = data.sensor("body_vel").data.copy()
@@ -906,8 +912,8 @@ def main(args=None):
                 log_module.append_row_data(quad, node.px4ctrldebug)
                     # log_last_time = quad.now_time
                 
-                # sun: 用剩余时间节流到模型步长；乘 1.2 预留调度开销，超时时不再额外睡眠。
-                elapsed = model.opt.timestep - (time.time()-now_time)*1.2
+                # Absolute monotonic deadline avoids accumulating relative-sleep drift.
+                elapsed = wall_start + data.time - time.perf_counter()
                 if elapsed > 0:  # 0.1s
                     # (0.015->0.0006) (0.05->0.0004（无录制)
                     time.sleep(np.clip(elapsed,0,None)) # -0.00015 

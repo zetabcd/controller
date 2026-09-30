@@ -1199,6 +1199,13 @@ void PX4CtrlFSM::calculate_control_()
             1000, "[acados] Feedback fallback: status=%d, failures=%d, iter=%d, time=%.3f ms",
             d.status, d.consecutive_failures, d.iterations, d.solve_time_ms);
     }
+#elif PX4CTRL_PRIMARY_CONTROLLER == 1
+    const auto &d=controller.diagnostics();
+    if (d.fallback) {
+        RCLCPP_WARN_THROTTLE(px4controlnode_.get_logger(), *px4controlnode_.get_clock(), 1000,
+            "[OMMPC] Feedback fallback: status=%d, failures=%d, cycle=%.3f ms",
+            d.status,d.consecutive_failures,d.cycle_time_ms);
+    }
 #endif
 }
 

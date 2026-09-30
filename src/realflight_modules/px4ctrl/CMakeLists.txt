@@ -93,6 +93,10 @@ add_library(px4ctrl_acados_nmpc STATIC src/acados_nmpc_solver.cpp)
 target_include_directories(px4ctrl_acados_nmpc PUBLIC include)
 target_link_libraries(px4ctrl_acados_nmpc PUBLIC Eigen3::Eigen px4ctrl_acados_ocp_solver)
 
+add_library(px4ctrl_ommpc STATIC src/ommpc_solver.cpp)
+target_include_directories(px4ctrl_ommpc PUBLIC include)
+target_link_libraries(px4ctrl_ommpc PUBLIC px4ctrl_reference osqp::osqp)
+
 # sun: 顶层目标包含输入转换、状态机、外环控制器、参数和坐标变换实现。
 add_executable(px4ctrl_node 
   src/px4ctrl_node.cpp
@@ -123,6 +127,7 @@ target_link_libraries(px4ctrl_node
   Eigen3::Eigen
   osqp::osqp
   px4ctrl_acados_nmpc
+  px4ctrl_ommpc
   px4ctrl_reference
   px4ctrl_omtraj
   m)
@@ -198,6 +203,8 @@ install(DIRECTORY config DESTINATION share/${PROJECT_NAME}/)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(ommpc_test test/ommpc_test.cpp)
+  target_link_libraries(ommpc_test px4ctrl_ommpc)
   ament_add_gtest(acados_nmpc_test test/acados_nmpc_test.cpp)
   target_link_libraries(acados_nmpc_test px4ctrl_acados_nmpc)
   ament_add_gtest(trajectory_test test/trajectory_test.cpp)

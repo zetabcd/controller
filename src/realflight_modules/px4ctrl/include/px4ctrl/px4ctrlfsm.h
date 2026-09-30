@@ -28,7 +28,7 @@ class PX4ControlNode;
 // 顶层控制器编译开关；连续编号 0、1、2：
 // 0=QuadControl, 1=OmMpcControl, 2=acados NMPC。
 #ifndef PX4CTRL_PRIMARY_CONTROLLER
-#define PX4CTRL_PRIMARY_CONTROLLER 1
+#define PX4CTRL_PRIMARY_CONTROLLER 1 // OMMPC 八字调参；本轮开始前为 2 (acados NMPC)
 #endif
 
 // Only controller setup and thrust-estimation behavior depend on this flag.

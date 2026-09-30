@@ -1,0 +1,624 @@
+% Build: cd 0913 && latexmk -xelatex ommpc_tuning_and_realflight_audit_20260930.tex
+\documentclass[UTF8,a4paper,11pt,fontset=fandol]{ctexart}
+\usepackage[margin=22mm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,bm,booktabs,longtable,tabularx,array}
+\usepackage[table]{xcolor}
+\usepackage{xurl,listings,enumitem,fancyhdr,tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage[unicode,colorlinks=true,linkcolor=blue!45!black,urlcolor=blue!45!black]{hyperref}
+\definecolor{panel}{RGB}{237,243,249}
+\setlength{\parskip}{4pt}
+\setlength{\emergencystretch}{3em}
+\setlist{itemsep=3pt,topsep=4pt,leftmargin=2em}
+\renewcommand{\arraystretch}{1.18}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\code}[1]{{\small\nolinkurl{#1}}}
+\newcommand{\note}[1]{\par\noindent\colorbox{panel}{\parbox{\dimexpr\linewidth-2\fboxsep}{#1}}\par}
+\newcommand{\source}[1]{\par\noindent\textbf{代码证据：}\code{#1}\par}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,columns=fullflexible,
+ keepspaces=true,showstringspaces=false,frame=single,rulecolor=\color{black!20},tabsize=2}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small OMMPC 调参与实物迁移审计}
+\fancyhead[R]{\small 2026-09-30}\fancyfoot[C]{\thepage}
+\hypersetup{pdftitle={OMMPC 调参过程、接口变化与实物迁移审计}}
+\title{\textbf{OMMPC 调参过程、接口变化\\与实物迁移审计}\\[5pt]
+\large 螺旋翻转与八字跟踪：数据来源、理想化条件及验证边界}
+\author{many\_controllerV3 项目工作区分析}
+\date{2026 年 9 月 30 日}
+\begin{document}
+\maketitle
+
+\note{\textbf{核心结论：}当前角加速度、推力及气动前馈在实物上有实现路径，未发现控制器直接读取仿真风扰、真实外力或真实电机推力作为前馈。但现有闭环验证直接使用位置、速度和姿态真值，且大量被控对象参数与控制器共享，\textbf{不足以支持直接在实物上执行当前翻转参数}。可能导致失败的主要缺口是状态估计与延迟、模型标定误差、自研内环执行链和故障处理；不是必须获得某个不可测扰动才能运行算法。}
+
+本文审计 \code{ommpcmodif} 分支的当前工作区，HEAD 为 \code{ef04df3}，包含未提交修改。
+代码引用以编写时文件和函数为准，HEAD 本身不能恢复全部实现。
+审计时 YAML 的轨迹类型为 \code{vertical_circle}；与已测试 \code{p20_ff16.yaml} 的
+\code{helix} 不同，其他参数逐项相同。本文保留当前轨迹选择，不将其改回螺旋。
+将 \code{src/realflight_modules/px4ctrl/} 简写为 \code{px4ctrl/}；
+将 \code{src/uav_simulator/quadsim_mujoco/} 简写为 \code{quadsim/}。
+本次工作只整理文档、复核代码与已有实验，不修改控制器，也不新增实飞或闭环验证结果。
+
+\textbf{证据等级：}“已确认”指直接可见的代码路径或保存的实验数据；“机制推断”指由控制律解释的可能原因；
+“待验证”指没有执行的测试或没有接入的功能。建议的测试范围不等于已通过的稳定性范围。
+
+\clearpage
+\setcounter{tocdepth}{1}
+\tableofcontents
+\clearpage
+\section{先回答：哪些理想化会影响实物？}
+\begin{longtable}{L{3.1cm}L{6.1cm}L{6.0cm}}
+\toprule 审计问题 & 当前事实 & 对实物的含义\\\midrule\endhead
+前馈是否读取未知扰动？ & 未发现。参考角加速度来自规划曲线或参考窗差分；气动补偿来自名义模型。风只在物理模型中施加。 & 不需要真实风速、外力传感器才能运行；但无风模型不能准确补偿实际风。\\
+反馈是否使用真值？ & 是。仿真把 $p,v,q$ 真值直接包装为 PX4 状态消息；无 EKF/VIO 过程。 & 这是最重要的验证缺口。真实估计偏差、延迟、复位和掉帧均可能改变闭环表现。\\
+角加速度 D 项是否用真值？ & 否。由接收到的陀螺角速度经 TVR 求导。 & 实物可计算，但高 D 对振动、滤波相位及采样时刻更敏感。\\
+推力状态是否直接读取仿真推力？ & 否。由上一条外环推力命令经一阶模型传播。 & 可实现，却是开环模型估计；没有实际推力或分配残差校正。\\
+模型参数是否过于准确？ & 是。质量、惯量、机臂、桨模型、油门映射和线性阻力等从控制器同步到仿真。 & 调参没有充分覆盖辨识误差；同时改两侧参数不是鲁棒性测试。\\
+是否走真实飞控全链路？ & 否。真实 C++ 外环和自研内环运行，但 MuJoCo 直接接收电机消息，没有验证真实 PX4/ESC 执行。 & 报文、模式、输出映射、延迟和保护需要独立验证。\\
+是否能断言实物必然失败？ & 不能。尚无实物证据，也没有充分覆盖上述缺口。 & 正确结论是“算法接口可落地，当前参数尚不具备直接实飞依据”。\\
+\bottomrule
+\end{longtable}
+
+\section{修改阶段与基线：不要混淆“之前”}
+\subsection{三个阶段}
+\begin{enumerate}
+\item \textbf{模型重构阶段。}以本地 Lu 等（2023）论文的流形误差与 QP 思路为依据，从 $(p,v,R)$ 的 9 维误差模型扩展为 $(p,v,R,\omega,a_T)$ 的 13 维局部误差模型；参考窗由 $8\times0.01$ s 改为 $16\times0.03$ s。增加角速度/推力响应、名义气动补偿、工作区复用、命令平滑和反馈回退。细节见 \code{OMMPC.md}。
+\item \textbf{第一轮参数筛选（v2）。}16 套配置、25 次闭环实验；最终位置权重从 $[150,150,150]$ 改为 $[300,300,300]$。同时排查分终端启动时的墙钟/仿真时钟不一致。没有在该轮修改内环增益。
+\item \textbf{内外环联合筛选（v3）。}33 套配置、75 次闭环实验；测试 P/I/D、角加速度前馈、模型时间常数、外环频率、权重、网格和求解精度。当前采用 \code{p20_ff16}。它偏向螺旋翻转及扰动表现，八字并非最优。
+\end{enumerate}
+v3 的 \code{baseline.yaml} 已含 v2 的位置权重 300，不能把 v3 的收益归为再次提高位置权重。
+\texttt{git diff HEAD} 还包含本次任务之前已有的修改，例如 NMPC 权重；不能将全部工作区差异都归因于本轮 OMMPC 调参。
+
+\subsection{重构前后参数与结构}
+下表“旧”以 HEAD 中的 OMMPC/YAML 为依据，而不是 C++ 类的缺省值。
+\begin{longtable}{L{3.9cm}L{5.0cm}L{6.3cm}}
+\toprule 项目 & 重构前 & 当前\\\midrule\endhead
+局部误差 & $p,v,\theta$，9 维 & 再加 $\omega,a_T$，13 维；姿态仍仅 3 维误差\\
+预测时域 & 8 步，10 ms，共 80 ms & 16 步，30 ms，共 480 ms；外环周期仍为 10 ms\\
+位置权重 & $[1000,1000,800]$ & $[300,300,300]$\\
+速度权重 & $[40,40,10]$ & $[6,6,8]$\\
+姿态误差权重 & $[50,50,40]$ & $[3,3,2]$\\
+输入修正权重 & $[0.5,0.6,0.6,0.6]$ & $[0.10,0.12,0.12,0.12]$\\
+附加状态权重 & 无 & 角速度每轴 0.05；推力状态 0.01\\
+首条命令变化权重 & 无 & $[0.02,0.08,0.08,0.08]$\\
+终端状态权重倍率 & 1 & 2\\
+输入物理量 & 总推力及角速度 & 相同；推力仍输出 N，角速度仍 rad/s\\
+失败策略 & 保持上一条输入并裁剪推力 & 当前状态反馈生成有界命令，关闭前馈、清理求解历史；不是倒飞安全恢复证明\\
+求解 & 每周期建立 OSQP 问题 & 复用 OSQP 工作区；200 次迭代上限，容差 $10^{-4}$，预算 6 ms\\
+\bottomrule
+\end{longtable}
+这些权重属于不同的模型和时域，不能通过新旧数值倍率判断控制强弱。新实现每周期一次线性化、一次 QP，
+不是多轮 SQP。决策仍为 $4N$ 个输入修正；当前没有在线逐电机硬约束。
+
+\subsection{v3 最终实际修改的参数}
+\begin{center}\begin{tabular}{lll}\toprule
+参数 & v3 调参前 & 当前 \code{p20_ff16}\\\midrule
+角速度 P，xyz & $[10,12,4]$ & $[20,24,8]$\\
+角速度 I，xyz & $[3,3,0.5]$ & 相同\\
+角速度 D，xyz & $[0.05,0.05,0]$ & $[0.6,0.6,0]$\\
+角加速度前馈系数 F & 固定 $[1,1,1]$ & 可配 $[1.6,1.6,1]$\\
+预测角速度时间常数 / s & $[0.10,0.083,0.25]$ & $[0.08,0.0666667,0.125]$\\
+推力时间常数 / s & 0.033 & 相同\\
+位置权重、预测网格 & 300；$16\times0.03$ s & 相同\\
+外环/内环频率 & 100/400 Hz & 相同\\\bottomrule
+\end{tabular}\end{center}
+前馈增益为 \code{gain.gain_rate_ff_x/y/z}，缺省 1，启动时读取并检查非负有限。
+这不是新增传感器接口。内环参数被其他外环共用；换回 acados 或其他控制器时不能假定本轮结果仍成立。
+
+\section{控制器输入输出与数据来源}
+\subsection{真实执行链与仿真边界}
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[>=Latex,node distance=6mm,
+ box/.style={draw,rounded corners,fill=panel,align=center,text width=13cm,minimum height=11mm,font=\small}]
+\node[box] (ref) {本机规划器/参考文件：未来 0.48 s 的参考窗\\$p_d,v_d,R_d,a_{T,d},\omega_d,\alpha_d$，由曲线导数或参考差分获得};
+\node[box,below=of ref] (mpc) {100 Hz OMMPC：反馈 $p,v,R,\omega$；内部传播推力状态\\预测、QP、首条命令和参考角加速度坐标变换};
+\node[box,below=of mpc] (msg) {自定义消息 /rates\_thrust\_setpoint\\$T_c$ [N]、$\omega_c$ [rad/s]、$\alpha_{ff}$ [rad/s$^2$]、有效标志、时间戳};
+\node[box,below=of msg] (rate) {400 Hz 自研内环：P+I+D+F 前馈、刚体力矩换算、分配、油门映射\\输出 /fmu/in/actuator\_motors；请求 direct\_actuator 模式};
+\node[box,below=of rate] (plant) {当前验证：MuJoCo/QUAD 直接接收电机命令\\真实部署：飞控传输/输出配置、ESC、电机、机体，尚未闭环验证};
+\node[box,below=of plant] (state) {反馈差别：仿真 $p,v,q$ 真值 + 带噪陀螺\\实物需状态估计器和 IMU，包含延迟、偏差、复位和丢包};
+\draw[->] (ref)--(mpc);\draw[->] (mpc)--(msg);\draw[->] (msg)--(rate);
+\draw[->] (rate)--(plant);\draw[->] (plant)--(state);
+\draw[->] (state.west)--++(-0.6,0)|-(mpc.west);
+\end{tikzpicture}
+\caption{当前实现不使用 PX4 原生角速度内环；切换内环实现意味着重新辨识预测模型。}
+\end{figure}
+
+\subsection{外界究竟需要提供什么？}
+\begin{longtable}{L{2.3cm}L{4.5cm}L{4.0cm}L{3.9cm}}
+\toprule 数据 & 当前来源与用途 & 实物来源 & 相对重构前的变化\\\midrule\endhead
+$p,v$ & \code{VehicleLocalPosition}；外环状态，速度还参与内环来流近似 & PX4 状态估计、融合定位；需有效标志与时间语义 & 已有输入；仿真目前为真值\\
+$R$ 或 $q$ & \code{VehicleAttitude}；误差、预测、前馈坐标转换 & 姿态估计 & 已有输入；仿真目前为真值\\
+$\omega$ & 默认 \code{SensorCombined.gyro_rad}；内环反馈和新外环状态 & 陀螺；或编译选用已滤波角速度话题 & 以前内环已有；现在外环模型也明确使用\\
+$\hat a_T$ & 上条外环命令经一阶模型传播；初值 $g$ & 相同软件计算，无推力传感器要求 & 新增内部状态，不是外部测量\\
+参考状态与输入 & $p_d,v_d,R_d,a_{T,d},\omega_d$，来自轨迹生成器/文件；$N+1=17$ 个节点 & 机载规划器或预载轨迹 & 接口已存在；预瞄范围扩大\\
+参考 $\alpha_d$ & 解析曲线或参考窗差分；馈入预测和内环 & 规划器计算；不需要实际角加速度传感器 & 前馈字段原本已存在；当前更一致地处理与重建\\
+参考 $j_d,s_d$ & 解析路径的三、四阶导数，用于姿态/角加速度参考 & 由光滑规划曲线解析计算 & 不是对真实位置四次求导；全状态采样参考可走差分路径\\
+实际角加速度估计 & 内环 TVR 对陀螺序列求导，进入 D 项 & 相同算法，须验证实时性/滤波相位 & 已有功能，本轮增大其权重\\
+质量、惯量、桨与气动系数 & YAML 静态参数 & 称重、结构/台架/飞行辨识 & 部分已有；新预测/参考更加依赖气动与响应模型\\
+风速、真实外力、真实推力 & 未作为外界输入要求 & 不必提供；未知项成为模型误差 & 没有新增“扰动真值”订阅\\
+ESC RPM、电压等 & 当前主要进入诊断链 & 取决于硬件遥测能力 & 不应误认为已用于 OMMPC 推力状态闭环修正\\
+\bottomrule
+\end{longtable}
+\source{px4ctrl/src/ommpc.cpp: calculateControl; px4ctrl/src/ommpc_solver.cpp: step; px4ctrl/src/px4ctrlrate_node.cpp: calculateControl}
+
+\subsection{前馈的既有接口与本次变化}
+HEAD 中的 OMMPC 已调用 \code{angularFeedforward}，消息已有 \code{rate_dot_ref} 和
+\code{rate_dot_ref_valid}；内环原来以系数 1 加入该项。此次不是从“完全无前馈”变成“有前馈”。
+主要变化是：前馈进入扩展预测模型，缺失参考导数显式重建，气动修正后的参考保持一致，并允许调节各轴 F。
+
+参考曲线 $p_d(t)$ 已知时，可以计算 $v_d,a_d,j_d,s_d$，进而生成 $R_d,\omega_d,\alpha_d$。
+这些是\textbf{希望飞行器执行的运动}，不是未来真实运动或未来风扰。预载轨迹的未来已知是正常规划条件。
+但若外部系统仅发送当前一个点，未来 0.48 s 只能按模型外推；不能保证获得与完整预载曲线相同的性能。
+不要把低频、带噪的测量位置直接差分到 snap 后作为前馈。
+
+参考角加速度在当前机体系中的表达为
+\begin{equation}
+ \alpha_{ff}^{B}=R^T R_d\alpha_d^{B_d}.
+\end{equation}
+这里实际姿态 $R$ 在实物上由估计器提供；它的估计误差仍会影响前馈。
+该量是名义物理角加速度，不是完整角速度反馈命令的时间导数。
+不能任意增加姿态误差导数项并再次补偿同一反馈贡献。
+
+推力名义命令增加一阶逆响应项：
+\begin{equation}
+ a_{T,c,d}=a_{T,d}+\tau_T\frac{\mathrm d a_{T,d}}{\mathrm dt}.
+\end{equation}
+导数由参考窗相邻节点计算，属于已知规划量，不是测得的实际推力变化率。
+若轨迹不光滑或模型时间常数不准，这个逆响应项也可能产生过大的命令。
+
+\subsection{输出语义及日志变化}
+外环始终输出 $T_c=m a_{T,c}$（N）、当前 FLU 机体系角速度命令（rad/s），并附角加速度前馈（rad/s$^2$）。
+期望姿态主要用于参考/诊断，不能把该字段误认为另一路直接驱动执行器的姿态闭环。
+QP 仍只优化推力和角速度四个输入；附带角加速度是名义轨迹前馈，不是额外独立优化变量。
+
+内环 \code{/debugPx4/ratectrl.rate_dot_ref} 现在记录\textbf{乘 F 后实际施加的项}，
+以满足日志恒等式 P+I+D+FF；\code{/rates_thrust_setpoint.rate_dot_ref} 则仍为乘 F 前的参考。
+前后版本比较时必须区分这两个字段，不能把幅值增加直接当成参考轨迹变激烈。
+新增 \code{ommpc_*} 求解诊断字段属于日志，不是物理传感器。
+
+\section{模型匹配、调参经验与八字退步}
+\subsection{为什么 P、D、F 与预测时间常数需要一起看}
+当前内环先生成角加速度命令，再换算刚体力矩：
+\begin{align}
+ \alpha_c&=K_P(\omega_c-\omega)+I-K_D\widehat{\dot\omega}+F\alpha_{ff},\\
+ \tau_c&=J\alpha_c+\omega\times(J\omega).
+\end{align}
+在力矩即时实现、角加速度估计准确、参数准确的理想条件下，逐轴有
+\begin{equation}
+ (1+D)\dot\omega=P(\omega_c-\omega)+I+F\alpha_{ff}.
+\end{equation}
+忽略积分贡献时，令 $F=1+D$、$\tau_\omega=(1+D)/P$，才能近似得到当前预测器形式
+\begin{equation}
+ \dot\omega=(\omega_c-\omega)/\tau_\omega+\alpha_{ff}.
+\end{equation}
+这说明只改 P、只按 $1/P$ 修改时间常数，或提高 D 却保持 F=1，均可能造成执行链与预测器不一致。
+但上述公式不是辨识结果；真实电机、TVR 和传输动态不可能被这一条代数关系完全抵消。
+预测器默认前馈等效系数为 1，F 变化若偏离这种近似关系，需要重新验证模型。
+
+当前平移与推力模型为
+\begin{align}
+ \dot p&=v,\qquad v_B=R^Tv,\\
+ \dot v&=-g e_3+R\left(a_T e_3-D_vv_B+k_h'\lVert v_{B,xy}\rVert^2 e_3\right),\\
+ \dot a_T&=(a_{T,c}-a_T)/\tau_T,\qquad \dot R=R\widehat\omega.
+\end{align}
+其中 $D_v=\operatorname{diag}(k_{dx},k_{dy},k_{dz})/m$、$k_h'=k_h/m$。
+模型用地速近似空速，\textbf{假设风为零}。实际风存在时，物理模型中来流改变，但控制器并未得到同一风真值。
+模型没有完整 PID 积分、各电机转速、时延和分配饱和状态。
+
+\subsection{八字误差变大的证据与限度}
+\begin{center}\begin{tabular}{lrr}\toprule
+八字配置（seed51） & 全动作 RMSE / mm & 最大误差 / mm\\\midrule
+baseline & 0.969 & 1.874\\
+p20\_d03，F=1，旧近似时间常数 & 0.914 & 1.866\\
+p20\_d06，F=1，旧近似时间常数 & 9.199 & 17.981\\
+p20\_ff13，D=0.3，配套模型 & 0.987 & 2.355\\
+p20\_ff16，D=0.6，配套模型 & 3.810 & 11.718\\\bottomrule
+\end{tabular}\end{center}
+相同 P 下，D=0.3 与 D=0.6 的未匹配组给出较清楚的对照；高 D 是需要重点复核的因素。
+配套 F 和时间常数把高 D 组从 9.20 mm 改善到 3.81 mm，但没有恢复原精度。
+不能把最后两组的差别单独归因于 F，因为 D、F 和时间常数都变了。
+
+\textbf{机制推断：}更强 D 对翻转动态提供阻尼，也增加了对角加速度估计误差与相位的敏感性。
+平缓八字的原始误差已很小，模型偏差和采样时序所占比例更大。P 使用收到的角速度，
+现有 \code{lpf_gyro_*} 输出仅用于监视，不能靠改其截止频率来直接改善当前反馈。
+TVR 为 200 点窗、100 点外推、25 点拟合，不能简单把窗口长度理解为固定 0.5 s 纯延迟。
+
+\textbf{尚未证明：}每种八字配置只有一次 seed51 对照，ROS 调度并不随种子完全固定。
+2.5 ms 步长在 1.5 m/s 下对应 3.75 mm 位移；时间对齐差异与目前误差同量级。
+这不是说误差全是计时伪差，而是现有数据不支持精确分解参数、噪声和时序的因果贡献。
+对应八字运行没有求解回退、没有电机输出油门触限，因此尚不支持饱和或求解失败是此次退步主因。
+
+\textbf{选型反思：}v3 优先螺旋翻转和扰动峰值；没有把八字退步作为淘汰条件。
+“翻转更稳必然导致八字更差”并不成立，\code{p20_ff13} 已表明存在兼顾空间。
+下一轮应将多轨迹误差、峰值、失飞、延迟与模型误差纳入同一选型标准，而不是逐轨迹追求单次最低 RMSE。
+
+\section{重点审计：真值、模型共享和隐藏的工程假设}
+\subsection{是否做了针对性调整？}
+\textbf{做了项目和任务针对性调整。}预测模型增加了本项目内环与推力响应，使用本项目桨/气动参数，
+并优先按螺旋翻转的实验表现选取 P/D/F 与时间常数。这种选择可能对任务与仿真模型过拟合，八字退步就是需要保留的反例。
+
+\textbf{未发现控制器按轨迹名称暗中切换增益或读取未来真实运动。}
+当前同一组 YAML 控制增益用于螺旋、竖直圆和八字；轨迹生成器按路径类型生成不同参考，属于正常规划。
+相同轨迹的参数对照保持轨迹配置与物理参数一致，没有通过降低参考速度来换取本轮收益。
+参考窗包含未来规划点，是有限时域控制的输入；未来实际扰动并不包含在其中。
+时钟/步长一致性修正改变了原先不一致的仿真执行方式，应独立披露，不能全部归为控制参数收益。
+
+\subsection{位置、速度、姿态直接来自仿真真值（已确认）}
+\code{att_topic_pub} 直接读取 \code{state.quat}；\code{local_pose_topic_pub} 直接读取
+\code{state.pos/vel}，并把位置/速度有效标志全部置 true。
+这些状态来自 MuJoCo 传感器，不是由有噪 IMU、定位数据经估计器融合得到。
+因此“开启 IMU 噪声”并不意味着位置、速度和姿态反馈也含真实估计误差。
+
+它会掩盖三类问题：姿态漂移/振动使推力方向和前馈转换错误；位置速度延迟使外环追踪过时状态；
+估计器重置或掉帧使参考与反馈坐标突然不一致。当前有限数值检查无法检测“数值正常但过时或偏置”的状态。
+实物可用定位系统提供这些量，但需要实际测量其误差和延迟，不能用仿真毫米级结果推断实物精度。
+\source{quadsim/quadsim_mujoco/quadsim_node.py: sens_topic_pub, att_topic_pub, local_pose_topic_pub; script/acados_closed_loop/headless.py: main}
+
+\subsection{噪声测试覆盖了什么、没有覆盖什么}
+基础陀螺噪声标准差为 $[0.07101,0.05167,0.28067]$ rad/s；加速度为
+$[0.92033,0.58970,0.56248]$ m/s$^2$。代码逐样本加入高斯噪声，\code{noise46} 将两者标准差加倍。
+它没有建立 IMU 偏置随机游走、轴间相关振动、混叠、温漂、饱和、安装误差或真实估计器。
+
+\textbf{尤其要注意：当前 OMMPC 不使用加速度计更新状态或辨识推力。}
+\code{estimateThrustModel} 恒返回 false；外环实际送入 solver 的反馈是 $p,v,q,\omega$。
+因此“加倍陀螺与加速度噪声”的结果，不能当成加速度噪声通过状态估计器影响位置闭环的验证。
+它对当前控制律的直接影响主要来自陀螺。
+位置/姿态真值发布与模型共享在本次重构前已存在；本轮没有为了降低误差新接入这些真值，
+但沿用这套环境仍会让调参结果依赖理想反馈，不能因其是原有条件就忽略迁移风险。
+
+\subsection{被控对象与控制器共享参数（已确认，重要）}
+\code{QuadSimNode.parameter_set} 从控制器参数服务读取质量、惯量、机臂、桨半径、
+桨推力/反扭矩系数、油门--转速曲线、空气密度和线性阻力系数；\code{init_mujoco} 把质量、惯量等写入物理模型。
+当前质量 0.811 kg、惯量对角 $[0.00191,0.00237,0.00360]$ kg\,m$^2$；
+控制器气动系数为 $[0.26,0.28,0.42]$ 与 $k_h=0.01$。
+注意仿真 \code{kh} 当前保持 QUAD 缺省 0.01，并未在该参数读取函数中拉取；这里只是数值恰好相同。
+
+这种共用参数有利于开发，却使模型失配测试偏乐观。例如，在控制器 YAML 中把质量增加 20\%，
+仿真也跟着增加，\textbf{并没有测试控制器把质量估错 20\%}。
+今后应保持控制器估计参数固定，独立改变物理模型参数；质量、惯量、电机效率和阻力应允许按轴/按电机变化。
+本轮风扰和噪声实验没有替代这一测试。
+
+气动补偿的系数与被控对象接近，使名义前馈较准；这属于模型信息优势，不是读取未知外力真值。
+实物可以标定这些参数，但不可能保证各速度、姿态、电压和来流下完全准确。
+\source{quadsim/quadsim_mujoco/quadsim_node.py: parameter_set, init_mujoco; px4ctrl/src/px4ctrl_node.cpp: drag_compensation}
+
+\subsection{推力状态和电机映射不是实测反馈}
+内部推力状态传播为
+\begin{equation}
+ \hat a_T^+=a_{T,c}^{\rm last}+
+ (\hat a_T-a_{T,c}^{\rm last})e^{-\Delta t/\tau_T}.
+\end{equation}
+这里的“上一条实际下发命令”是\textbf{外环已经选择并限幅的推力命令}，不是经过分配、电机饱和后实际产生的推力。
+没有从内环分配结果、ESC RPM、加速度计或真实电机推力回写此状态。
+负载、电压、桨损伤、气流以及单电机饱和都可能使该估计长期偏离实际值。
+
+内环使用 \code{motor_rad_sol_last_}（上次求得的转速命令）计算桨模型，而非 ESC 实测 RPM。
+\code{MotorFeedbackDebug} 中即便有遥测/重建推力，也不能称为控制器实际利用的测量反馈。
+\code{calibration_voltage} 属于诊断链配置，不能据此认为主控制油门映射已经补偿电池压降。
+实物运行不强制新增推力传感器，但必须标定油门--转速--推力关系，验证误差承受能力，必要时增加有效估计校正。
+
+\subsection{风扰没有泄漏给控制器；补偿仍有局限}
+风场在 \code{QUAD.get_body_force_moment} 中改变相对来流和气动力。
+内环明确令 $w_I=0$，用 $R^Tv$ 近似空速；外环预测也不含风速输入。
+因此没有发现“仿真提前知道风并精确抵消”的通路。
+但只验证一个平均风速 1 m/s 的风场工况，不能概括对任意阵风、风向或翻转段瞬时冲击的鲁棒性。
+原始日志中的真实力、RPM 和风场内部状态可用于离线评价；\textbf{离线有真值不等于控制律用真值}，两者应分开审计。
+
+\subsection{加速度消息存在坐标语义问题（原有问题）}
+MuJoCo XML 使用机体系 \code{accelerometer} 传感器 \code{body_linacc}；适配器先得到
+\code{state.acc_B}，再计算 \code{state.acc = Rbi * state.acc_B}。
+然而 \code{sens_topic_pub} 把 \code{state.acc} 翻转 y/z 后写进 \code{SensorCombined.accelerometer_m_s2}，
+而控制入口按机体系比力处理该字段。\textbf{这是世界系量与机体系消息的语义不一致}，翻转时尤其不能混用。
+
+当前 OMMPC 不用该加速度做推力估计，因此不能把它认定为本轮跟踪改善的来源或八字退步的主因。
+但若以后接入 EKF、加速度反馈、扰动观测或推力辨识，这个问题会污染验证；应先修正坐标和比力定义。
+本文只记录问题，未更改仿真发布逻辑。
+
+\subsection{实际坐标变换是 NED 到 NWU，不是标准 ENU}
+位置入口的实现为 $(x,y,z)=(x_{NED},-y_{NED},-z_{NED})$。
+对应世界系是 NWU；若为标准 ENU，应交换水平轴再取反 z。
+项目部分历史注释把当前局部 z 向上坐标统称 ENU，不应据注释接线。
+机体系 FRD 到 FLU 的 y/z 翻转本身正确；关键是规划、定位、姿态和前馈必须共用同一世界系。
+仿真发布端和接收端互相抵消的符号变换，可能掩盖外接 ENU 定位或规划器时的轴向错误。
+\source{px4ctrl/src/input.cpp: LocalPose_Data_t::feed, Attitude_Data_t::feed; px4ctrl/include/px4ctrl/control_reference.h}
+
+\subsection{估计器速度复位量的处理不一致（原有问题）}
+内环 \code{LocalPoseDataCallback} 每次用 \code{vx-delta_vxy[0]} 等作为速度，
+外环却直接使用 \code{vx/vy/vz}。本地消息定义说明 \code{delta_vxy/delta_vz} 是
+\textbf{最近一次估计器复位的跳变量}，并配有 reset counter；不是每一帧都应减去的常规测量误差。
+当前内环没有按复位计数器识别事件，外环也未统一处理参考坐标随估计重置的变化。
+当非零复位量持续随消息发布时，可能造成内外环使用不同速度，并影响来流与桨系数估计。
+仿真把这些复位量固定为零，因而不会暴露该问题。应按实际估计器复位语义修复并注入复位测试。
+\source{px4ctrl/src/px4ctrlrate_node.cpp: LocalPoseDataCallback; src/utils/px4_msgs/msg/VehicleLocalPosition.msg: delta_vxy, delta_vz, reset counters}
+
+\subsection{时钟修正是必要修复，不是实机通信时延验证}
+此前 GUI 日志中控制器使用墙钟、仿真传感器使用约 1000 s 的时间轴，物理运动整体约 0.8 倍实时。
+当前统一 \code{/clock}；电机与刚体使用相同固定物理步长，姿态矩阵使用当步四元数。
+这些修改恢复仿真的时间与动力学一致性，没有把被控对象换成理想的直接角速度执行器。
+
+但减慢墙钟且保持物理时钟一致，不等于实物中机体继续运动而控制计算迟到。
+10 ms 周期停顿实验先暂停仿真再补步，也不等价于单独施加 10 ms 传感器/命令传输延迟。
+没有对 PX4--DDS--ROS--执行器的各段纯时延进行独立扫描。
+接收缓存未统一按采样时刻对齐 $p,v,q,\omega$，TVR 使用控制循环时刻求导；重复/迟到的陀螺样本也需要验证。
+
+记录协议也有限制：物理步推进前设置 \code{quad.now_time}，推进后读取状态，消息沿用此前时间戳；
+MuJoCo 传感器阶段和控制发布时刻还可能有采样相位差。毫米级排名必须考虑这类时间语义。
+论文或图表应报告采样方式，不把该 RMSE 当成外部测量设备已证实的绝对精度。
+
+\subsection{自研内环、模式开关与超时处理尚未构成实机验证}
+\begin{enumerate}
+\item 当前 \code{input.h} 开启 \code{SIMULATION} 和 \code{USE_WITHOUT_RC}，会合成遥控挡位并绕过部分真实模式服务行为。
+关闭 \code{use_sim_time} 不会自动关闭这些编译开关；不能只改 launch 参数就认为切换到完整实机模式。
+\item 外环请求 \code{direct_actuator}，内环发布 \code{ActuatorMotors}。
+仿真订阅成功不证明目标固件支持相同发布/订阅配置、模式切换、输出映射和命令权限。
+应在目标固件及链路上核查，而不是把它解释为标准 PX4 角速度命令接口。
+\item 内环对陈旧 setpoint 的直接处理仅清零前馈；旧角速度和推力仍保留。
+状态超时主要记录诊断，不能把 \code{diagnostics.state_timeout_s} 当作完整的执行器看门狗。
+输出 NaN 可回退到上次油门，但这也不等于通信断开时安全恢复。
+外环 FSM 另有接收新鲜度判断，仍不能替代内环独立失联策略。
+\item 外环 OMMPC 回退有界，但没有证明能从任意倒飞姿态恢复；QP 有解同样不证明闭环稳定。
+\item 地面起点实验仍把电机初始转速设为悬停转速；这不是真实冷启动、解锁和起转验证。
+\end{enumerate}
+以上多数是既有工程条件，本轮没有通过加前馈修复它们。应避免把“算法没有 NaN”与“整机可安全翻转”混为一谈。
+
+\section{已完成实验与可复用经验}
+\subsection{v2：位置权重与时钟}
+位置权重 150、300、600 在 seed42--44 重复；300 组主段 RMSE 算术平均由 2.35 cm 降到 1.50 cm，
+全动作由 2.08 cm 降到 1.61 cm。600 组 seed43 失飞，即使其他运行误差更小也淘汰。
+这次失败没有求解回退，进一步表明求解成功不是稳定性证据。
+不要把时钟不同步的 GUI 失飞日志混入统一时钟后的正常跟踪误差提升百分比。
+
+\subsection{v3：正常螺旋复测}
+\begin{center}\begin{tabular}{lrrr}\toprule
+配置/种子 & 全动作 RMSE / cm & 最大误差 / cm & 持续在空中\\\midrule
+baseline43 & 1.08 & 2.30 & 是\\
+baseline44 & 7.17 & 19.39 & 是\\
+baseline45 & 137.27 & 252.45 & 否\\
+baseline52 & 1.13 & 2.71 & 是\\
+p20\_ff1643 & 0.67 & 1.27 & 是\\
+p20\_ff1644 & 0.83 & 1.82 & 是\\
+p20\_ff1645 & 0.58 & 1.23 & 是\\
+p20\_ff1652 & 1.07 & 2.67 & 是\\\bottomrule
+\end{tabular}\end{center}
+当前参数四次正常复测全动作 RMSE 平均约 0.79 cm；不将原参数失飞数据与正常跟踪混算提升比例。
+seed43--45 部分结果参与过继续选型，不能当作完全独立验证集；seed52 为候选固定后的补测。
+
+\subsection{扰动和其他轨迹}
+\begin{center}\begin{tabular}{lrrrr}\toprule
+& \multicolumn{2}{c}{原参数 / cm} & \multicolumn{2}{c}{当前参数 / cm}\\
+工况 & RMSE & 最大 & RMSE & 最大\\\midrule
+IMU 标准差加倍 & 5.77 & 13.95 & 2.44 & 3.89\\
+0.8 倍墙钟实时速度 & 1.08 & 2.27 & 0.82 & 2.09\\
+周期 10 ms 墙钟停顿 & 3.29 & 9.29 & 0.61 & 1.32\\
+平均风速 1 m/s & 1.56 & 3.16 & 0.73 & 1.41\\
+竖直圆翻转 & 1.06 & 1.78 & 0.68 & 1.20\\
+八字 & 0.097 & 0.187 & 0.381 & 1.172\\\bottomrule
+\end{tabular}\end{center}
+上表统一使用全动作指标；精确值和实验标识见附录。
+当前组四次正常与六项工况均无求解回退；OMMPC 整周期计算时间 p99 为 0.37--0.62 ms（当前电脑），
+不是机载计算平台或 400 Hz TVR 内环的耗时保证。输出油门触限率 0--0.52\%，不等于分配器内部推力裁剪率。
+选择当前组的一个依据是加倍噪声时的峰值：\code{p20_ff13} 为 7.26 cm，
+\code{p20_ff16} 为 3.89 cm；但前者八字更好。这是观察到的取舍，尚不是统计显著性或全局最优证明。
+
+评价使用 $\mathrm{RMSE}=\sqrt{\operatorname{mean}\lVert p_{truth}-p_{ref}\rVert^2}$。
+“主段”由轨迹生成器的 \code{main_start/main_end} 定义；“全动作”从起飞/稳定等待后到轨迹结束，
+包含主体与进出场，不含完整的解锁起转及起飞过程。参考位置由带时间戳的控制日志插值到状态时间。
+\code{remained_airborne} 实际检查 CMD 后最低高度大于 0.12 m，不能视为完整飞行品质或失效监测判据。
+
+\subsection{值得保留的调参经验}
+\begin{enumerate}
+\item 先统一参考、测量和执行时间，再讨论权重；时钟错位会表现为跟踪滞后，增益无法根治。
+\item 先辨识内环响应再调外环。v3 初筛中只把 P 加倍而保留旧模型，全动作误差 6.27 cm；同步改模型的组合为 0.88 cm。这是单次对照，不是通用倍率公式。
+\item 提高 P、提高位置权重、减小平滑项都不是单调改善。P 为原来的 4.5/6 倍，以及部分 P 三倍组合曾失飞。
+\item F 应理解为角加速度通道的匹配参数，不能把它当作任意放大的“免费加速”。D、F、时间常数需要联合验证。
+\item 200 Hz 外环、加密预测网格、收紧求解容差没有成为本轮最终选择；小 QP 数值误差通常不能替代正确的反馈与执行模型。
+\item 应同时记录位置、角速度、饱和、求解状态和时序；仅看 RMSE 容易漏掉一次失飞、内部裁剪或参数对某条轨迹的过拟合。
+\item 下一轮把八字作为约束测试，并保留未参与调参的轨迹、噪声种子、风场及模型失配组合；不能只增加同一理想模型下的重复次数。
+\end{enumerate}
+
+\section{面向实物的最小补齐路径（尚未执行）}
+\subsection{先修验证环境，再据此选参数}
+\begin{longtable}{L{2.9cm}L{7.2cm}L{5.1cm}}
+\toprule 优先事项 & 具体应做什么 & 用什么判断\\\midrule\endhead
+状态估计反馈 & 真值仅留在离线评价；控制器输入改为真实估计链或独立的有偏差/延迟/复位观测。分别处理位置、速度、姿态和陀螺。 & 记录采样/接收/执行时刻；检查估计误差与实际跟踪误差，而非只检查接收频率。\\
+物理参数独立 & 冻结控制器模型；只扰动物理侧质量、惯量、阻力、单电机效率、油门曲线、响应时间和电压工况。 & 证明测试没有同时改动模型两侧；最差工况无失飞、可恢复。\\
+传感器语义 & 修正加速度机体系比力发布，核对 NWU/FLU 与外部坐标转换；处理估计器复位。 & 悬停与已知姿态动作验证轴向/单位；翻转时保持一致。\\
+内环与推力辨识 & 在真实链路上测量命令到角速度、油门到推力/RPM 的响应与迟延；比较不同电压和工况。 & 用未参与拟合的数据检验一阶模型；误差过大则调整模型或降低带宽。\\
+执行与失联处理 & 验证真实模式切换、电机编号、旋向、输出范围；为陈旧命令/状态定义内环独立策略。 & 在台架/HIL 中主动丢包、停外环、停传感器，检查实际执行端结果。\\
+跨轨迹联合调参 & 八字、圆、螺旋及进出场共用候选参数；先限制失飞、峰值及执行余量，再比较误差。 & 明确八字可接受退步阈值；独立验证集不再参与选型。\\
+\bottomrule
+\end{longtable}
+
+可以先用估计延迟 5/10/20/40 ms、不同消息频率及少量连续丢包作探测；
+质量/惯量约 $\pm10\%$、$\pm20\%$、推力效率下降和电机响应变慢也可作为首轮敏感性扫描。
+这些数值只是\textbf{建议的探测点}，应由实际硬件测量范围替代，不是本项目已经容许的误差界。
+真实 IMU 和估计日志回放应保留采样时刻；直接缩放白噪声不能替代它。
+
+\subsection{为什么不能直接换成 PX4 原生内环}
+当前 $F=1+D$ 的推导依赖本项目“角加速度 PID + 刚体力矩换算”的实现。
+原生内环未必有相同增益单位、D 处理或角加速度输入通道。
+若只发送标准角速度命令而丢失前馈，预测器仍按 $+\alpha_{ff}$ 推进，会产生新失配。
+因此保留自研内环需要落实其执行链和失联保护；换原生内环则需重新定义前馈接入、辨识闭环响应并重配 OMMPC。
+
+\subsection{实物可实现性的分层判断}
+\begin{itemize}
+\item \textbf{计算层面可实现：}规划导数、参考预瞄、姿态坐标转换、TVR 和一阶推力传播均可在机载计算机执行，不依赖未知扰动真值。
+\item \textbf{接口层面尚待验证：}机上是否有足够及时的 $p,v,q,\omega$，目标固件/通信是否支持当前执行链，本次仿真未回答。
+\item \textbf{性能层面尚不能迁移：}当前厘米/毫米结果来自真值状态与较准模型；高 D 配置未经历真实振动、估计时延和模型失配验证。
+\item \textbf{建议验证顺序：}台架与 HIL 验证接口和故障路径，低风险悬停/缓慢轨迹辨识，八字/圆复测，再逐渐增加机动强度；不要用完整螺旋翻转作为第一次迁移测试。
+\end{itemize}
+
+\section{复现、证据留存和文档边界}
+v2 数据位于 \code{datalog/ommpc_tuning_v2/}，v3 数据位于 \code{datalog/ommpc_tuning_v3/}。
+两者被 Git 忽略，不能只保存源码分支而不保存实验目录。
+各实验保留配置、可执行文件/部分源码哈希、节点日志、\code{raw.npz} 和 \code{metrics.json}。
+\code{all_metrics.json} 为 75 次汇总；\code{parameter_differences.json} 为 33 套配置差异。
+本文附录嵌入两者的关键数据，避免阅读依赖被忽略的数据文件。
+
+\begin{lstlisting}
+# Build this document (from repository root)
+cd 0913
+latexmk -xelatex ommpc_tuning_and_realflight_audit_20260930.tex
+
+# Simulation only: both controller nodes must use /clock
+ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true
+# Or launch the simulator and controllers together:
+ros2 launch px4ctrl run_sim.launch.py
+\end{lstlisting}
+修改 YAML 后需重启两个控制节点；前馈参数启动时读取。
+实物使用非仿真时钟，但这只是时钟选择，不替代编译开关、坐标、固件、估计和执行链验证。
+
+此前控制器编译及 OMMPC、轨迹、参考与控制接口四组测试通过；本次只验证文档构建及数据一致性。
+没有执行新一轮实物、HIL、GUI 渲染或参数失配实验。文中建议没有被当成已实现功能。
+同目录 \code{ommpc_tuning_and_realflight_audit_20260930_manifest.json} 保存本次审计的文件哈希和实验摘要来源。
+
+\appendix
+\section{v3 的 33 套配置：全部参数差异}
+均相对 v3 基线。表中 P/I/D/F 表示 xyz 三轴；未列出的参数保持基线。F 未声明时为 1。数值显示至 7 位有效数字，完整精度见同目录审计清单。
+{\footnotesize\begin{longtable}{L{3.3cm}L{11.9cm}}
+\toprule 配置名 & 相对基线的差异\\\midrule\endhead
+\code{baseline} & 基线，无改动。\\
+\code{d0} & \code{D=[0, 0, 0]}\\
+\code{d015} & \code{D=[0.15, 0.15, 0]}\\
+\code{d03} & \code{D=[0.3, 0.3, 0]}\\
+\code{i0} & \code{I=[0, 0, 0]}\\
+\code{i2} & \code{I=[6, 6, 1]}\\
+\code{outer200} & \code{ctrl_freq_max=200}\\
+\code{outer200_p20} & \code{P=[20, 24, 8]}；\code{ctrl_freq_max=200}；\code{mpc.rate_time_constant=[0.05, 0.0415, 0.125]}\\
+\code{p15} & \code{P=[15, 18, 6]}；\code{mpc.rate_time_constant=[0.06666667, 0.05533333, 0.1666667]}\\
+\code{p20} & \code{P=[20, 24, 8]}；\code{mpc.rate_time_constant=[0.05, 0.0415, 0.125]}\\
+\code{p20_d015} & \code{P=[20, 24, 8]}；\code{D=[0.15, 0.15, 0]}；\code{mpc.rate_time_constant=[0.05, 0.0415, 0.125]}\\
+\code{p20_d03} & \code{P=[20, 24, 8]}；\code{D=[0.3, 0.3, 0]}；\code{mpc.rate_time_constant=[0.05, 0.0415, 0.125]}\\
+\code{p20_d06} & \code{P=[20, 24, 8]}；\code{D=[0.6, 0.6, 0]}；\code{mpc.rate_time_constant=[0.05, 0.0415, 0.125]}\\
+\code{p20_ff13} & \code{P=[20, 24, 8]}；\code{D=[0.3, 0.3, 0]}；\code{F=[1.3, 1.3, 1]}；\code{mpc.rate_time_constant=[0.065, 0.05416667, 0.125]}\\
+\code{p20_ff16} & \code{P=[20, 24, 8]}；\code{D=[0.6, 0.6, 0]}；\code{F=[1.6, 1.6, 1]}；\code{mpc.rate_time_constant=[0.08, 0.06666667, 0.125]}\\
+\code{p20_oldtau} & \code{P=[20, 24, 8]}\\
+\code{p30} & \code{P=[30, 36, 12]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}\\
+\code{p30_d015} & \code{P=[30, 36, 12]}；\code{D=[0.15, 0.15, 0]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}\\
+\code{p30_d03} & \code{P=[30, 36, 12]}；\code{D=[0.3, 0.3, 0]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}\\
+\code{p30_d06} & \code{P=[30, 36, 12]}；\code{D=[0.6, 0.6, 0]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}\\
+\code{p30_ff13} & \code{P=[30, 36, 12]}；\code{D=[0.3, 0.3, 0]}；\code{F=[1.3, 1.3, 1]}；\code{mpc.rate_time_constant=[0.04333333, 0.03611111, 0.08333333]}\\
+\code{p30_fine} & \code{P=[30, 36, 12]}；\code{mpc.horizon=24}；\code{mpc.prediction_dt=0.02}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}\\
+\code{p30_i0} & \code{P=[30, 36, 12]}；\code{I=[0, 0, 0]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}\\
+\code{p30_outer200} & \code{P=[30, 36, 12]}；\code{ctrl_freq_max=200}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}\\
+\code{p30_q150} & \code{P=[30, 36, 12]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}；\code{mpc.state_weight=[150, 150, 150, 6, 6, 8, 3, 3, 2]}\\
+\code{p30_q600} & \code{P=[30, 36, 12]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}；\code{mpc.state_weight=[600, 600, 600, 6, 6, 8, 3, 3, 2]}\\
+\code{p30_rate_low} & \code{P=[30, 36, 12]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}；\code{mpc.input_weight=[0.1, 0.04, 0.04, 0.04]}；\code{mpc.command_change_weight=[0.02, 0.02, 0.02, 0.02]}\\
+\code{p30_tau_slow} & \code{P=[30, 36, 12]}；\code{mpc.rate_time_constant=[0.04333333, 0.03596667, 0.1083333]}\\
+\code{p30_tight} & \code{P=[30, 36, 12]}；\code{mpc.rate_time_constant=[0.03333333, 0.02766667, 0.08333333]}；\code{mpc.maximum_iterations=400}；\code{mpc.tolerance=1e-06}\\
+\code{p45} & \code{P=[45, 54, 18]}；\code{mpc.rate_time_constant=[0.02222222, 0.01844444, 0.05555556]}\\
+\code{p60} & \code{P=[60, 72, 24]}；\code{mpc.rate_time_constant=[0.01666667, 0.01383333, 0.04166667]}\\
+\code{rate_cost_low} & \code{mpc.input_weight=[0.1, 0.04, 0.04, 0.04]}；\code{mpc.command_change_weight=[0.02, 0.02, 0.02, 0.02]}\\
+\code{thrust_cost_low} & \code{mpc.input_weight=[0.03, 0.12, 0.12, 0.12]}；\code{mpc.command_change_weight=[0.005, 0.08, 0.08, 0.08]}\\
+\bottomrule\end{longtable}}
+\section{v3 的 75 次闭环实验索引}
+所有数值为已有日志指标，不是本次重新仿真。全动作误差以 cm 计；失败样本完整保留，不与正常样本混算性能提升。带 noise/slow/stall/wind/vertical/eight 的名称对应正文定义；其余为螺旋常规工况。
+{\footnotesize\begin{longtable}{L{5.0cm}rrrrL{1.0cm}}
+\toprule 实验名 & seed & 主段 RMSE & 全动作 RMSE & 全动作最大 & 在空中\\\midrule\endhead
+\code{baseline42} & 42 & 1.145 & 1.108 & 2.339 & 是\\
+\code{baseline43} & 43 & 1.143 & 1.081 & 2.301 & 是\\
+\code{baseline44} & 44 & 6.128 & 7.169 & 19.394 & 是\\
+\code{baseline45} & 45 & 89.889 & 137.268 & 252.448 & \textbf{否}\\
+\code{baseline52} & 52 & 1.226 & 1.135 & 2.706 & 是\\
+\code{baseline_eight51} & 51 & 0.097 & 0.097 & 0.187 & 是\\
+\code{baseline_noise46} & 46 & 5.505 & 5.770 & 13.947 & 是\\
+\code{baseline_slow47} & 47 & 1.165 & 1.079 & 2.275 & 是\\
+\code{baseline_stall48} & 48 & 4.392 & 3.292 & 9.295 & 是\\
+\code{baseline_vertical50} & 50 & 0.976 & 1.063 & 1.784 & 是\\
+\code{baseline_wind49} & 49 & 1.775 & 1.559 & 3.162 & 是\\
+\code{d01542} & 42 & 0.976 & 1.000 & 2.187 & 是\\
+\code{d0342} & 42 & 0.796 & 0.944 & 2.337 & 是\\
+\code{d042} & 42 & 1.792 & 1.520 & 3.251 & 是\\
+\code{i042} & 42 & 1.092 & 1.047 & 2.165 & 是\\
+\code{i242} & 42 & 1.061 & 1.030 & 2.187 & 是\\
+\code{outer20042} & 42 & 1.071 & 0.937 & 1.721 & 是\\
+\code{outer200_p2042} & 42 & 1.082 & 0.852 & 1.598 & 是\\
+\code{p1542} & 42 & 1.012 & 0.855 & 1.631 & 是\\
+\code{p2042} & 42 & 1.089 & 0.880 & 2.039 & 是\\
+\code{p20_d01542} & 42 & 1.656 & 1.269 & 2.404 & 是\\
+\code{p20_d0342} & 42 & 0.763 & 0.658 & 1.209 & 是\\
+\code{p20_d0343} & 43 & 1.837 & 1.581 & 4.223 & 是\\
+\code{p20_d0344} & 44 & 1.634 & 1.221 & 2.619 & 是\\
+\code{p20_d0345} & 45 & 0.793 & 0.678 & 1.160 & 是\\
+\code{p20_d03_eight51} & 51 & 0.091 & 0.091 & 0.187 & 是\\
+\code{p20_d03_wind49} & 49 & 0.901 & 0.774 & 1.346 & 是\\
+\code{p20_d0642} & 42 & 0.632 & 0.629 & 1.187 & 是\\
+\code{p20_d0643} & 43 & 1.328 & 1.112 & 2.926 & 是\\
+\code{p20_d0644} & 44 & 0.618 & 0.620 & 1.230 & 是\\
+\code{p20_d0645} & 45 & 0.707 & 0.668 & 1.753 & 是\\
+\code{p20_d06_eight51} & 51 & 0.920 & 0.920 & 1.798 & 是\\
+\code{p20_d06_noise46} & 46 & 0.723 & 0.763 & 1.506 & 是\\
+\code{p20_d06_slow47} & 47 & 0.770 & 0.735 & 1.913 & 是\\
+\code{p20_d06_stall48} & 48 & 0.729 & 0.757 & 1.763 & 是\\
+\code{p20_d06_vertical50} & 50 & 0.809 & 0.854 & 1.877 & 是\\
+\code{p20_d06_wind49} & 49 & 3.238 & 2.538 & 4.912 & 是\\
+\code{p20_ff1342} & 42 & 0.848 & 0.685 & 1.362 & 是\\
+\code{p20_ff1343} & 43 & 0.844 & 0.686 & 1.333 & 是\\
+\code{p20_ff1344} & 44 & 0.829 & 0.675 & 1.366 & 是\\
+\code{p20_ff1345} & 45 & 1.149 & 0.868 & 1.905 & 是\\
+\code{p20_ff13_eight51} & 51 & 0.099 & 0.099 & 0.235 & 是\\
+\code{p20_ff13_noise46} & 46 & 2.826 & 2.933 & 7.255 & 是\\
+\code{p20_ff13_wind49} & 49 & 0.982 & 0.781 & 1.369 & 是\\
+\code{p20_ff1643} & 43 & 0.811 & 0.666 & 1.274 & 是\\
+\code{p20_ff1644} & 44 & 1.058 & 0.827 & 1.823 & 是\\
+\code{p20_ff1645} & 45 & 0.692 & 0.582 & 1.232 & 是\\
+\code{p20_ff1652} & 52 & 1.424 & 1.074 & 2.669 & 是\\
+\code{p20_ff16_eight51} & 51 & 0.381 & 0.381 & 1.172 & 是\\
+\code{p20_ff16_noise46} & 46 & 3.274 & 2.443 & 3.890 & 是\\
+\code{p20_ff16_slow47} & 47 & 0.995 & 0.818 & 2.088 & 是\\
+\code{p20_ff16_stall48} & 48 & 0.724 & 0.614 & 1.324 & 是\\
+\code{p20_ff16_vertical50} & 50 & 0.733 & 0.684 & 1.203 & 是\\
+\code{p20_ff16_wind49} & 49 & 0.867 & 0.726 & 1.408 & 是\\
+\code{p20_oldtau42} & 42 & 6.833 & 6.275 & 12.719 & 是\\
+\code{p3042} & 42 & 0.946 & 0.746 & 1.468 & 是\\
+\code{p30_d01542} & 42 & 0.870 & 0.696 & 1.348 & 是\\
+\code{p30_d0342} & 42 & 0.775 & 0.639 & 1.262 & 是\\
+\code{p30_d0343} & 43 & 0.987 & 0.768 & 1.883 & 是\\
+\code{p30_d0344} & 44 & 229.513 & 220.666 & 317.694 & \textbf{否}\\
+\code{p30_d0345} & 45 & 3.710 & 2.781 & 5.272 & 是\\
+\code{p30_d0642} & 42 & 0.985 & 0.830 & 1.896 & 是\\
+\code{p30_ff1342} & 42 & 1.516 & 1.147 & 2.444 & 是\\
+\code{p30_fine42} & 42 & 5.655 & 4.804 & 13.865 & 是\\
+\code{p30_i042} & 42 & 22.061 & 111.115 & 351.960 & \textbf{否}\\
+\code{p30_outer20042} & 42 & 1.572 & 1.180 & 2.299 & 是\\
+\code{p30_q15042} & 42 & 1.146 & 0.956 & 2.093 & 是\\
+\code{p30_q60042} & 42 & 0.919 & 1.038 & 3.015 & 是\\
+\code{p30_rate_low42} & 42 & 411.688 & 1003.100 & 2072.735 & \textbf{否}\\
+\code{p30_tau_slow42} & 42 & 15.521 & 11.335 & 35.321 & 是\\
+\code{p30_tight42} & 42 & 1.042 & 0.812 & 1.630 & 是\\
+\code{p4542} & 42 & 1578.473 & 1646.654 & 2417.499 & \textbf{否}\\
+\code{p6042} & 42 & 305.606 & 264.092 & 579.372 & \textbf{否}\\
+\code{rate_cost_low42} & 42 & 1.399 & 1.098 & 2.575 & 是\\
+\code{thrust_cost_low42} & 42 & 0.966 & 0.968 & 2.100 & 是\\
+\bottomrule\end{longtable}}
+\section{代码证据定位}
+以下行号为本次审计快照的起始位置，后续修改后以函数名为准。清单文件包含 SHA-256，帮助识别版本差异。
+\begin{longtable}{L{7.5cm}L{7.7cm}}
+\toprule 文件及起始行 & 核查内容\\\midrule\endhead
+\code{px4ctrl/src/ommpc.cpp:37} & 反馈输入为位置、速度、姿态和陀螺；实际加速度计不进入 solver。\\
+\code{px4ctrl/src/ommpc_solver.cpp:198} & 推力状态仅由外环命令传播。\\
+\code{px4ctrl/src/ommpc_solver.cpp:200} & 气动参考修正、角加速度重建及推力前馈。\\
+\code{px4ctrl/src/control_reference.cpp:224} & 参考角加速度变换到当前机体系。\\
+\code{px4ctrl/src/px4ctrlrate_node.cpp:300} & 内环无风假设、TVR、P/I/D/F、命令转速模型和分配。\\
+\code{px4ctrl/src/px4ctrlrate_node.cpp:248} & 速度复位量被逐次扣除。\\
+\code{px4ctrl/src/px4ctrlrate_node.cpp:548} & 执行器输出与 NaN 回退；检查超时策略边界。\\
+\code{px4ctrl/include/px4ctrl/input.h:7} & 仿真与无遥控编译开关；IMU 数据源选择。\\
+\code{px4ctrl/src/input.cpp:307} & NED 到 NWU 变换；外环直接用速度。\\
+\code{px4ctrl/src/px4ctrlfsm.cpp:1104} & \code{direct_actuator} 模式与自定义推力/角速度接口。\\
+\code{quadsim/quadsim_mujoco/quadsim_node.py:421} & IMU 噪声、加速度坐标、随后姿态/位置真值发布。\\
+\code{quadsim/quadsim_mujoco/quadsim_node.py:548} & 仿真从控制器同步物理/标定参数。\\
+\code{quadsim/quadsim_mujoco/quadsim_node.py:642} & 将质量、惯量和几何写入物理模型。\\
+\code{quadsim/quadsim_mujoco/quad.py:199} & 风场仅进入被控对象气动力与桨来流。\\
+\code{script/acados_closed_loop/headless.py:48} & 固定步长、悬停转速初始化、墙钟停顿和传感器发布。\\
+\code{script/acados_closed_loop/analyze.py:40} & 指标窗口、时间插值与在空中判据。\\
+\code{src/utils/px4_msgs/msg/VehicleLocalPosition.msg:32} & 本地 PX4 消息定义：最近复位速度跳变量。\\
+\bottomrule\end{longtable}
+\section{资料来源与结论使用范围}
+正文方法背景沿用本地 Lu 等（2023）论文及项目既有实现说明；本文的参数结论来自本项目实验，不是论文给出的性能保证。
+\begin{itemize}
+\item 本地论文：Lu 等，2023，\emph{On-Manifold Model Predictive Control for Trajectory Tracking on Robotic Systems}，0913 目录所附 PDF。
+\item 项目记录：\code{px4ctrl/OMMPC.md}、\code{OMMPC_TUNING.md}、\code{OMMPC_FULL_TUNING.md}。
+\item 实验原始依据：\code{datalog/ommpc_tuning_v2/} 与 \code{datalog/ommpc_tuning_v3/}。
+\item 数据字段语义依据：本仓库 \code{src/utils/px4_msgs/msg/} 和 \code{src/utils/ratectrl_msgs/msg/}；未据此声称目标实机固件已兼容。
+\end{itemize}
+当前资料支持“控制接口可实现、理想反馈仿真中部分机动显著改善、跨轨迹存在退步”的结论。它不支持“无需状态估计验证即可直接实飞”，也不支持“实物必然失败”的确定性断言。
+\end{document}
