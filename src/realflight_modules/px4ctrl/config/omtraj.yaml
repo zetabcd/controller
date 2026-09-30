@@ -24,6 +24,29 @@ omtraj_visualizer:
       position: [1.0, 1.0, 1.5]
       velocity: [0.0, 0.0, 0.0]
       yaw: 0.0
+    model:
+      gravity: 9.805
+      linear_drag: [0.3205918618988903, 0.34525277435265106, 0.5178791615289765]
+      horizontal_lift: 0.012330456226880395
+    limits:
+      waypoint_margin: 0.05  # shrink 12 cm task spheres to 7 cm; reserve 5 cm for tracking
+      thrust_min: 1.0
+      thrust_max: 30.0       # m/s^2, with feedback reserve
+      rate_max: [4.0, 4.0, 4.0] # rad/s per axis
+      thrust_slew_max: 40.0  # m/s^3
+      angular_acceleration_max: [16.0, 16.0, 16.0] # rad/s^2 per axis
+      speed_max: 6.0         # m/s
+      # First-order thrust-command budget.
+      thrust_time_constant: 0.033
+      maximum_tilt: 1.5707963267948966 # radians; waypoint cones still apply
+      minimum_relative_altitude: 0.0
+      mass: 0.811
+      inertia: [0.00191, 0.00237, 0.00360]
+      arm: 0.1216
+      arm_angle: 0.7853981633974483
+      torque_to_thrust: 0.011406015037593987
+      motor_min: 0.5         # N, above physical idle to reserve feedback authority
+      motor_max: 17.972347331460142 # 70% of static model maximum
     optimizer:
       # Manuscript III: one joint free-time SCP, right SO(3) increments and CSTC.
       # No outer bisection or locked passage schedule. T is the sole physical cost.

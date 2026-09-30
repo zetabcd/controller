@@ -80,7 +80,7 @@ public:
       0, static_cast<int>(declare_parameter<int>("waypoint_count", 3)));
     const double waypoint_tolerance = std::max(
       0.0, declare_parameter<double>("waypoint_tolerance", 0.12));
-    const double waypoint_margin = declare_parameter<double>("tracking.waypoint_margin", 0.0);
+    const double waypoint_margin = declare_parameter<double>("limits.waypoint_margin", 0.0);
     if (!std::isfinite(waypoint_margin) || waypoint_margin < 0 || waypoint_margin >= waypoint_tolerance) {
       throw std::invalid_argument("Waypoint margin must be nonnegative and smaller than task tolerance");
     }
@@ -146,26 +146,24 @@ public:
     options.body_rate_max = vector3Parameter("optimizer.body_rate_max", {options.body_rate_max.x(), options.body_rate_max.y(), options.body_rate_max.z()});
     options.body_rate_trust_region = vector3Parameter("optimizer.body_rate_trust_region", {options.body_rate_trust_region.x(), options.body_rate_trust_region.y(), options.body_rate_trust_region.z()});
     options.model.linear_drag = vector3Parameter("model.linear_drag", {options.model.linear_drag.x(), options.model.linear_drag.y(), options.model.linear_drag.z()});
-    options.tracking.rate_max = vector3Parameter("tracking.rate_max", {options.tracking.rate_max.x(), options.tracking.rate_max.y(), options.tracking.rate_max.z()});
-    options.tracking.angular_acceleration_max = vector3Parameter("tracking.angular_acceleration_max", {options.tracking.angular_acceleration_max.x(), options.tracking.angular_acceleration_max.y(), options.tracking.angular_acceleration_max.z()});
-    options.tracking.inertia = vector3Parameter("tracking.inertia", {options.tracking.inertia.x(), options.tracking.inertia.y(), options.tracking.inertia.z()});
+    options.tracking.rate_max = vector3Parameter("limits.rate_max", {options.tracking.rate_max.x(), options.tracking.rate_max.y(), options.tracking.rate_max.z()});
+    options.tracking.angular_acceleration_max = vector3Parameter("limits.angular_acceleration_max", {options.tracking.angular_acceleration_max.x(), options.tracking.angular_acceleration_max.y(), options.tracking.angular_acceleration_max.z()});
+    options.tracking.inertia = vector3Parameter("limits.inertia", {options.tracking.inertia.x(), options.tracking.inertia.y(), options.tracking.inertia.z()});
     options.model.gravity = declare_parameter<double>("model.gravity", options.model.gravity);
     options.model.horizontal_lift = declare_parameter<double>("model.horizontal_lift", options.model.horizontal_lift);
-    options.tracking.enabled = declare_parameter<bool>("tracking.enabled", options.tracking.enabled);
-    options.tracking.motor_constraints = declare_parameter<bool>("tracking.motor_constraints", options.tracking.motor_constraints);
-    options.tracking.thrust_min = declare_parameter<double>("tracking.thrust_min", options.tracking.thrust_min);
-    options.tracking.thrust_max = declare_parameter<double>("tracking.thrust_max", options.tracking.thrust_max);
-    options.tracking.thrust_time_constant = declare_parameter<double>("tracking.thrust_time_constant", options.tracking.thrust_time_constant);
-    options.tracking.thrust_slew_max = declare_parameter<double>("tracking.thrust_slew_max", options.tracking.thrust_slew_max);
-    options.tracking.speed_max = declare_parameter<double>("tracking.speed_max", options.tracking.speed_max);
-    options.tracking.maximum_tilt = declare_parameter<double>("tracking.maximum_tilt", options.tracking.maximum_tilt);
-    options.tracking.minimum_relative_altitude = declare_parameter<double>("tracking.minimum_relative_altitude", options.tracking.minimum_relative_altitude);
-    options.tracking.mass = declare_parameter<double>("tracking.mass", options.tracking.mass);
-    options.tracking.arm = declare_parameter<double>("tracking.arm", options.tracking.arm);
-    options.tracking.arm_angle = declare_parameter<double>("tracking.arm_angle", options.tracking.arm_angle);
-    options.tracking.torque_to_thrust = declare_parameter<double>("tracking.torque_to_thrust", options.tracking.torque_to_thrust);
-    options.tracking.motor_min = declare_parameter<double>("tracking.motor_min", options.tracking.motor_min);
-    options.tracking.motor_max = declare_parameter<double>("tracking.motor_max", options.tracking.motor_max);
+    options.tracking.thrust_min = declare_parameter<double>("limits.thrust_min", options.tracking.thrust_min);
+    options.tracking.thrust_max = declare_parameter<double>("limits.thrust_max", options.tracking.thrust_max);
+    options.tracking.thrust_time_constant = declare_parameter<double>("limits.thrust_time_constant", options.tracking.thrust_time_constant);
+    options.tracking.thrust_slew_max = declare_parameter<double>("limits.thrust_slew_max", options.tracking.thrust_slew_max);
+    options.tracking.speed_max = declare_parameter<double>("limits.speed_max", options.tracking.speed_max);
+    options.tracking.maximum_tilt = declare_parameter<double>("limits.maximum_tilt", options.tracking.maximum_tilt);
+    options.tracking.minimum_relative_altitude = declare_parameter<double>("limits.minimum_relative_altitude", options.tracking.minimum_relative_altitude);
+    options.tracking.mass = declare_parameter<double>("limits.mass", options.tracking.mass);
+    options.tracking.arm = declare_parameter<double>("limits.arm", options.tracking.arm);
+    options.tracking.arm_angle = declare_parameter<double>("limits.arm_angle", options.tracking.arm_angle);
+    options.tracking.torque_to_thrust = declare_parameter<double>("limits.torque_to_thrust", options.tracking.torque_to_thrust);
+    options.tracking.motor_min = declare_parameter<double>("limits.motor_min", options.tracking.motor_min);
+    options.tracking.motor_max = declare_parameter<double>("limits.motor_max", options.tracking.motor_max);
 
     marker_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
       marker_topic_, rclcpp::QoS(1).transient_local().reliable());
