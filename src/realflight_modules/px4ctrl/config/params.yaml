@@ -55,7 +55,7 @@ px4ctrl_node:
         max_speed: 1.0
         max_acceleration: 1.5
       omtraj:
-        file: datalog/omtraj/omtraj_optimized.csv
+        file: datalog/omtraj/omtraj_manifold_v2.csv
 
     # SO(3) 误差 QP；内环与推力响应纳入预测。参数读取后重启生效。
     mpc:

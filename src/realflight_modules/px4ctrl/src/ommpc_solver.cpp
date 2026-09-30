@@ -198,6 +198,13 @@ struct OmMpcSolver::Impl
     thrust = last(0) + (thrust - last(0)) * std::exp(-dt / o.thrust_time_constant);
     s.thrust_acceleration = thrust;
     auto nominal = window;
+    for (const auto & r : nominal.points) {
+      if (r.aerodynamics_included &&
+        ((r.model_linear_drag-o.linear_drag).norm()>1e-6 ||
+        std::abs(r.model_horizontal_lift-o.horizontal_lift)>1e-6)) {
+        throw std::invalid_argument("Trajectory/OMMPC aerodynamic model mismatch");
+      }
+    }
     if (o.linear_drag.squaredNorm() > 0 || o.horizontal_lift > 0) {
       for (auto & r:nominal.points) {
         r =
@@ -232,7 +239,8 @@ struct OmMpcSolver::Impl
       refs[k] = {r.position, r.velocity, r.attitude, r.body_rate, r.thrust_acceleration};
       if (k == o.horizon) {break;}
       const int a = std::max(0, k - 1), b = k + 1;
-      const double thrust_dot = (nominal.points[b].thrust_acceleration -
+      const double thrust_dot = r.thrust_rate_valid ? r.thrust_rate :
+        (nominal.points[b].thrust_acceleration -
         nominal.points[a].thrust_acceleration) / ((b - a) * o.prediction_dt);
       ud.segment<4>(4 * k) << r.thrust_acceleration + o.thrust_time_constant * thrust_dot,
         r.body_rate;

@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
@@ -17,6 +18,8 @@ def main():
     p.add_argument('name')
     p.add_argument('--duration', default=43, type=float)
     p.add_argument('--seed', default=42, type=int)
+    p.add_argument('--ros-domain-id', default=72, type=int,
+        help='Use a distinct domain for each simultaneous experiment')
     p.add_argument('--controller-label', default='configured controller')
     p.add_argument('--controller-executable', default=str(
         ROOT/'install/px4ctrl/lib/px4ctrl/px4ctrl_node'),
@@ -40,14 +43,33 @@ def main():
         p.error('stall-ms must be in [0, 1000] and stall-period in (0, 1000]')
     out = Path(a.output_root).resolve()/a.name
     out.mkdir(parents=True, exist_ok=False)
-    env = dict(os.environ, ROS_DOMAIN_ID='72', ROS_LOCALHOST_ONLY='1',
+    env = dict(os.environ, ROS_DOMAIN_ID=str(a.ros_domain_id), ROS_LOCALHOST_ONLY='1',
         ROS_LOG_DIR=str(out/'ros'), OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1',
         FASTRTPS_DEFAULT_PROFILES_FILE=str(HERE/'fastdds.xml'))
     config = Path(a.config).resolve()
     # Freeze the exact startup parameters and binary fingerprint for every run.
     (out/'params.yaml').write_bytes(config.read_bytes())
+    parameters = yaml.safe_load(config.read_text())
+    trajectory = parameters['px4ctrl_node']['ros__parameters'].get('trajectory', {})
+    reference_sha256 = None
+    if trajectory.get('type') == 'omtraj':
+        reference = Path(trajectory['omtraj']['file'])
+        if not reference.is_absolute():
+            reference = ROOT/reference
+        frozen = out/'reference.csv'
+        frozen.write_bytes(reference.read_bytes())
+        reference_sha256 = hashlib.sha256(frozen.read_bytes()).hexdigest()
+        trajectory['omtraj']['file'] = str(frozen)
+        (out/'params.yaml').write_text(yaml.safe_dump(parameters, sort_keys=False))
     executable = Path(a.controller_executable).resolve()
-    sources = ['src/realflight_modules/px4ctrl/src/ommpc_solver.cpp',
+    sources = ['src/realflight_modules/px4ctrl/src/omtraj.cpp',
+        'src/realflight_modules/px4ctrl/src/omtraj_qp.h',
+        'src/realflight_modules/px4ctrl/src/omtraj_dynamics.cpp',
+        'src/realflight_modules/px4ctrl/src/omtraj_io.cpp',
+        'src/realflight_modules/px4ctrl/src/omtraj_reference.cpp',
+        'src/realflight_modules/px4ctrl/include/px4ctrl/control_reference.h',
+        'src/realflight_modules/px4ctrl/src/control_reference.cpp',
+        'src/realflight_modules/px4ctrl/src/ommpc_solver.cpp',
         'src/realflight_modules/px4ctrl/src/ommpc.cpp',
         'src/realflight_modules/px4ctrl/src/controller.cpp',
         'src/realflight_modules/px4ctrl/src/acados_nmpc.cpp',
@@ -66,6 +88,7 @@ def main():
         real_time_factor=a.real_time_factor,
         stall_ms=a.stall_ms, stall_period_s=a.stall_period,
         executable=str(executable),
+        reference_sha256=reference_sha256,
         executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
         inner_executable_sha256=hashlib.sha256((ROOT/'install/px4ctrl/lib/px4ctrl/px4ctrlrate_node').read_bytes()).hexdigest(),
         source_sha256={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest()

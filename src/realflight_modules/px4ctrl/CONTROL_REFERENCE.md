@@ -23,7 +23,7 @@
 - `full_state=false`：提供 p/v/a/jerk/snap/yaw/yaw_rate/yaw_acceleration。
   `resolveReference()` 解析构造姿态、名义推力、角速度、角加速度。
   `extrapolateFlatReference()` 用常 snap / 常航向角加速度产生导数一致的短窗口。
-- `full_state=true`：提供 p/v/q/thrust_acceleration/body_rate；角加速度可选。
+- `full_state=true`：提供 p/v/q/thrust_acceleration/body_rate；角加速度、推力变化率可选。
   `angular_acceleration_valid` 区分缺失与有效零。缺失时不启用内环前馈。
   `kinematics_valid=true` 时同时提供解析 p/v/a/jerk/snap（新解析轨迹）；
   为 false 时不声称拥有 jerk/snap（omtraj CSV）。传统控制器使用明确的角速度/角加速度前馈通道。
@@ -35,8 +35,8 @@
 坐标使用与反馈一致的局部 z 向上世界系、FLU 机体系；当前 PX4 桥实际是
 NED→NWU 的 `[x,-y,-z]`，本次没有改动它。q 为参考机体到世界的旋转。
 `thrust_acceleration` 是 N/kg（m/s²），不是油门；输出 `thrust` 是 N。
-完整状态参考是无气动补偿的名义运动，a 按 `R e3 a_T - g e3` 恢复；
-NMPC 自己负责其模型相关的气动参考补偿。
+`aerodynamics_included=false` 的完整参考按 `R e3 a_T - g e3` 恢复加速度，预测控制器按自身模型补偿。omtraj v2 设置 `aerodynamics_included=true` 并携带气动系数，加速度由同一气动模型恢复；模型匹配时控制器不重复补偿，不匹配时拒绝参考。
+`thrust_rate_valid` 标明推力变化率是否有效，OMMPC 优先用于执行器滞后补偿；缺失时才采用窗口差分。
 
 航向加推力的平坦映射使用正常飞行的局部姿态表示，要求推力朝上，并拒绝奇异点。
 倒飞/翻滚应提供完整四元数形式；它仍不保证传统控制器能跟踪任意机动。
@@ -73,7 +73,7 @@ omega_command_ref = omega_ref + tau * (alpha_ref - alpha_ff)
 
 `AnalyticTrajectory` 直接返回 `ReferencePoint`，`TrajectoryPlayer` 对齐进入 CMD 的位置/航向，并按真实时间生成预测窗口。没有旧生成器、旧 CMD 宏、`set_2D8_ref()` 或 `LegacyTrajectoryReference`。
 
-`SampledTrajectory` 只服务于离散源；omtraj 的 CSV 在 `omtraj_reference.cpp` 转成通用定时参考后，才交给统一轨迹播放器。它的角加速度仍是差分近似，不伪造 snap。
+`SampledTrajectory` 服务于一般离散源。omtraj v2 在 `omtraj_reference.cpp` 封装为模型积分的 `Trajectory`：推力/角速度一阶保持，p/v/q 用同一动力学积分，角加速度和推力变化率取区间斜率，不伪造 jerk/snap。播放要求已校验的 v2 模型和悬停首末边界，v1 需重新生成。
 
 三个控制器公共入口统一使用 `ReferenceWindow` + `ControlModeReference`；不再接受包含另一份位置参考的 `Ref_State_t`。后者仅留在 FSM 模式参考内部与 QuadControl 私有控制律。
 
@@ -85,7 +85,7 @@ NMPC 对新解析轨迹的气动修正同步解析更新姿态、角速度和角
 
 ```bash
 colcon build --packages-select ratectrl_msgs px4ctrl --symlink-install
-colcon test --packages-select px4ctrl --ctest-args -R '^(trajectory_test|control_reference_test|controller_adapter_test|acados_nmpc_test)$' --output-on-failure
+colcon test --packages-select px4ctrl --ctest-args -R '^(omtraj_test|trajectory_test|control_reference_test|controller_adapter_test|ommpc_test|acados_nmpc_test)$' --output-on-failure
 ```
 
 生成模型的参数维度由 12 改为 15，新增三个前馈分量；生成脚本及 C 文件同步更新。

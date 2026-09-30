@@ -16,7 +16,7 @@ def generate_launch_description():
     planner = Node(
         package='px4ctrl', executable='omtraj_visualizer_node',
         name='omtraj_visualizer', output='screen',
-        parameters=[str(config_dir / 'omtraj.yaml')])
+        parameters=[str(config_dir / 'omtraj.yaml'), str(config_dir / 'omtraj_tracking.yaml')])
     rviz = Node(
         package='rviz2', executable='rviz2', name='omtraj_rviz',
         arguments=['-d', str(config_dir / 'omtraj.rviz')], output='screen',

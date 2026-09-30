@@ -147,11 +147,11 @@ ros2 launch px4ctrl omtraj_visualizer.launch.py
 ros2 launch px4ctrl omtraj_visualizer.launch.py rviz:=false
 ```
 
-修改 `waypoint_count`、`waypoints.point_0...`、初末位置/速度/偏航及 `optimizer.*`。算法以 SCP 和 OSQP 求解固定时长可行性子问题，通过 CSTC 选择有序航点通过节点，并可在外层搜索较短的可行总时间。结果 success 表示约束可行，另有 converged 状态，不应把局部数值搜索结果当作全局最优证明。
+任务参数在 `omtraj.yaml`，独立物理范围在 [omtraj_tracking.yaml](src/realflight_modules/px4ctrl/config/omtraj_tracking.yaml)，launch 同时加载。算法按 `0913/wenzhang0710.docx` 第 III 节实现：9 维 SO(3) 局部增量、联合优化总时间 T、L1 虚拟控制、CSTC 有序航点。Shen 文章仅作为航点约束参考。推力/角速度及其变化率、执行器指令余量、速度/倾角和逐电机限制都是硬约束；没有额外轨迹平滑目标或外层时间二分。
 
-重要配置包括网格数、总时间区间、推力/角速度边界、信赖域、输入平滑项，以及可选推力变化率/角加速度限制。当前 `enforce_input_rate_constraints` 和 `enforce_hover_boundary_input` 都为 false，不能仅凭路径看起来平滑认定内环容易跟踪。
+QP 预消元、信赖域内冗余行筛除和按需 L1 可行性恢复，非线性回溯，独立加密积分验收并补充节点间约束。success 表示验收通过，converged 另表示局部收敛，不代表全局最优。详细公式对应、参数影响和闭环证据见 [TRAJECTORIES.md](src/realflight_modules/px4ctrl/TRAJECTORIES.md#omtraj文稿方法约束与控制器对接)。
 
-优化成功且 `output.save_trajectory=true` 时保存 `datalog/omtraj/omtraj_optimized.csv`。控制侧 `trajectory.omtraj.file` 必须对应此文件；设置 `trajectory.type: omtraj` 并重启控制器后才会执行它。优化显示节点本身不控制飞机。
+成功时保存 `datalog/omtraj/omtraj_manifold_v2.csv`；v2 包含模型并在加载时复查动力学。旧 v1 不能直接用于新版控制播放。控制侧设置 `trajectory.type: omtraj`、确认 `trajectory.omtraj.file` 并重启后才会执行。优化显示节点本身不控制飞机。
 
 控制器加载时会以 CSV 起点为基准，对齐进入 CMD 的当前位置和偏航，因而 CSV 的初始高度不是一个会直接命令飞机飞到的绝对起飞高度；若任务需要起飞段，要在轨迹中表达。CSV 修改后需重启控制节点重新加载。
 
@@ -333,7 +333,7 @@ ros2 launch minco minco_visualizer.launch.py
 | 调模型、PID、MPC/NMPC 参数 | `px4ctrl/config/params.yaml` | 默认按修改配置、重启相关节点使用；不要假定支持即时热更新 |
 | 调八字尺度/速度 | `trajectory.figure_eight.*` | 重启后重新生成与检查 |
 | 调圆/螺旋 | `trajectory.horizontal_circle/vertical_circle/helix.*` | 重启后重新生成与检查 |
-| 改离线优化航点/限制 | `omtraj.yaml` | 重跑优化，成功生成 CSV 后重启控制器 |
+| 改离线优化航点/限制 | `omtraj.yaml`、`omtraj_tracking.yaml` | 重跑优化，成功生成 CSV 后重启控制器 |
 | 改噪声/风场/电机时间常数 | `quadsim_mujoco/config/params.yaml` | 重启仿真 |
 | 改记录范围和记录触发 | `flight_data_recorder/config/recorder.yaml` | 重启记录器 |
 | 改 ESC 映射/诊断超时 | `ratectrl_diagnostics.yaml` | 重启内环 |

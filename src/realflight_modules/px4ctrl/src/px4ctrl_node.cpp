@@ -467,7 +467,7 @@ int main(int argc, char *argv[])
 	node->set_parameter(rclcpp::Parameter(
 		"trajectory.omtraj.file",
 		uav_utils::projectPath(
-			trajectory_file.empty() ? "datalog/omtraj/omtraj_optimized.csv" : trajectory_file,
+			trajectory_file.empty() ? "datalog/omtraj/omtraj_manifold_v2.csv" : trajectory_file,
 			ament_index_cpp::get_package_share_directory("px4ctrl")).string()));
 
 

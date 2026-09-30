@@ -576,6 +576,14 @@ bool PX4CtrlFSM::prepare_cmd_trajectory()
             cmd_trajectory_ = std::make_shared<px4ctrl::AnalyticTrajectory>(o);
         }
         px4ctrl::TrajectoryLimits limits;
+#if PX4CTRL_PRIMARY_CONTROLLER != 0
+        const auto first_reference = cmd_trajectory_->evaluate(0.0);
+        if (first_reference.aerodynamics_included &&
+            ((first_reference.model_linear_drag - controller.options().linear_drag).norm() > 1e-6 ||
+            std::abs(first_reference.model_horizontal_lift - controller.options().horizontal_lift) > 1e-6)) {
+            throw std::invalid_argument("Omtraj/controller aerodynamic model mismatch; regenerate with matching model");
+        }
+#endif
         limits.gravity = p.gra; limits.mass = p.uav.mass;
         limits.inertia = {p.uav.Jvx, p.uav.Jvy, p.uav.Jvz};
         limits.arm = p.uav.l; limits.arm_angle = p.uav.beta_deg * 3.14159265358979323846 / 180.0;

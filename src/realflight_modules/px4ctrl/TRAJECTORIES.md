@@ -1,10 +1,10 @@
 # 解析轨迹与统一参考接口
 
-本次按 `0913/轨迹生成/uav_trajectory_design.tex` 实现水平加速圆、竖直俯仰翻转圆、水平轴滚转螺旋，并重新实现水平八字。保留 omtraj 优化算法、可视化和 CSV 格式；删除原 minimum-snap、barrel-roll、five-turn、figure-eight 生成器、`set_2D8_ref()` 和 `LegacyTrajectoryReference`。
+本次按 `0913/轨迹生成/uav_trajectory_design.tex` 实现水平加速圆、竖直俯仰翻转圆、水平轴滚转螺旋，并重新实现水平八字。omtraj 按 `0913/wenzhang0710.docx` 第 III 节重构，使用含动力学模型的 v2 CSV；删除原 minimum-snap、barrel-roll、five-turn、figure-eight 生成器、`set_2D8_ref()` 和 `LegacyTrajectoryReference`。
 
 ## 使用与参数
 
-在 `config/params.yaml` 设置 `trajectory.type`，取值为 `horizontal_circle`、`vertical_circle`、`helix`、`figure_eight`、`omtraj`。默认是 `figure_eight`。三个控制器使用同一选择入口，不再有 CMD 轨迹编译宏。所有参数在启动时读取、生成并检查；修改后重启控制节点，活动轨迹不热切换。
+在 `config/params.yaml` 设置 `trajectory.type`，取值为 `horizontal_circle`、`vertical_circle`、`helix`、`figure_eight`、`omtraj`。当前工作区选择为 `helix`，以实际 YAML 为准。三个控制器使用同一选择入口，不再有 CMD 轨迹编译宏。所有参数在启动时读取、生成并检查；修改后重启控制节点，活动轨迹不热切换。
 
 | 参数 | 含义与默认值 |
 |---|---|
@@ -43,7 +43,7 @@
 ## 统一接口
 
 ```text
-AnalyticTrajectory / SampledTrajectory(omtraj 文件边界)
+AnalyticTrajectory / OmReference(omtraj v2 模型积分) / SampledTrajectory
   → Trajectory::evaluate(t) → ReferencePoint
   → TrajectoryPlayer（时间、刚体对齐、预测网格）→ ReferenceWindow
   → QuadControl / OmMpcControl / AcadosNmpcControl
@@ -56,7 +56,7 @@ AnalyticTrajectory / SampledTrajectory(omtraj 文件边界)
 
 `kinematics_valid` 表示 p 至 snap 来自同一可微曲线，`angular_acceleration_valid` 区分有效零与缺失角加速度。NMPC 对解析轨迹的气动补偿连同一、二阶姿态导数一起解析计算，保留倒飞姿态分支；不在默认气动补偿打开后又把解析前馈退化为窗口差分。这是基于名义姿态的一次气动力修正，并非耦合气动方程的全局求解。
 
-omtraj 仅在文件边界转换为通用 `TimedReference`，优化器结果类型不进入 FSM 或控制器。其内部仍按离散数据插值，并从世界角速度差分补出角加速度；不虚构解析 jerk/snap。终点后也明确悬停，但 CSV 最后一个非悬停输入到 HOLD 不保证 C4；需要平滑终端时应在离线任务中约束它。
+omtraj 在文件边界封装为 `Trajectory`，优化器类型不进入 FSM 或控制器。`OmReference` 用优化时的动力学和一阶保持（FOH）推力、角速度积分求值；角加速度、推力变化率直接取区间斜率，避免独立插值造成 p/v/q/u 不一致。它不提供 jerk/snap。播放要求首末状态为水平静止悬停，结束后保持末位置。节点动力学残差受独立校验容差限制，不宣称严格 C4。详细实现与参数见下节。
 
 下层 `RatesThrustSetpoint` 的单位与消息布局不变：总推力 N、机体角速度 rad/s、角加速度前馈 rad/s²。角加速度按实际姿态转换到当前机体系。轨迹力矩只用于离线分配检查，不叠加到内环重复计算。
 
@@ -66,7 +66,7 @@ omtraj 仅在文件边界转换为通用 `TimedReference`，优化器结果类�
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 colcon build --packages-select px4ctrl --symlink-install --cmake-args -DBUILD_TESTING=ON
-ctest --test-dir build/px4ctrl -R '^(trajectory_test|control_reference_test|controller_adapter_test|acados_nmpc_test)$' --output-on-failure
+ctest --test-dir build/px4ctrl -R '^(omtraj_test|trajectory_test|control_reference_test|controller_adapter_test|ommpc_test|acados_nmpc_test)$' --output-on-failure
 python3 script/analyze_trajectories.py
 ```
 
@@ -84,3 +84,93 @@ python3 script/analyze_trajectories.py
 旧五圈 QP 参数曾测得峰值速度 7.65 m/s、推力加速度 65.42 m/s²、角速度 10.85 rad/s，首尾角速度约 0.146 rad/s。新方案降低了名义推力峰值，解决了首尾残余角速度和缓存差分前馈，并使直径/每圈推进量可直接解释。但旧方案与新默认圈数、时间律不同，这不是同一任务的闭环性能对照；不能仅据这些峰值宣称实际跟踪更好。
 
 采样检查使用当前质量、惯量、力臂、反扭矩系数以及真实内环电机编号，联合计算 `tau=I*alpha+omega×I*omega` 后逐电机检查上下限。检查通过仅表示无气动名义参考与静态分配可行；没有替代电机迟滞/来流/电池限流和真实闭环仿真，也不是连续时间峰值证明。高度限制是相对激活位置，不是地形避障。原系统的特技中断恢复能力仍需单独验证。
+
+
+## omtraj：文稿方法、约束与控制器对接
+
+依据 `0913/wenzhang0710.docx` 第 III 节实现；Shen 2024 仅用于航点约束的参考，没有替换为其 13 维状态优化方案。物理目标始终是总时间 T。计算时间通过稀疏实现减少，可跟踪性通过约束限定；没有添加轨迹平滑、控制能量或跟踪误差作为竞争目标。
+
+| 文稿内容 | 实现 |
+|---|---|
+| x=(p,v,R)，右乘 SO(3) 局部增量 | 每节点 9 维状态增量；四元数仅用于存储和积分，更新 R exp(δθ) |
+| t=Tτ，自由终止时间 | ΔT 与状态、输入、航点进度在同一个 SCP 子问题联合优化，无外层时间二分 |
+| 线性化动力学、虚拟控制 | 保留名义动力学缺陷、下一节点旋转对数映射的导数及 ΔT 导数；正常步骤将虚拟控制置零；不可行时按需加入 L1 绝对值上图变量恢复可行性 |
+| CSTC 航点 | μ(||p−wp||²−r²)≤0；λ₀=1、λN=0、λk+1=λk−μk；不预先锁死通过时刻 |
+| 有序通过 | λj≤λj+1；结合非负进度和 CSTC 保证首次通过的顺序，并独立检查实际按序进入航点球 |
+| 姿态锥 | 世界竖直与机体 z 轴夹角；全局限制或按航点触发的 `waypoints.tilt_i` |
+| 数值稳定 | 状态/进度增量正则、信赖域、实际非线性 merit 回溯、逐步收紧 CSTC 松弛 |
+
+文稿中的旋转方向按 `R: body→world` 统一；动力学线性化使用 ΔT 而非重复累加绝对 T，并保留名义缺陷。这些是使公式可执行的一致性修正。增量正则及虚拟控制罚项属于 SCP 求解机制，不是另加的物理优化指标。保留微小输入、时间增量正则以稳定 QP。
+
+代码拆分为 `omtraj.cpp`（SCP）、内部 `omtraj_qp.h`（稀疏 QP/预消元）、`omtraj_dynamics.cpp`（模型/约束/积分）、`omtraj_io.cpp`（独立校验与文件）、`omtraj_reference.cpp`（控制参考源）。移除额外的进度乘积排序约束和航点辅助松弛变量，保留原始 CSTC 与逐步收紧的 σ。每次 QP 代入固定变量、合并单变量约束，再按当前信赖域筛掉不可能激活的线性行；这些行下一次重新评估，不锁死航点时刻。
+
+精度随非线性残差收紧，避免远离可行域时过度求解。接近可行域时，修正步骤暂不缩短 T，但允许略增 T 以消除缺陷，随后继续时间优化。筛选后的行结构会变化，因此每次对子问题重新分解，避免累积无用稀疏项和复用失配的对偶变量。QP 状态只决定是否尝试更新，不能充当物理可行性证明。
+
+### 参数文件与可跟踪性
+
+任务/数值参数在 [omtraj.yaml](config/omtraj.yaml)，机体模型与可跟踪范围在 [omtraj_tracking.yaml](config/omtraj_tracking.yaml)。launch 同时加载两份文件。当前模型参数与控制器 `params.yaml` 一致；修改质量、气动系数或执行器时间常数时，应同步更新并重新生成轨迹。
+
+| 硬约束 | 默认范围及用途 |
+|---|---|
+| 推力加速度 aT | 1～30 m/s²，为反馈留余量 |
+| 机体角速度 ω | 各轴 ±4 rad/s，低于控制器的 ±14 rad/s |
+| 推力变化率 / 角加速度 | ±40 m/s³ / 各轴 ±16 rad/s²，限制执行器变化需求 |
+| 一阶滞后指令预算 | aT+τT·aTdot 仍在推力范围；当前内环具有角加速度前馈，角速度/角加速度/电机限制共同预留反馈余量 |
+| 速度 / 倾角 | 速度模长 ≤6 m/s；机体 z 轴倾角 ≤π/2 |
+| 相对高度 | 相对轨迹起点 ≥0 m（控制器允许 −0.01 m，留出余量）；不是地形避障 |
+| 逐电机推力 | 用 τ=Jα+ω×Jω 和真实分配矩阵检查上下限，范围 0.5～17.9723 N；低于上限并高于物理怠速 0.12363 N 以预留反馈余量 |
+| 首末状态与输入 | 静止、水平、aT=g、ω=0，与播放器悬停接口衔接 |
+
+`tracking.waypoint_margin=0.05` 将任务的 12 cm 航点球缩为规划的 7 cm 球。如果实际位置误差始终不超过 5 cm，则对应时刻仍在任务球内（三角不等式）。该参数是空间余量，不是任意外扰下的闭环误差证明。
+
+电机约束沿用文稿忽略转子惯性项的近似，静态电机推力与转速平方等价。它没有建模电池压降、所有内环 PID/滤波动态或任意外扰，因此不能仅靠这些约束证明实机跟踪稳定。
+
+参数文件不会使算法结构变得不稳定，但约束过紧、初值较差或最大时间太短会导致不可行或 SCP 不收敛。建议先固定数值容差、使用已验证的默认配置；按闭环结果逐步调整物理上限，每次重跑规划和仿真。`initial_speed` 仅影响初始猜测，不是速度约束。默认 40 区间、每区间 12 个 RK4 子步；网格数控制轨迹表达能力，积分子步控制动力学精度。增加前者增加 QP 规模；增加后者不会增加 QP 变量。不能通过放宽物理校验容差来换取“成功”。
+
+### 验收、CSV 与播放
+
+优化结束用两倍积分子步复查动力学，检查粗细积分差；积分误差过大时自动倍增 RK4 子步（最多 100），不会增加 QP 维度。并按每区间至少 10 点、间隔不大于 5 ms 的网格检查物理约束。节点间出现超限时，把该区间最差位置加入下一次 QP。这个过程是数值加密校验，不是连续时间峰值的解析证明。动力学分别采用位置/速度/姿态容差；`constraint_tolerance` 应用于归一化的约束行，不能统一解释成米或弧度。
+
+`success` 表示存在通过独立验收的轨迹；`converged` 另外要求原约束通过、σ=0、退出可行性恢复、子问题达到求解精度且局部模型预期改进相对信赖域足够小。采用模型改进作为近似驻点判据，避免仅因冗余输入方向仍变化就耗尽预算。仅 OSQP 达到迭代上限不能获得该标志。达到 SCP 预算时可返回此前最短的已验收轨迹，并注明未收敛；不声称全局最优。
+
+v2 CSV 保存模型、积分子步数和节点 p/v/q/aT/ω；加载时重新检查模型动力学。CSV 本身不保存完整任务约束或优化历史，因此“可加载”不等于对任意新参数文件可行，也不会伪造 converged=true。旧 v1 文件可读取检查，但控制播放器拒绝执行，需要重新规划。保存先写临时文件，成功后原子替换。
+
+默认输出 `datalog/omtraj/omtraj_manifold_v2.csv`。在 `params.yaml` 设置 `trajectory.type: omtraj` 并确认 `trajectory.omtraj.file` 后，重新启动控制节点。播放器按进入 CMD 的位置、偏航整体对齐，CSV 起始高度不是绝对起飞命令。
+
+接口传递 `aerodynamics_included`、模型系数、`thrust_rate`/有效标志和机体角加速度。OMMPC、acados 在模型匹配时保留规划器的气动参考，不再二次补偿；不匹配则拒绝该参考。OMMPC 优先使用解析的区间推力斜率构建执行器输入。已有公共 `ReferenceWindow` 接口和内环前馈通道继续使用，控制器不依赖优化器内部变量。
+
+批量规划示例（在工作区根目录，先构建并 source）：
+
+```bash
+ros2 run px4ctrl omtraj_visualizer_node --ros-args \
+  --params-file src/realflight_modules/px4ctrl/config/omtraj.yaml \
+  --params-file src/realflight_modules/px4ctrl/config/omtraj_tracking.yaml \
+  -p exit_after_solve:=true
+```
+
+### 回归与闭环证据
+
+测试覆盖 QP 消元与矛盾约束、点到点、自由时间、有序航点、低速限制、动力学导数、模型一致性、CSV 篡改拒绝、姿态锥和逐电机限制；同时运行公共参考接口、控制器适配和两种 MPC 回归。
+
+旧版七航点基线在 `datalog/omtraj_refactor/final_planning/`：60 区间、T=8.979448 s、耗时 34.221 s、100 次 SCP、未满足局部终止条件。QP 占 33.846 s，77 个子问题达到 3000 次迭代上限。保守约束不意味着 QP 容易求解：重复约束、辅助松弛以及不必要的高精度都会拖慢收敛。
+
+2026-09-30 最终复核（本机单次计时，不能当作实时上界）：
+
+| 配置 | 飞行时间 | 规划耗时 | SCP 轮数 | 局部终止条件 |
+|---|---:|---:|---:|---|
+| 旧实现、原 60 区间及约束 | 8.979448 s | 34.221 s | 100 | 未满足 |
+| 新实现、同一 60 区间及约束 | 9.085473 s | 7.606 s | 100 | 未满足 |
+| 新默认、40 区间及闭环验收约束 | 8.077670 s | 3.322 s | 35 | 满足 |
+
+同网格对比保留旧数值配置，耗时下降约 4.5 倍，但返回的局部可行解略长；不能把它说成同样最优性的加速。新默认同时调整网格、数值参数和物理范围，整体约快 10.3 倍，飞行时间缩短约 10%。默认运行的 34 个已接受 QP 步耗时中位数 76.5 ms、P95 196.7 ms，日志保留每步 OSQP 迭代数与残差；仍属于秒级离线规划。参数、源码哈希、日志、旧默认备份及最终参考位于 `datalog/omtraj_fast/final_planning/`。
+
+| 最终参考闭环 | 位置 RMSE | 最大位置误差 | 控制回退 | 电机输出触限 |
+|---|---:|---:|---:|---:|
+| `agile40_v12_noise7` | 1.94 cm | 3.41 cm | 0 | 0 |
+| `agile40_v12_noise42` | 1.47 cm | 3.25 cm | 0 | 0 |
+
+两组均按序进入全部 7 个任务航点球（半径 12 cm），并覆盖全程飞行及约 6.77 s 末端保持。实际电机消息分别持续到 1016.9925 / 1016.9900 s，仿真结束于 1017.0 s。详细结果见各目录的 `metrics.json`、`waypoint_audit.json`、`raw.npz` 与日志。最终默认 CSV 与两组冻结参考逐字节相同。六个测试套件共 49 个测试通过。
+
+当前规划和闭环数据见 `datalog/omtraj_fast/`。闭环使用当前 OMMPC 与 MuJoCo 电机/刚体/气动模型，位置噪声标准差 0.01 m、速度噪声标准差 0.03 m/s。更激进的 6.489869 s 候选最大误差达到 6.25 cm，未满足验收；默认参数据此收紧角加速度、推力变化率，并增加电机低端余量。
+
+每组实验冻结参考 CSV、配置、二进制和源码哈希。独立 ROS 域避免实验串扰；分析器拒绝时间倒退或控制数据未覆盖全程的实验。上述结果仅适用于已测工况，不是任意风扰、模型失配或实机下的跟踪保证。输出油门触限统计不等于分配器内部裁剪统计。部分运行在仿真时钟结束后出现既有内环估计器 `XTWX` 奇异异常，需同时核对电机消息覆盖时间，不能据此声称退出流程正常。

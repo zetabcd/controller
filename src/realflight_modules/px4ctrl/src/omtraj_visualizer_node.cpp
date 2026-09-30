@@ -45,9 +45,11 @@ std_msgs::msg::ColorRGBA color(float r, float g, float b, float a = 1.0F)
 class OmTrajectoryVisualizer : public rclcpp::Node
 {
 public:
+  bool succeeded() const {return result_.success;}
   OmTrajectoryVisualizer()
   : Node("omtraj_visualizer")
   {
+    declare_parameter<bool>("exit_after_solve", false);
     frame_id_ = declare_parameter<std::string>("frame_id", "map");
     marker_topic_ = declare_parameter<std::string>(
       "visualization.marker_topic", "omtraj/markers");
@@ -67,10 +69,10 @@ public:
       0.005, declare_parameter<double>("visualization.trajectory_width", 0.055));
     save_trajectory_ = declare_parameter<bool>("output.save_trajectory", true);
     trajectory_output_file_ = declare_parameter<std::string>(
-      "output.trajectory_file", "datalog/omtraj/omtraj_optimized.csv");
+      "output.trajectory_file", "datalog/omtraj/omtraj_manifold_v2.csv");
     if (save_trajectory_) {
       trajectory_output_file_ = uav_utils::projectPath(
-        trajectory_output_file_.empty() ? "datalog/omtraj/omtraj_optimized.csv" : trajectory_output_file_,
+        trajectory_output_file_.empty() ? "datalog/omtraj/omtraj_manifold_v2.csv" : trajectory_output_file_,
         ament_index_cpp::get_package_share_directory("px4ctrl")).string();
     }
 
@@ -78,6 +80,10 @@ public:
       0, static_cast<int>(declare_parameter<int>("waypoint_count", 3)));
     const double waypoint_tolerance = std::max(
       0.0, declare_parameter<double>("waypoint_tolerance", 0.12));
+    const double waypoint_margin = declare_parameter<double>("tracking.waypoint_margin", 0.0);
+    if (!std::isfinite(waypoint_margin) || waypoint_margin < 0 || waypoint_margin >= waypoint_tolerance) {
+      throw std::invalid_argument("Waypoint margin must be nonnegative and smaller than task tolerance");
+    }
     waypoints_.reserve(static_cast<std::size_t>(waypoint_count));
     for (int i = 0; i < waypoint_count; ++i) {
       OmTrajectoryWaypoint waypoint;
@@ -85,7 +91,8 @@ public:
       // point preserves the desired [x,y,z] grouping without parsing strings.
       waypoint.position = vector3Parameter(
         "waypoints.point_" + std::to_string(i), {});
-      waypoint.tolerance = waypoint_tolerance;
+      waypoint.tolerance = waypoint_tolerance - waypoint_margin;
+      waypoint.maximum_tilt = declare_parameter<double>("waypoints.tilt_" + std::to_string(i), M_PI);
       waypoints_.push_back(waypoint);
       RCLCPP_INFO(
         get_logger(), "Loaded waypoint[%d] = [%.3f, %.3f, %.3f], tolerance=%.3f m",
@@ -106,84 +113,59 @@ public:
 
     OmTrajectoryOptions options;
     options.intervals = declare_parameter<int>("optimizer.intervals", options.intervals);
-    options.max_scp_iterations = declare_parameter<int>(
-      "optimizer.max_scp_iterations", options.max_scp_iterations);
-    options.max_time_search_iterations = declare_parameter<int>(
-      "optimizer.max_time_search_iterations", options.max_time_search_iterations);
-    options.minimum_time = declare_parameter<double>(
-      "optimizer.minimum_time", options.minimum_time);
-    options.maximum_time = declare_parameter<double>(
-      "optimizer.maximum_time", options.maximum_time);
-    options.initial_speed = declare_parameter<double>(
-      "optimizer.initial_speed", options.initial_speed);
-    options.time_search_tolerance = declare_parameter<double>(
-      "optimizer.time_search_tolerance", options.time_search_tolerance);
-    options.thrust_acceleration_min = declare_parameter<double>(
-      "optimizer.thrust_acceleration_min", options.thrust_acceleration_min);
-    options.thrust_acceleration_max = declare_parameter<double>(
-      "optimizer.thrust_acceleration_max", options.thrust_acceleration_max);
-    const auto body_rate_max = vector3Parameter(
-      "optimizer.body_rate_max", {14.0, 14.0, 14.0});
-    options.body_rate_max = body_rate_max;
-    options.position_trust_region = declare_parameter<double>(
-      "optimizer.position_trust_region", options.position_trust_region);
-    options.velocity_trust_region = declare_parameter<double>(
-      "optimizer.velocity_trust_region", options.velocity_trust_region);
-    options.attitude_trust_region = declare_parameter<double>(
-      "optimizer.attitude_trust_region", options.attitude_trust_region);
-    options.thrust_trust_region = declare_parameter<double>(
-      "optimizer.thrust_trust_region", options.thrust_trust_region);
-    options.body_rate_trust_region = vector3Parameter(
-      "optimizer.body_rate_trust_region", {4.0, 4.0, 4.0});
-    options.scp_backtracking_steps = declare_parameter<int>(
-      "optimizer.scp_backtracking_steps", options.scp_backtracking_steps);
-    options.state_regularization = declare_parameter<double>(
-      "optimizer.state_regularization", options.state_regularization);
-    options.input_regularization = declare_parameter<double>(
-      "optimizer.input_regularization", options.input_regularization);
-    options.input_smoothness = declare_parameter<double>(
-      "optimizer.input_smoothness", options.input_smoothness);
-    options.virtual_control_weight = declare_parameter<double>(
-      "optimizer.virtual_control_weight", options.virtual_control_weight);
-    options.convergence_tolerance = declare_parameter<double>(
-      "optimizer.convergence_tolerance", options.convergence_tolerance);
-    options.dynamics_tolerance = declare_parameter<double>(
-      "optimizer.dynamics_tolerance", options.dynamics_tolerance);
-    options.optimize_total_time = declare_parameter<bool>(
-      "optimizer.optimize_total_time", options.optimize_total_time);
-    options.enforce_input_rate_constraints = declare_parameter<bool>(
-      "optimizer.enforce_input_rate_constraints", options.enforce_input_rate_constraints);
-    options.enforce_hover_boundary_input = declare_parameter<bool>(
-      "optimizer.enforce_hover_boundary_input", options.enforce_hover_boundary_input);
-    options.thrust_acceleration_rate_max = declare_parameter<double>(
-      "optimizer.thrust_acceleration_rate_max", options.thrust_acceleration_rate_max);
-    options.body_rate_acceleration_max = vector3Parameter(
-      "optimizer.body_rate_acceleration_max", {20.0, 20.0, 20.0});
-    options.enable_cstc = declare_parameter<bool>(
-      "optimizer.enable_cstc", options.enable_cstc);
-    options.enforce_strict_waypoint_order = declare_parameter<bool>(
-      "optimizer.enforce_strict_waypoint_order", options.enforce_strict_waypoint_order);
-    options.lock_cstc_active_set_for_time_search = declare_parameter<bool>(
-      "optimizer.lock_cstc_active_set_for_time_search",
-      options.lock_cstc_active_set_for_time_search);
-    options.retry_cstc_on_locked_failure = declare_parameter<bool>(
-      "optimizer.retry_cstc_on_locked_failure", options.retry_cstc_on_locked_failure);
-    options.progress_trust_region = declare_parameter<double>(
-      "optimizer.progress_trust_region", options.progress_trust_region);
-    options.cstc_warm_start_iterations = declare_parameter<int>(
-      "optimizer.cstc_warm_start_iterations", options.cstc_warm_start_iterations);
-    options.cstc_initial_support_radius = declare_parameter<int>(
-      "optimizer.cstc_initial_support_radius", options.cstc_initial_support_radius);
-    options.cstc_relaxation_initial = declare_parameter<double>(
-      "optimizer.cstc_relaxation_initial", options.cstc_relaxation_initial);
-    options.cstc_relaxation_decay = declare_parameter<double>(
-      "optimizer.cstc_relaxation_decay", options.cstc_relaxation_decay);
-    options.cstc_slack_weight = declare_parameter<double>(
-      "optimizer.cstc_slack_weight", options.cstc_slack_weight);
-    options.cstc_tolerance = declare_parameter<double>(
-      "optimizer.cstc_tolerance", options.cstc_tolerance);
-    options.cstc_slack_tolerance = declare_parameter<double>(
-      "optimizer.cstc_slack_tolerance", options.cstc_slack_tolerance);
+    options.max_scp_iterations = declare_parameter<int>("optimizer.max_scp_iterations", options.max_scp_iterations);
+    options.integration_substeps = declare_parameter<int>("optimizer.integration_substeps", options.integration_substeps);
+    options.scp_backtracking_steps = declare_parameter<int>("optimizer.scp_backtracking_steps", options.scp_backtracking_steps);
+    options.optimize_total_time = declare_parameter<bool>("optimizer.optimize_total_time", options.optimize_total_time);
+    options.enforce_hover_boundary_input = declare_parameter<bool>("optimizer.enforce_hover_boundary_input", options.enforce_hover_boundary_input);
+    options.store_history = declare_parameter<bool>("optimizer.store_history", options.store_history);
+    options.minimum_time = declare_parameter<double>("optimizer.minimum_time", options.minimum_time);
+    options.maximum_time = declare_parameter<double>("optimizer.maximum_time", options.maximum_time);
+    options.initial_speed = declare_parameter<double>("optimizer.initial_speed", options.initial_speed);
+    options.thrust_acceleration_min = declare_parameter<double>("optimizer.thrust_acceleration_min", options.thrust_acceleration_min);
+    options.thrust_acceleration_max = declare_parameter<double>("optimizer.thrust_acceleration_max", options.thrust_acceleration_max);
+    options.position_trust_region = declare_parameter<double>("optimizer.position_trust_region", options.position_trust_region);
+    options.velocity_trust_region = declare_parameter<double>("optimizer.velocity_trust_region", options.velocity_trust_region);
+    options.attitude_trust_region = declare_parameter<double>("optimizer.attitude_trust_region", options.attitude_trust_region);
+    options.thrust_trust_region = declare_parameter<double>("optimizer.thrust_trust_region", options.thrust_trust_region);
+    options.time_trust_region = declare_parameter<double>("optimizer.time_trust_region", options.time_trust_region);
+    options.progress_trust_region = declare_parameter<double>("optimizer.progress_trust_region", options.progress_trust_region);
+    options.state_regularization = declare_parameter<double>("optimizer.state_regularization", options.state_regularization);
+    options.progress_regularization = declare_parameter<double>("optimizer.progress_regularization", options.progress_regularization);
+    options.maximum_virtual_control_weight = declare_parameter<double>("optimizer.maximum_virtual_control_weight", options.maximum_virtual_control_weight);
+    options.virtual_control_weight = declare_parameter<double>("optimizer.virtual_control_weight", options.virtual_control_weight);
+    options.cstc_merit_weight = declare_parameter<double>("optimizer.cstc_merit_weight", options.cstc_merit_weight);
+    options.convergence_tolerance = declare_parameter<double>("optimizer.convergence_tolerance", options.convergence_tolerance);
+    options.position_tolerance = declare_parameter<double>("optimizer.position_tolerance", options.position_tolerance);
+    options.velocity_tolerance = declare_parameter<double>("optimizer.velocity_tolerance", options.velocity_tolerance);
+    options.attitude_tolerance = declare_parameter<double>("optimizer.attitude_tolerance", options.attitude_tolerance);
+    options.constraint_tolerance = declare_parameter<double>("optimizer.constraint_tolerance", options.constraint_tolerance);
+    options.cstc_tolerance = declare_parameter<double>("optimizer.cstc_tolerance", options.cstc_tolerance);
+    options.cstc_relaxation_initial = declare_parameter<double>("optimizer.cstc_relaxation_initial", options.cstc_relaxation_initial);
+    options.cstc_relaxation_decay = declare_parameter<double>("optimizer.cstc_relaxation_decay", options.cstc_relaxation_decay);
+    options.body_rate_max = vector3Parameter("optimizer.body_rate_max", {options.body_rate_max.x(), options.body_rate_max.y(), options.body_rate_max.z()});
+    options.body_rate_trust_region = vector3Parameter("optimizer.body_rate_trust_region", {options.body_rate_trust_region.x(), options.body_rate_trust_region.y(), options.body_rate_trust_region.z()});
+    options.model.linear_drag = vector3Parameter("model.linear_drag", {options.model.linear_drag.x(), options.model.linear_drag.y(), options.model.linear_drag.z()});
+    options.tracking.rate_max = vector3Parameter("tracking.rate_max", {options.tracking.rate_max.x(), options.tracking.rate_max.y(), options.tracking.rate_max.z()});
+    options.tracking.angular_acceleration_max = vector3Parameter("tracking.angular_acceleration_max", {options.tracking.angular_acceleration_max.x(), options.tracking.angular_acceleration_max.y(), options.tracking.angular_acceleration_max.z()});
+    options.tracking.inertia = vector3Parameter("tracking.inertia", {options.tracking.inertia.x(), options.tracking.inertia.y(), options.tracking.inertia.z()});
+    options.model.gravity = declare_parameter<double>("model.gravity", options.model.gravity);
+    options.model.horizontal_lift = declare_parameter<double>("model.horizontal_lift", options.model.horizontal_lift);
+    options.tracking.enabled = declare_parameter<bool>("tracking.enabled", options.tracking.enabled);
+    options.tracking.motor_constraints = declare_parameter<bool>("tracking.motor_constraints", options.tracking.motor_constraints);
+    options.tracking.thrust_min = declare_parameter<double>("tracking.thrust_min", options.tracking.thrust_min);
+    options.tracking.thrust_max = declare_parameter<double>("tracking.thrust_max", options.tracking.thrust_max);
+    options.tracking.thrust_time_constant = declare_parameter<double>("tracking.thrust_time_constant", options.tracking.thrust_time_constant);
+    options.tracking.thrust_slew_max = declare_parameter<double>("tracking.thrust_slew_max", options.tracking.thrust_slew_max);
+    options.tracking.speed_max = declare_parameter<double>("tracking.speed_max", options.tracking.speed_max);
+    options.tracking.maximum_tilt = declare_parameter<double>("tracking.maximum_tilt", options.tracking.maximum_tilt);
+    options.tracking.minimum_relative_altitude = declare_parameter<double>("tracking.minimum_relative_altitude", options.tracking.minimum_relative_altitude);
+    options.tracking.mass = declare_parameter<double>("tracking.mass", options.tracking.mass);
+    options.tracking.arm = declare_parameter<double>("tracking.arm", options.tracking.arm);
+    options.tracking.arm_angle = declare_parameter<double>("tracking.arm_angle", options.tracking.arm_angle);
+    options.tracking.torque_to_thrust = declare_parameter<double>("tracking.torque_to_thrust", options.tracking.torque_to_thrust);
+    options.tracking.motor_min = declare_parameter<double>("tracking.motor_min", options.tracking.motor_min);
+    options.tracking.motor_max = declare_parameter<double>("tracking.motor_max", options.tracking.motor_max);
 
     marker_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
       marker_topic_, rclcpp::QoS(1).transient_local().reliable());
@@ -199,9 +181,9 @@ public:
         if (progress.states.empty()) {
           RCLCPP_WARN(
             get_logger(),
-            "[SOLVE] global=%zu attempt=%d SCP=%d/%d %s | "
+            "[SOLVE] global=%zu SCP=%d/%d %s | "
             "step=%.3fs QP=%.3fs elapsed=%.3fs T=%.3fs",
-            live_progress_count_, progress.time_attempt + 1,
+            live_progress_count_,
             progress.scp_iteration, max_iterations,
             progress.solver_status.c_str(), progress.step_solve_time,
             progress.qp_solve_time, progress.elapsed_solve_time, progress.total_time);
@@ -210,16 +192,16 @@ public:
         }
         RCLCPP_INFO(
           get_logger(),
-          "[SOLVE] global=%zu attempt=%d SCP=%d/%d | "
+          "[SOLVE] global=%zu SCP=%d/%d | "
           "step=%.3fs QP=%.3fs elapsed=%.3fs T=%.3fs | "
-          "update=%.2e dyn=%.2e virtual=%.2e wp=%.2e order=%.2e slack=%.2e | %s",
-          live_progress_count_, progress.time_attempt + 1,
+          "update=%.2e dyn=%.2e virtual=%.2e wp=%.2e order=%.2e | %s",
+          live_progress_count_,
           progress.scp_iteration, max_iterations,
           progress.step_solve_time, progress.qp_solve_time, progress.elapsed_solve_time,
           progress.total_time, progress.maximum_update,
           progress.maximum_dynamics_defect, progress.maximum_virtual_control,
           progress.maximum_waypoint_residual, progress.maximum_order_residual,
-          progress.maximum_cstc_slack, progress.solver_status.c_str());
+          progress.solver_status.c_str());
         publishLiveOptimizationFrame(progress);
       };
     OmTrajectoryOptimizer optimizer(options);
@@ -301,19 +283,20 @@ public:
         maximum_body_rate.x(), maximum_body_rate.y(), maximum_body_rate.z(),
         maximum_thrust_rate, maximum_body_rate_acceleration);
       const double thrust_utilization = maximum_thrust /
-        std::max(options.thrust_acceleration_max, 1.0e-9);
+        std::max(options.tracking.enabled ? std::min(options.thrust_acceleration_max,
+        options.tracking.thrust_max) : options.thrust_acceleration_max, 1.0e-9);
       const double body_rate_utilization =
         (maximum_body_rate.array() /
-        options.body_rate_max.cwiseMax(Eigen::Vector3d::Constant(1.0e-9)).array()).maxCoeff();
+        (options.tracking.enabled ? options.body_rate_max.cwiseMin(options.tracking.rate_max) :
+        options.body_rate_max).cwiseMax(Eigen::Vector3d::Constant(1.0e-9)).array()).maxCoeff();
       RCLCPP_INFO(
         get_logger(), "Control-bound utilization: thrust=%.1f%%, body-rate=%.1f%%",
         100.0 * thrust_utilization, 100.0 * body_rate_utilization);
       RCLCPP_INFO(
         get_logger(), "Final residuals: update=%.3e, nonlinear=%.3e, virtual=%.3e, waypoint=%.3e, "
-        "order=%.3e, slack=%.3e",
+        "order=%.3e",
         result_.maximum_update, result_.maximum_dynamics_defect, result_.maximum_virtual_control,
-        result_.maximum_waypoint_residual, result_.maximum_order_residual,
-        result_.maximum_cstc_slack);
+        result_.maximum_waypoint_residual, result_.maximum_order_residual);
     }
 
     RCLCPP_INFO(
@@ -425,7 +408,6 @@ private:
     status.color = color(0.2F, 0.08F, 0.02F);
     std::ostringstream text;
     text << "OPTIMIZATION LIVE (orange)  global step " << live_progress_count_
-         << "  attempt " << iteration.time_attempt + 1
          << "  SCP " << iteration.scp_iteration
          << "  T=" << std::fixed << std::setprecision(2) << iteration.total_time << "s"
          << "\nstep=" << std::fixed << std::setprecision(3) << iteration.step_solve_time
@@ -584,9 +566,14 @@ int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
   try {
-    rclcpp::spin(std::make_shared<OmTrajectoryVisualizer>());
+    auto node = std::make_shared<OmTrajectoryVisualizer>();
+    if (node->get_parameter("exit_after_solve").as_bool()) {
+      const int code = node->succeeded() ? 0 : 1; rclcpp::shutdown(); return code;
+    }
+    rclcpp::spin(node);
   } catch (const std::exception &exception) {
     RCLCPP_FATAL(rclcpp::get_logger("omtraj_visualizer"), "%s", exception.what());
+    rclcpp::shutdown(); return 1;
   }
   rclcpp::shutdown();
   return 0;

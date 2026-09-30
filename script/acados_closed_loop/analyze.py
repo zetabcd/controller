@@ -1,4 +1,4 @@
-"""Compare current analytic trajectories using their generated evaluation bounds."""
+"""Compare analytic or omtraj flights using explicit trajectory time bounds."""
 import argparse
 import json
 from pathlib import Path
@@ -17,7 +17,15 @@ def trajectory_info(folder):
     t = p['trajectory']
     kind = t['type']
     if kind == 'omtraj':
-        raise ValueError('CSV trajectories need explicit evaluation bounds; use an analytic trajectory here')
+        path = Path(t['omtraj']['file'])
+        if not path.is_absolute():
+            path = ROOT/path
+        samples = np.loadtxt(path, delimiter=',', comments='#', ndmin=2)
+        if len(samples) < 2 or samples[0, 0] != 0 or np.any(np.diff(samples[:, 0]) <= 0):
+            raise ValueError('Invalid omtraj time grid')
+        duration = float(samples[-1, 0])
+        return dict(kind=kind, duration=duration, main_start=0.0,
+                    main_end=duration, motion_start=0.0)
     fields = {k: t[k] for k in ('takeoff_height', 'takeoff_duration', 'settle_duration') if k in t}
     fields.update(t.get(kind, {}))
     fields['gravity'] = p['gra']
@@ -40,6 +48,9 @@ def interpolate(values, stamps, target):
 def load(folder):
     raw = np.load(folder/'raw.npz')
     s, d, m = (raw[k] for k in ('state', 'debug', 'motors'))
+    for name, samples in [('state', s), ('debug', d), ('motors', m)]:
+        if len(samples) < 2 or np.any(np.diff(samples[:, 0]) < 0):
+            raise ValueError(f'{folder}: missing or non-monotonic {name} timestamps')
     d = d[d[:, 0] >= s[0, 0]]
     _, indices = np.unique(d[:, 0], return_index=True)
     d = d[indices]
@@ -47,6 +58,8 @@ def load(folder):
         raise ValueError(f'{folder}: CMD never activated')
     start = d[d[:, 1] == 3][0, 0]
     info = trajectory_info(folder)
+    if min(d[-1, 0], m[-1, 0]) < start+info['duration']:
+        raise ValueError(f'{folder}: controller data does not cover the full trajectory')
     t = s[:, 0]-start
     ref = interpolate(d[:, 2:5], d[:, 0], s[:, 0])
     err = s[:, 3:6]-ref

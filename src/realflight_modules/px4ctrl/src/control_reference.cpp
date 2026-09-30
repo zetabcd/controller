@@ -82,7 +82,15 @@ ReferencePoint compensateReferenceAerodynamics(
   if (!drag.allFinite() || (drag.array()<0).any() || !std::isfinite(lift) || lift<0) {
     throw std::invalid_argument("Invalid aerodynamic coefficients");
   }
+  if (r.aerodynamics_included) {
+    if ((r.model_linear_drag-drag).norm()>1e-6 ||
+      std::abs(r.model_horizontal_lift-lift)>1e-6) {
+      throw std::invalid_argument("Trajectory/controller aerodynamic model mismatch");
+    }
+    return r;
+  }
   const Eigen::Matrix3d R=r.attitude.normalized().toRotationMatrix();
+  r.thrust_rate_valid=false; // correcting force changes its time derivative
   const Eigen::Vector3d vb=R.transpose()*r.velocity;
   Eigen::Vector3d aero=-drag.cwiseProduct(vb);
   aero.z()+=lift*vb.head<2>().squaredNorm();
@@ -134,13 +142,27 @@ ReferencePoint resolveReference(ReferencePoint r, double gravity)
     if ((r.kinematics_valid && (!r.acceleration.allFinite() || !r.jerk.allFinite() || !r.snap.allFinite())) ||
       !validQuaternion(r.attitude) || !std::isfinite(r.thrust_acceleration) ||
       r.thrust_acceleration <= 0 || !r.body_rate.allFinite() ||
-      (r.angular_acceleration_valid && !r.body_acceleration.allFinite()))
+      (r.angular_acceleration_valid && !r.body_acceleration.allFinite()) ||
+      (r.thrust_rate_valid && !std::isfinite(r.thrust_rate)) ||
+      (r.aerodynamics_included && (!r.model_linear_drag.allFinite() ||
+      (r.model_linear_drag.array() < 0).any() || !std::isfinite(r.model_horizontal_lift) ||
+      r.model_horizontal_lift < 0)))
     {
       throw std::invalid_argument("Invalid full-state reference");
     }
     r.attitude.normalize();
     r.acceleration = r.attitude * Eigen::Vector3d(0, 0, r.thrust_acceleration) -
       gravity * Eigen::Vector3d::UnitZ();
+    if (r.aerodynamics_included) {
+      if (!r.model_linear_drag.allFinite() || (r.model_linear_drag.array() < 0).any() ||
+        !std::isfinite(r.model_horizontal_lift) || r.model_horizontal_lift < 0) {
+        throw std::invalid_argument("Invalid reference aerodynamic model");
+      }
+      const Eigen::Vector3d vb = r.attitude.conjugate() * r.velocity;
+      Eigen::Vector3d aero = -r.model_linear_drag.cwiseProduct(vb);
+      aero.z() += r.model_horizontal_lift * vb.head<2>().squaredNorm();
+      r.acceleration += r.attitude * aero;
+    }
     const auto rotation = r.attitude.toRotationMatrix();
     r.yaw = std::atan2(rotation(1, 0), rotation(0, 0));
     if (!r.angular_acceleration_valid) {r.body_acceleration.setZero();}
@@ -214,7 +236,11 @@ void validateReferenceWindow(const ReferenceWindow & w, int horizon, double dt)
       !r.acceleration.allFinite() || !std::isfinite(r.yaw) ||
       !validQuaternion(r.attitude) || std::abs(r.attitude.norm() - 1) > 1e-6 ||
       !std::isfinite(r.thrust_acceleration) || r.thrust_acceleration <= 0 ||
-      !r.body_rate.allFinite() || (r.angular_acceleration_valid && !r.body_acceleration.allFinite()))
+      !r.body_rate.allFinite() || (r.angular_acceleration_valid && !r.body_acceleration.allFinite()) ||
+      (r.thrust_rate_valid && !std::isfinite(r.thrust_rate)) ||
+      (r.aerodynamics_included && (!r.model_linear_drag.allFinite() ||
+      (r.model_linear_drag.array() < 0).any() || !std::isfinite(r.model_horizontal_lift) ||
+      r.model_horizontal_lift < 0)))
     {
       throw std::invalid_argument("Invalid resolved control reference");
     }

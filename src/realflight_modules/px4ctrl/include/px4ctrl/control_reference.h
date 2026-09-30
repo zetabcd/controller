@@ -29,6 +29,8 @@ struct ReferencePoint
   double yaw{0.0}, yaw_rate{0.0}, yaw_acceleration{0.0};
   Eigen::Quaterniond attitude{Eigen::Quaterniond::Identity()};
   double thrust_acceleration{0.0};  // total nominal thrust / mass [m/s^2]
+  double thrust_rate{0.0};
+  bool thrust_rate_valid{false};
   Eigen::Vector3d body_rate{Eigen::Vector3d::Zero()};
   Eigen::Vector3d body_acceleration{Eigen::Vector3d::Zero()};
   // false: p/v/a/j/s/yaw derivatives are authoritative; resolve analytically.
@@ -37,6 +39,11 @@ struct ReferencePoint
   bool angular_acceleration_valid{false};
   // True only when p/v/a/jerk/snap come from one differentiable curve.
   bool kinematics_valid{false};
+  // Model-aware sources already include aerodynamic forces in q/thrust.
+  // The controller must check the model instead of applying compensation twice.
+  bool aerodynamics_included{false};
+  Eigen::Vector3d model_linear_drag{Eigen::Vector3d::Zero()};
+  double model_horizontal_lift{0};
 };
 using ReferencePoints = std::vector<ReferencePoint, Eigen::aligned_allocator<ReferencePoint>>;
 

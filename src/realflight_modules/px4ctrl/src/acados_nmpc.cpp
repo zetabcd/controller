@@ -32,10 +32,18 @@ void AcadosNmpcControl::prepareReferences(
   const auto & o = options();
   px4ctrl::validateReferenceWindow(window, o.horizon, o.prediction_dt);
   auto nominal = window;
+  for (const auto & r : nominal.points) {
+    if (r.aerodynamics_included &&
+      ((r.model_linear_drag - o.linear_drag).norm() > 1e-6 ||
+      std::abs(r.model_horizontal_lift - o.horizontal_lift) > 1e-6)) {
+      throw std::invalid_argument("Trajectory/NMPC aerodynamic model mismatch");
+    }
+  }
   const bool compensate_drag = o.linear_drag.squaredNorm() > 0 || o.horizontal_lift > 0;
   if (compensate_drag) {
     bool analytic = true;
     for (auto & r : nominal.points) {
+      if (r.aerodynamics_included) {continue;}
       r = px4ctrl::compensateReferenceAerodynamics(r, o.gravity, o.linear_drag, o.horizontal_lift);
       analytic = analytic && r.angular_acceleration_valid;
     }

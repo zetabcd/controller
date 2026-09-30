@@ -99,3 +99,18 @@ TEST(ControlReference, SampledAngularAccelerationIncludesChangingAxes)
     EXPECT_LT(r.body_acceleration.norm(), 1e-12);
   }
 }
+
+TEST(ControlReference, RejectsNonfiniteModelAndThrustDerivative)
+{
+  ReferenceWindow w;
+  w.dt = 0.02;
+  w.points.push_back(resolveReference(ReferencePoint{}, 9.805));
+  auto & r = w.points.front();
+  r.aerodynamics_included = true;
+  r.model_horizontal_lift = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(validateReferenceWindow(w, 0, w.dt), std::invalid_argument);
+  r.model_horizontal_lift = 0;
+  r.thrust_rate_valid = true;
+  r.thrust_rate = std::numeric_limits<double>::infinity();
+  EXPECT_THROW(validateReferenceWindow(w, 0, w.dt), std::invalid_argument);
+}

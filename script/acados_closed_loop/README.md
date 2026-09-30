@@ -1,7 +1,7 @@
 # OMMPC / acados / MuJoCo 闭环检查
 
 运行真实的 px4ctrl_node、px4ctrlrate_node、MuJoCo/QUAD 电机和气动模型。
-控制器不会连接默认 ROS 域：固定 ROS_DOMAIN_ID=72，只用本机 UDP 回环。
+控制器不会连接默认 ROS 域：默认 ROS_DOMAIN_ID=72，只用本机 UDP 回环；并行实验必须用 `--ros-domain-id` 分配不同域。
 实验启动前请确保此域没有其他实验。脚本只结束自己启动的进程。
 
 ```bash
@@ -28,7 +28,7 @@ python3 script/acados_closed_loop/analyze.py q18_seed42
 
 轨迹由传入 YAML 的 `trajectory.type` 选择。分析器使用参数快照调用 `trajectory_inspect`，
 按生成器的 main_start/main_end 评价圆/螺旋/八字主体，另报含进出场的 maneuver 指标。
-当前分析器支持四种解析轨迹；omtraj CSV 需要另行指定评价窗口，不会套用八字指标。
+omtraj 使用 CSV 的完整 [0,T] 作为 main/maneuver 窗口；时间戳倒退或控制日志未覆盖完整飞行时拒绝统计。运行脚本冻结 `reference.csv`，在参数快照中改为该路径，并记录参考文件 SHA256；之后重新规划不会改变已有实验的参考。
 同一套参数下仅改变 Qp 时也不能承诺同一实时执行序列；调度和 DDS 到达顺序会改变噪声使用。
 
 适配器用固定 deadline 的实时 400 Hz 步进及 /clock，控制节点 use_sim_time=true，

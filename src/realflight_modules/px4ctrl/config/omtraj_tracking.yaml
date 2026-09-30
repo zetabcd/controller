@@ -1,0 +1,32 @@
+# Physical envelope only. These are constraints, never extra optimization goals.
+# The coefficients below match params.yaml; update both after identification.
+omtraj_visualizer:
+  ros__parameters:
+    model:
+      gravity: 9.805
+      linear_drag: [0.3205918618988903, 0.34525277435265106, 0.5178791615289765] # kd/m
+      horizontal_lift: 0.012330456226880395 # kh/m
+    tracking:
+      enabled: true
+      waypoint_margin: 0.05   # shrink 12 cm task spheres to 7 cm; tracking budget 5 cm
+      thrust_min: 1.0          # mass-normalized thrust, m/s^2
+      thrust_max: 30.0
+      rate_max: [4.0, 4.0, 4.0] # rad/s, leaves room below controller's 14 rad/s
+      thrust_slew_max: 40.0    # m/s^3
+      angular_acceleration_max: [16.0, 16.0, 16.0] # rad/s^2, per axis
+      thrust_time_constant: 0.033
+      # Bound a_T+tau_T*dot(a_T). Angular acceleration feedforward is available;
+      # rate/alpha/motor limits reserve authority for attitude feedback.
+      speed_max: 6.0           # Euclidean norm, m/s
+      maximum_tilt: 1.5707963267948966        # radians; pi allows inversion
+      minimum_relative_altitude: 0.0 # relative to trajectory start
+      # Reconstruct torque=J*alpha+omega x J*omega and check each rotor thrust.
+      # Static allocation omits rotor inertia / unmodeled disturbances.
+      motor_constraints: true
+      mass: 0.811
+      inertia: [0.00191, 0.00237, 0.00360]
+      arm: 0.1216
+      arm_angle: 0.7853981633974483
+      torque_to_thrust: 0.011406015037593987
+      motor_min: 0.5                # above physical idle 0.12363 N; feedback reserve
+      motor_max: 17.972347331460142 # 70% physical maximum; reserve feedback authority

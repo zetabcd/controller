@@ -18,7 +18,7 @@ private:
   ReferencePoint terminal_;
   double gravity_;
 };
-// Persistence boundary only. The optimizer and its CSV format remain unchanged.
+// Omtraj v2 uses its integrated model-aware source, not SampledTrajectory.
 std::shared_ptr<const Trajectory> loadOmTrajectoryReference(
   const std::string & path,
   double gravity);

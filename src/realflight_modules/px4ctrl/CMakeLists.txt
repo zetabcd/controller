@@ -81,7 +81,7 @@ add_library(px4ctrl_reference STATIC src/control_reference.cpp src/trajectory.cp
 target_include_directories(px4ctrl_reference PUBLIC include)
 target_link_libraries(px4ctrl_reference PUBLIC Eigen3::Eigen)
 
-add_library(px4ctrl_omtraj STATIC src/omtraj.cpp src/omtraj_reference.cpp)
+add_library(px4ctrl_omtraj STATIC src/omtraj.cpp src/omtraj_dynamics.cpp src/omtraj_io.cpp src/omtraj_reference.cpp)
 target_include_directories(px4ctrl_omtraj PUBLIC include)
 target_link_libraries(px4ctrl_omtraj PUBLIC px4ctrl_reference Eigen3::Eigen osqp::osqp)
 
@@ -203,6 +203,8 @@ install(DIRECTORY config DESTINATION share/${PROJECT_NAME}/)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(omtraj_test test/omtraj_test.cpp)
+  target_link_libraries(omtraj_test px4ctrl_omtraj)
   ament_add_gtest(ommpc_test test/ommpc_test.cpp)
   target_link_libraries(ommpc_test px4ctrl_ommpc)
   ament_add_gtest(acados_nmpc_test test/acados_nmpc_test.cpp)
