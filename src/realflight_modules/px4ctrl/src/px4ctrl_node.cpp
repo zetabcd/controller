@@ -77,6 +77,10 @@ PX4ControlNode::PX4ControlNode(std::string name) : Node(name), fsm(*this)
 								   "/fmu/out/vehicle_status_v1",
 								   qos,
 								   std::bind(&States_Data_t::feed, &fsm.sta_data, std::placeholders::_1));	
+    land_detected_subscription_ = this->create_subscription<px4_msgs::msg::VehicleLandDetected>(
+        "/fmu/out/vehicle_land_detected",
+        rclcpp::QoS(rclcpp::KeepLast(1)).best_effort().durability_volatile(),
+        std::bind(&PX4CtrlFSM::feed_land_detected, &fsm, std::placeholders::_1));
 	battery_status_position_subscription_ = this->create_subscription<px4_msgs::msg::BatteryStatus>(
 								   "/fmu/out/battery_status", 
 								   qos,
@@ -719,6 +723,7 @@ int main(int argc, char *argv[])
 	while (rclcpp::ok()) 
 	{
 		rclcpp::spin_some(node);
+        node->fsm.update_flight_origin();
 #ifdef SIMULATION
 		node->fsm.process();
 #else

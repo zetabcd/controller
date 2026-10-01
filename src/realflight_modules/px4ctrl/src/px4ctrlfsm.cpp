@@ -63,24 +63,6 @@ void PX4CtrlFSM::process()
     dt_ = (now_time - last_time_).seconds();
     last_time_ = now_time;
 
-    const bool origin_pose_valid = pose_data.timestamp != 0 &&
-        pose_is_received(now_time) && pose_is_valid(pose_data) && pose_data.p.allFinite();
-#ifdef SIMULATION
-    // The simulator does not publish VehicleStatus; freeze its first valid pose.
-    if (!takeoff_origin_.valid() && origin_pose_valid) {
-        takeoff_origin_.update(false, true, pose_data.p);
-    }
-#else
-    // Only a received, fresh DISARMED status may refresh the ground origin.
-    const double status_age = (now_time - sta_data.rcv_stamp).seconds();
-    if (sta_data.timestamp != 0 && status_age >= 0.0 && status_age < 1.0 &&
-        (sta_data.arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_DISARMED ||
-         sta_data.arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_ARMED)) {
-        takeoff_origin_.update(vs_is_armed(), origin_pose_valid,
-            origin_pose_valid ? pose_data.p : Eigen::Vector3d::Zero());
-    }
-#endif
-
     // 执行状态机，使其步进一次
     cur_state_ = run_state_machine_once(&fsm_);
     // manual/auto_hover/cmd/safe 都属于外部控制状态。心跳在
@@ -139,9 +121,48 @@ void PX4CtrlFSM::reset_start_time()
     // sun: 重置任务相对时间，后续轨迹以新的状态进入时刻作为 t=0。
     start_time_ = px4controlnode_.get_clock()->now();
 }
+
+void PX4CtrlFSM::update_flight_origin()
+{
+    const auto now = px4controlnode_.get_clock()->now();
+    const bool valid = pose_data.timestamp != 0 && pose_is_received(now) &&
+        pose_is_valid(pose_data) && pose_data.p.allFinite();
+#ifdef SIMULATION
+    if (!takeoff_origin_.valid() && valid) {
+        takeoff_origin_.update(false, true, pose_data.p);
+    }
+#else
+    const double age = (now - sta_data.rcv_stamp).seconds();
+    if (sta_data.timestamp == 0 || age < 0.0 || age >= 1.0) {return;}
+    const bool armed = vs_is_armed();
+    if (!armed && sta_data.arming_state != px4_msgs::msg::VehicleStatus::ARMING_STATE_DISARMED) {
+        return;
+    }
+    takeoff_origin_.update(armed, valid, valid ? pose_data.p : Eigen::Vector3d::Zero());
+    if (flight_was_armed_ && !armed) {
+        landing_.cancel();
+        trajectory_reference_.clear();
+        reset_controller_();
+        pending_mode_switch_ = ModeSwitchTarget::NONE;
+        set_next_state(&fsm_, FSM_STATE(manual_on));
+        RCLCPP_INFO(px4controlnode_.get_logger(), "Disarmed: reset flight; ground origin can update.");
+    }
+    flight_was_armed_ = armed;
+#endif
+}
+
+void PX4CtrlFSM::feed_land_detected(const px4_msgs::msg::VehicleLandDetected::SharedPtr msg)
+{
+    // Duplicates must not extend the freshness of an old landed indication.
+    if (msg->timestamp == 0 || msg->timestamp == land_timestamp_) {return;}
+    land_timestamp_ = msg->timestamp;
+    land_received_time_ = px4controlnode_.get_clock()->now().seconds();
+    land_detected_ = msg->landed;
+}
 /* MANUAL(ONBOARD)模式 */ 
 void* PX4CtrlFSM::FSM_FUNCT(manual_on)(void * this_fsm)
 {   
+    landing_.cancel();
     // sun: manual_on 表示 PX4 本机模式仍掌握执行器；控制节点仅监视输入并等待切入 OFFBOARD。
     /* 状态切换 */ 
     RC_Data_t *pd = (RC_Data_t *)get_data_entry((FSM *)this_fsm);
@@ -219,6 +240,7 @@ void* PX4CtrlFSM::FSM_FUNCT(manual_on)(void * this_fsm)
 /* MANUAL(OFFBOARD)模式 */ 
 void* PX4CtrlFSM::FSM_FUNCT(manual)(void * this_fsm)
 {
+    landing_.cancel();
     // sun: manual 是 OFFBOARD 下的遥控姿态模式；首次进入时锁定现场状态并清控制器历史。
     if (get_last_state((FSM *)this_fsm) != FSM_STATE(manual))
     {
@@ -333,12 +355,20 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
         trajectory_reference_.clear();
         set_init_ref();
         record_position();
-        const bool taking_off = takeoff_origin_.takeoffPending();
-        hover_target_ = takeoff_origin_.enterHover(record_state_data.p + record_state_data.v * 0.3);
+        const bool taking_off = !landing_.requested() && takeoff_origin_.takeoffPending();
+        if (landing_.requested()) {
+            hover_target_ = record_state_data.p;
+            landing_.start(hover_target_, takeoff_origin_.position().z());
+            landing_start_time_ = now_time.seconds();
+            land_start_timestamp_ = land_timestamp_;
+            next_disarm_request_time_ = landing_start_time_;
+        } else {
+            hover_target_ = takeoff_origin_.enterHover(record_state_data.p + record_state_data.v * 0.3);
+        }
         const auto &origin = takeoff_origin_.position();
         RCLCPP_INFO(px4controlnode_.get_logger(),
             "%s: ground origin NWU [%.3f, %.3f, %.3f], target [%.3f, %.3f, %.3f] m",
-            taking_off ? "Relative takeoff" : "Position hold",
+            landing_.active() ? "Landing requested" : (taking_off ? "Relative takeoff" : "Position hold"),
             origin.x(), origin.y(), origin.z(),
             hover_target_.x(), hover_target_.y(), hover_target_.z());
         reset_point_reference_(record_state_data.p + record_state_data.v * 0.3);
@@ -372,6 +402,12 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
     if(pd->aux2_changed){
         switch (pd->aux2){
             case GEARS::UP:
+                if (landing_.active()) {
+                    pd->aux2_changed = false;
+                    RCLCPP_WARN(px4controlnode_.get_logger(),
+                        "Landing active: AUX2 DOWN cancels to manual; CMD restart is inhibited.");
+                    break;
+                }
                 // sun: CMD 轨迹会用到 p/v/a 多阶反馈，因此再次完整检查估计数据。
                 if (!pose_is_received(now_time))
                 {
@@ -423,7 +459,11 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
 #endif
     /* 任务 */
     // [LEGACY QuadControl] 先用当前 IMU 更新推力模型；OMMPC 不使用该映射。
-    set_point_hover(hover_target_.x(), hover_target_.y(), hover_target_.z());
+    if (landing_.active()) {
+        set_requested_landing_ref_();
+    } else {
+        set_point_hover(hover_target_.x(), hover_target_.y(), hover_target_.z());
+    }
     // set_manual_postion_ref(dt_,false);
 #if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
     controller.estimateThrustModel(sens_data.a);
@@ -446,6 +486,7 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
     // measured local frame, then evaluate H+1 points at exact prediction times.
     if (get_last_state((FSM *)this_fsm) != FSM_STATE(cmd))
     {
+        landing_.cancel();
         record_position();
         set_hover_ref();
         reset_controller_();
@@ -478,9 +519,11 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
     if(pd->aux2_changed){
         switch (pd->aux2){
             case GEARS::MID:
-                // UP -> MID 回到悬停，不改变 PX4 Offboard 模式。
+                // Only the pilot's UP -> MID request starts landing, not a fallback.
+                landing_.request();
+                pd->aux2_changed = false;
                 set_next_state((FSM *)this_fsm, FSM_STATE(auto_hover));
-                RCLCPP_INFO(px4controlnode_.get_logger(), "\033[32m[px4ctrl] CMD_CTRL --> AUTO_HOVER\033[0m");
+                RCLCPP_INFO(px4controlnode_.get_logger(), "[px4ctrl] CMD_CTRL --> AUTO_HOVER (land)");
                 return NULL;
                 break;
             case GEARS::DOWN:
@@ -523,6 +566,7 @@ void* PX4CtrlFSM::FSM_FUNCT(safe)(void* this_fsm)
     /*  刚进入状态 */
     if (get_last_state((FSM *)this_fsm) != FSM_STATE(safe))
     {
+        landing_.cancel();
         // [OMMPC] 安全/降落参考必须覆盖 CMD 轨迹源。
         trajectory_reference_.clear();
         record_position();
@@ -789,6 +833,45 @@ void PX4CtrlFSM::set_land_ref()
     ref.yaw_accel = 0.0;
     ref.fsm_state = get_curr_state(&fsm_);
 	ref_ = ref;
+}
+
+void PX4CtrlFSM::set_requested_landing_ref_()
+{
+    const double now = now_time.seconds();
+    const bool valid = pose_is_received(now_time) && pose_is_valid(pose_data) &&
+        att_is_received(now_time) && sens_is_received(now_time) &&
+        att_data.q.coeffs().allFinite() && sens_data.w.allFinite();
+    const bool upright = valid && att_data.q.toRotationMatrix()(2, 2) > 0.94 &&
+        sens_data.w.norm() < 0.3;
+    const bool land_fresh = land_received_time_ >= landing_start_time_ &&
+        land_timestamp_ > land_start_timestamp_ && now >= land_received_time_ &&
+        now - land_received_time_ < 0.5;
+    const auto previous = landing_.phase();
+    landing_.update(dt_, pose_data.p, pose_data.v, valid, upright, land_fresh && land_detected_);
+    set_point_hover(landing_.position().x(), landing_.position().y(), landing_.position().z());
+    ref_.v = landing_.velocity();
+    ref_.a = landing_.acceleration();
+    if (previous != landing_.phase()) {
+        RCLCPP_INFO(px4controlnode_.get_logger(), "%s",
+            landing_.landed() ? "Touchdown confirmed; requesting disarm." :
+            "Landing stabilized; descending at up to 0.3 m/s, 0.1 m/s near ground.");
+    }
+    if (!land_fresh) {
+        RCLCPP_WARN_THROTTLE(px4controlnode_.get_logger(), *px4controlnode_.get_clock(), 3000,
+            "No fresh vehicle_land_detected; automatic disarm waits for confirmed touchdown.");
+    }
+#ifndef SIMULATION
+    // Keep control/heartbeats active until VehicleStatus confirms DISARMED.
+    if (landing_.landed() && land_fresh && land_detected_ && valid && upright &&
+        pose_data.v.norm() < 0.2 &&
+        std::abs(pose_data.p.z() - takeoff_origin_.position().z()) < 0.15 &&
+        vs_is_armed() && now >= next_disarm_request_time_ && !service_request_pending_) {
+        next_disarm_request_time_ = now + 1.0;
+        process_vehicle_command_(VehicleCommandRequest::DISARM,
+            px4_msgs::msg::VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM,
+            0.0, 0.0, "disarmed");
+    }
+#endif
 }
 
 void PX4CtrlFSM::record_position()
@@ -1218,10 +1301,12 @@ void PX4CtrlFSM::calculate_control_()
         // current-position hover, keeping the normal mode/Offboard lifecycle.
         RCLCPP_ERROR(px4controlnode_.get_logger(), "Invalid control reference: %s", error.what());
         trajectory_reference_.clear();
+        landing_.cancel();
         reset_controller_();
         record_position();
         set_hover_ref();
         set_next_state(&fsm_, FSM_STATE(auto_hover));
+        hover_target_ = ref_.p;
         mode.fsm_state = ref_.fsm_state;
         mode.position_valid = mode.velocity_valid = mode.acceleration_valid = true;
         calculate(make_reference());

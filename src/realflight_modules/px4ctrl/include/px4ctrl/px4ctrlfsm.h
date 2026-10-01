@@ -23,6 +23,8 @@
 #include <px4ctrl/acados_nmpc.h>
 #include <px4ctrl/trajectory.h>
 #include <px4ctrl/takeoff_origin.h>
+#include <px4ctrl/landing_reference.h>
+#include <px4_msgs/msg/vehicle_land_detected.hpp>
 
 class PX4ControlNode;
 
@@ -69,6 +71,9 @@ public:
 
     PX4CtrlFSM(PX4ControlNode &);
     void process();
+    // Called before the main loop's armed/kill gates, including while disarmed.
+    void update_flight_origin();
+    void feed_land_detected(const px4_msgs::msg::VehicleLandDetected::SharedPtr msg);
     void reset_start_time();
     void set_init_ref();
     void set_hover_ref();
@@ -118,13 +123,19 @@ private:
         OFFBOARD,
         MANUAL,
         ARM,
+        DISARM,
     };
 
     // sun: control_sp_ 是本周期控制输出，ref_ 是由当前状态生成的统一参考状态。
     Control_Setpoint_t control_sp_;
     px4ctrl::TrajectoryPlayer trajectory_reference_;
     px4ctrl::TakeoffOrigin takeoff_origin_;
+    px4ctrl::LandingReference landing_;
     Eigen::Vector3d hover_target_{Eigen::Vector3d::Zero()};
+    double landing_start_time_{0.0}, land_received_time_{-1.0};
+    double next_disarm_request_time_{0.0};
+    uint64_t land_timestamp_{0}, land_start_timestamp_{0};
+    bool land_detected_{false}, flight_was_armed_{false};
     Ref_State_t ref_; 
     rclcpp::Time start_time_;
     rclcpp::Time last_time_;
@@ -187,6 +198,7 @@ private:
     bool load_cmd_trajectory_();
     bool switch_to_offboard_mode_();
     bool switch_to_manual_mode_();
+    void set_requested_landing_ref_();
     
     
     

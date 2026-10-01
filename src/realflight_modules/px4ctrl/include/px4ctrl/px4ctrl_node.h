@@ -48,6 +48,7 @@ private:
 	rclcpp::Subscription<px4_msgs::msg::ManualControlSetpoint>::SharedPtr manual_control_setpoint_subscription_;
 #endif
 	rclcpp::Subscription<px4_msgs::msg::VehicleStatus>::SharedPtr vehicle_status_subscription_;
+    rclcpp::Subscription<px4_msgs::msg::VehicleLandDetected>::SharedPtr land_detected_subscription_;
 #if PX4CTRL_USE_FILTERED_IMU
 	rclcpp::Subscription<px4_msgs::msg::VehicleAngularVelocity>::SharedPtr vehicle_angular_velocity_subscription_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleAcceleration>::SharedPtr vehicle_acceleration_subscription_;
