@@ -22,6 +22,7 @@
 #include <px4ctrl/input.h>
 #include <px4ctrl/acados_nmpc.h>
 #include <px4ctrl/trajectory.h>
+#include <px4ctrl/takeoff_origin.h>
 
 class PX4ControlNode;
 
@@ -122,6 +123,8 @@ private:
     // sun: control_sp_ 是本周期控制输出，ref_ 是由当前状态生成的统一参考状态。
     Control_Setpoint_t control_sp_;
     px4ctrl::TrajectoryPlayer trajectory_reference_;
+    px4ctrl::TakeoffOrigin takeoff_origin_;
+    Eigen::Vector3d hover_target_{Eigen::Vector3d::Zero()};
     Ref_State_t ref_; 
     rclcpp::Time start_time_;
     rclcpp::Time last_time_;

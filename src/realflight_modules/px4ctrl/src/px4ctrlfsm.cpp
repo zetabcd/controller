@@ -63,6 +63,24 @@ void PX4CtrlFSM::process()
     dt_ = (now_time - last_time_).seconds();
     last_time_ = now_time;
 
+    const bool origin_pose_valid = pose_data.timestamp != 0 &&
+        pose_is_received(now_time) && pose_is_valid(pose_data) && pose_data.p.allFinite();
+#ifdef SIMULATION
+    // The simulator does not publish VehicleStatus; freeze its first valid pose.
+    if (!takeoff_origin_.valid() && origin_pose_valid) {
+        takeoff_origin_.update(false, true, pose_data.p);
+    }
+#else
+    // Only a received, fresh DISARMED status may refresh the ground origin.
+    const double status_age = (now_time - sta_data.rcv_stamp).seconds();
+    if (sta_data.timestamp != 0 && status_age >= 0.0 && status_age < 1.0 &&
+        (sta_data.arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_DISARMED ||
+         sta_data.arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_ARMED)) {
+        takeoff_origin_.update(vs_is_armed(), origin_pose_valid,
+            origin_pose_valid ? pose_data.p : Eigen::Vector3d::Zero());
+    }
+#endif
+
     // 执行状态机，使其步进一次
     cur_state_ = run_state_machine_once(&fsm_);
     // manual/auto_hover/cmd/safe 都属于外部控制状态。心跳在
@@ -301,14 +319,28 @@ void* PX4CtrlFSM::FSM_FUNCT(manual)(void * this_fsm)
 /* AUTO_HOVER模式 */ 
 void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
 {
-    // sun: auto_hover 锁定进入状态时的位置和航向，并在稳定工况下持续辨识推力映射。
+    // First hover takes off above the ground origin; subsequent entries hold locally.
     /*  刚进入状态 */
     if (get_last_state((FSM *)this_fsm) != FSM_STATE(auto_hover))
     {
+        if (!takeoff_origin_.valid()) {
+            RCLCPP_ERROR(px4controlnode_.get_logger(),
+                "Reject AUTO_HOVER: no ground origin. Start with valid position while disarmed.");
+            set_next_state((FSM *)this_fsm, FSM_STATE(manual));
+            return NULL;
+        }
         // Non-CMD modes use their own local reference, never the previous trajectory.
         trajectory_reference_.clear();
         set_init_ref();
         record_position();
+        const bool taking_off = takeoff_origin_.takeoffPending();
+        hover_target_ = takeoff_origin_.enterHover(record_state_data.p + record_state_data.v * 0.3);
+        const auto &origin = takeoff_origin_.position();
+        RCLCPP_INFO(px4controlnode_.get_logger(),
+            "%s: ground origin NWU [%.3f, %.3f, %.3f], target [%.3f, %.3f, %.3f] m",
+            taking_off ? "Relative takeoff" : "Position hold",
+            origin.x(), origin.y(), origin.z(),
+            hover_target_.x(), hover_target_.y(), hover_target_.z());
         reset_point_reference_(record_state_data.p + record_state_data.v * 0.3);
         reset_controller_();
 #if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
@@ -391,8 +423,7 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
 #endif
     /* 任务 */
     // [LEGACY QuadControl] 先用当前 IMU 更新推力模型；OMMPC 不使用该映射。
-    // set_hover_ref();
-    set_point_hover(0,0,0.5);
+    set_point_hover(hover_target_.x(), hover_target_.y(), hover_target_.z());
     // set_manual_postion_ref(dt_,false);
 #if !PX4CTRL_USES_PREDICTIVE_CONTROLLER
     controller.estimateThrustModel(sens_data.a);
@@ -724,7 +755,7 @@ void PX4CtrlFSM::update_point_reference_(double dt)
 
 void PX4CtrlFSM::set_point_hover(const double &x, const double &y, const double &z)
 {
-    // sun: 用进入状态时的速度做 0.3 s 前视补偿，使悬停点位于当前运动趋势前方，减小急停冲击。
+    // Inputs are world NWU coordinates, already translated by the caller.
     Eigen::Vector3d point(x,y,z);
 	Ref_State_t ref;
 	ref.p = point;

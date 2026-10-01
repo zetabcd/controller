@@ -4,7 +4,11 @@
 
 ## 使用与参数
 
-在 `config/params.yaml` 设置 `trajectory.type`，取值为 `horizontal_circle`、`vertical_circle`、`helix`、`figure_eight`、`omtraj`。当前工作区选择为 `helix`，以实际 YAML 为准。三个控制器使用同一选择入口，不再有 CMD 轨迹编译宏。所有参数在启动时读取、生成并检查；修改后重启控制节点，活动轨迹不热切换。
+AUTO_HOVER 首次起飞的目标是本次地面原点上方 0.2 m（当前值在 `takeoff_origin.h` 的 `enterHover()` 中设置）。实机在收到新鲜的未解锁状态及有效位置时更新原点，解锁后固定；因此应在地面启动控制节点、等位置有效后再解锁。原点包括动捕/PX4 的高度偏移，不要求飞机放在世界坐标零点。重新上锁、移动飞机后会更新下一次起飞原点。一次飞行中再次进入 AUTO_HOVER 时保持进入位置（含原有 0.3 s 速度前视），不重复上升或返回起飞点。仿真无解锁状态话题，使用首次有效位置作为原点，重启节点开始新一次实验。
+
+这是参考位置平移，控制器反馈仍使用原世界坐标 NWU；没有重置 PX4 或动捕坐标。CMD 仍从进入 CMD 的当前位置和航向接续，`trajectory.takeoff_height` 仍是相对此处的上升量。启动日志在进入悬停时打印地面原点和目标世界坐标。
+
+在 `config/params.yaml` 设置 `trajectory.type`，取值为 `horizontal_circle`、`vertical_circle`、`helix`、`figure_eight`、`omtraj`。当前工作区选择为 `vertical_circle`，半径 0.9 m、进出距离各 1.35 m，以实际 YAML 为准；下表保留生成器默认参数。三个控制器使用同一选择入口，不再有 CMD 轨迹编译宏。所有参数在启动时读取、生成并检查；修改后重启控制节点，活动轨迹不热切换。
 
 | 参数 | 含义与默认值 |
 |---|---|
