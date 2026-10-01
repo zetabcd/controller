@@ -1,10 +1,15 @@
 px4ctrlrate_node:
   ros__parameters:
+    motor_speed:
+      # Throttle / (rad/s * s); 0 disables feedback. Conservative starting gain.
+      ki: 0.0002
+      # Absolute additive throttle correction (0.10 = ten percentage points).
+      integral_limit: 0.10
     diagnostics:
       esc_topic: /fmu/out/esc_status
       esc_timeout_s: 0.25
       state_timeout_s: 0.25
-      # Metadata: existing speed/throttle bench calibration was measured at 16 V.
+      # Legacy nominal metadata only; actual bench voltage is unverified. Not used in control.
       calibration_voltage: 16.0
       # In the controller's motor order. Default: motor 1..4.
       motor_functions: [101, 102, 103, 104]

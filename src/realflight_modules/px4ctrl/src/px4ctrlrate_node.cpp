@@ -15,6 +15,7 @@
 #include <px4ctrl/px4ctrlparam.h>
 #include <px4ctrl/motor_calculate.h>
 #include <px4ctrl/motor_feedback.h>
+#include <px4ctrl/motor_speed_control.h>
 #include <px4ctrl/sliding_window_tvr.h>
 
 #include <fms_utils/openfsm.h>
@@ -46,9 +47,13 @@ public:
 			!std::isfinite(calibration_voltage_) || calibration_voltage_ <= 0) {
 			throw std::invalid_argument("diagnostic timeout and calibration voltage must be positive");
 		}
-		feedback_.configure(declare_parameter<double>("diagnostics.esc_timeout_s", 0.25),
+		const double esc_timeout = declare_parameter<double>("diagnostics.esc_timeout_s", 0.25);
+		feedback_.configure(esc_timeout,
 			declare_parameter<std::vector<int64_t>>("diagnostics.esc_slots", std::vector<int64_t>{}),
 			declare_parameter<std::vector<int64_t>>("diagnostics.motor_functions", {101, 102, 103, 104}));
+		const double speed_ki = declare_parameter<double>("motor_speed.ki", 0.0002);
+		const double speed_limit = declare_parameter<double>("motor_speed.integral_limit", 0.10);
+		for (auto & controller : motor_speed_) controller.configure(speed_ki, speed_limit, esc_timeout);
 		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;	// Qos设置表
 		qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT;
 		qos_profile.durability = RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
@@ -63,6 +68,12 @@ public:
 			declare_parameter<std::string>("diagnostics.esc_topic", "/fmu/out/esc_status"),
 			rclcpp::SensorDataQoS(), [this](px4_msgs::msg::EscStatus::ConstSharedPtr msg) {
 				feedback_.update(*msg, steadySeconds());
+			});
+		vehicle_status_subscription_ = create_subscription<px4_msgs::msg::VehicleStatus>(
+			"/fmu/out/vehicle_status_v1", rclcpp::SensorDataQoS(),
+			[this](px4_msgs::msg::VehicleStatus::ConstSharedPtr msg) {
+				armed_ = msg->arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_ARMED;
+				if (!armed_) for (auto & controller : motor_speed_) controller.reset();
 			});
 		actuator_motors_publisher_ = this->create_publisher<px4_msgs::msg::ActuatorMotors>("/fmu/in/actuator_motors", qos);
 		// 订阅者
@@ -449,7 +460,7 @@ public:
 			}else{
 				thro_setpoint_i = (-param.motor.rc2speed_b+std::sqrt(param.motor.rc2speed_b*param.motor.rc2speed_b-4*param.motor.rc2speed_a*(param.motor.rc2speed_c-motor_rad_sol)))/2/param.motor.rc2speed_a;
 			}
-			thro_setpoint[i] = std::min(thro_setpoint_i,1.0);
+			thro_setpoint[i] = std::clamp(thro_setpoint_i, 0.0, 1.0);
 			debug_msg_.thro_setpoint_i[i] = thro_setpoint_i;
 			debug_msg_.thro_setpoint[i] = thro_setpoint[i];
 			debug_msg_.motor_reaction_torque_sol[i] = cms[i] * motor_rad_sol * motor_rad_sol;
@@ -554,11 +565,20 @@ public:
 		debug_msg_.cycle_interval_s = cycle_start - previous_cycle_start_s_;
 		previous_cycle_start_s_ = cycle_start;
 		debug_msg_.cycle_id = ++cycle_id_;
+		const Eigen::Vector3d va_b = state_data_.Rbi.transpose() * state_data_.v_I;
+		auto feedback = feedback_.sample(cycle_start, param, va_b,
+			input_stamps_[1].fresh(cycle_start, state_timeout_s_) &&
+			input_stamps_[2].fresh(cycle_start, state_timeout_s_));
 		if (GetThrustDes() >= 0.0) {
 			Eigen::Array4d command;
 			calculateControl(command);
 			for (size_t i = 0; i < 4; ++i) {
-				if (std::isnan(command[i])) {
+				const int slot = feedback.esc_slot[i];
+				command[i] = motor_speed_[i].update(command[i], debug_msg_.motor_rad_sol[i],
+					feedback.motor_rad[i], slot >= 0 ? feedback.report_timestamp[slot] : 0,
+					cycle_start, feedback.rpm_valid[i] && debug_msg_.control_result_finite &&
+					input_stamps_[3].fresh(cycle_start, state_timeout_s_), armed_ && GetThrustDes() > 0);
+				if (!std::isfinite(command[i])) {
 					command[i] = last_command_[i];
 					debug_msg_.actuator_fallback[i] = true;
 				}
@@ -566,6 +586,8 @@ public:
 			publish_actuator_motors_(command);
 			last_command_ = command;
 		} else {
+			for (auto & controller : motor_speed_) controller.reset();
+			last_command_.setConstant(-1.0);
 			publish_actuator_motors_(Eigen::Array4d::Constant(-1.0));
 		}
 		const double now = steadySeconds();
@@ -584,19 +606,16 @@ public:
 			debug_msg_.input_valid[i] = input_stamps_[i].fresh(now, state_timeout_s_);
 			if (i < 4) debug_msg_.control_inputs_valid &= debug_msg_.input_valid[i];
 		}
-		const Eigen::Vector3d va_b = state_data_.Rbi.transpose() * state_data_.v_I;
-		auto feedback = feedback_.sample(now, param, va_b,
-			debug_msg_.input_valid[1] && debug_msg_.input_valid[2]);
 		feedback.timestamp = debug_msg_.timestamp;
 		feedback.cycle_id = debug_msg_.cycle_id;
 		feedback.actuator_timestamp = debug_msg_.actuator_timestamp;
-		feedback.steady_elapsed_us = debug_msg_.steady_elapsed_us;
+		feedback.steady_elapsed_us = cycle_start * 1e6;
 		feedback.actuator_control = debug_msg_.actuator_control;
 		feedback.calibration_voltage = calibration_voltage_;
 		feedback.position_timestamp = input_stamps_[1].timestamp;
 		feedback.attitude_timestamp = input_stamps_[2].timestamp;
-		feedback.position_age_s = input_stamps_[1].age(now);
-		feedback.attitude_age_s = input_stamps_[2].age(now);
+		feedback.position_age_s = input_stamps_[1].age(cycle_start);
+		feedback.attitude_age_s = input_stamps_[2].age(cycle_start);
 		feedback.state_timeout_s = state_timeout_s_;
 		if (debug_msg_.control_updated && debug_msg_.control_result_finite) {
 			for (size_t i = 0; i < 4; ++i) {
@@ -656,10 +675,13 @@ private:
     double state_timeout_s_{0.25};
     double calibration_voltage_{16.0};
     rate_diagnostics::MotorFeedback feedback_;
+    std::array<MotorSpeedControl, 4> motor_speed_;
+    bool armed_{false};
     // Initial NaN used to fall back to itself. Start with the existing inactive command.
     Eigen::Array4d last_command_{Eigen::Array4d::Constant(-1.0)};
     rclcpp::Publisher<px4debug_msgs::msg::MotorFeedbackDebug>::SharedPtr motor_feedback_publisher_;
     rclcpp::Subscription<px4_msgs::msg::EscStatus>::SharedPtr esc_status_subscription_;
+    rclcpp::Subscription<px4_msgs::msg::VehicleStatus>::SharedPtr vehicle_status_subscription_;
     rclcpp::Service<std_srvs::srv::Empty>::SharedPtr handshake_server_;
 	bool handshake_received_{false};
     rclcpp::Time start_time_;

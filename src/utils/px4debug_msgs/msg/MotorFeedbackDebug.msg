@@ -1,7 +1,7 @@
 # Mechanical ESC telemetry and QUASI-STEADY MODEL estimates, never measured force/torque.
 # Published at the rate loop frequency, also when the controller is inactive.
 # Repeated esc_sequence means reused feedback; use timestamps/ages/valid bits.
-uint16 schema_version 1
+uint16 schema_version 2
 uint64 timestamp # ROS-clock us, same as matching ratectrl message
 uint64 cycle_id
 uint64 actuator_timestamp
@@ -28,7 +28,7 @@ uint8[8] actuator_function
 uint16[8] failures
 int8[8] esc_power # raw PX4 power %, -1 invalid
 float32[8] report_receive_age_s # since this slot's report timestamp last changed
-float32[8] report_source_age_s # (EscStatus.timestamp - EscReport.timestamp)/1e6; NaN if invalid
+float32[8] report_source_age_s # Relative to newest online EscReport, not outer timestamp; diagnostic only
 
 # Arrays below follow controller motor order 1..4. Mapping uses actuator_function 101..104.
 # mapping_mode 0 = actuator_function, 1 = explicitly configured slot mapping.
@@ -51,7 +51,7 @@ float64[4] desired_motor_rpm
 # Estimation method 1 = existing CT/CQ + measured RPM + body airflow (zero wind assumption).
 # Method reserved 0 = none. Voltage is recorded, not multiplied into thrust without calibration.
 uint8 estimation_method
-float64 calibration_voltage # V; metadata only, existing speed/throttle calibration at 16 V
+float64 calibration_voltage # V; legacy nominal metadata only, actual bench voltage unverified
 bool airflow_valid
 uint64 position_timestamp
 uint64 attitude_timestamp

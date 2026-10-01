@@ -14,8 +14,7 @@ namespace rate_diagnostics
 {
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 
-// No clock-domain subtraction: now/received are host steady seconds. Source age is
-// computed separately, only between timestamps belonging to the same PX4 message.
+// Freshness uses host steady seconds, never mixed host/PX4 source clocks.
 struct InputStamp
 {
   uint64_t timestamp{0};
@@ -91,6 +90,7 @@ public:
     bool airflow_valid) const
   {
     Message out;
+    out.schema_version = 2;  // Source-age semantics changed; keep old logs distinguishable.
     out.esc_sequence = sequence_;
     out.esc_timestamp = latest_.timestamp;
     out.esc_receive_age_s = sequence_ ? now - received_at_ : nan;
@@ -125,6 +125,12 @@ public:
     out.mechanical_power_est.fill(nan);
     out.thrust_est = nan;
     out.tau_est.fill(nan);
+    uint64_t newest_report = 0;
+    for (size_t i = 0; i < 8; ++i) {
+      if (latest_.esc_online_flags & (1u << i)) {
+        newest_report = std::max(newest_report, latest_.esc[i].timestamp);
+      }
+    }
     for (size_t i = 0; i < 8; ++i) {
       const auto & report = latest_.esc[i];
       out.report_timestamp[i] = report.timestamp;
@@ -140,8 +146,10 @@ public:
       out.failures[i] = report.failures;
       out.esc_power[i] = report.esc_power;
       out.report_receive_age_s[i] = now - report_changed_at_[i];
-      out.report_source_age_s[i] = report.timestamp && latest_.timestamp >= report.timestamp ?
-        (latest_.timestamp - report.timestamp) * 1e-6 : nan;
+      // PX4's bridge may time-sync only the outer EscStatus timestamp. Compare
+      // nested report timestamps for diagnostics, not against that outer clock.
+      out.report_source_age_s[i] = report.timestamp && newest_report >= report.timestamp ?
+        (newest_report - report.timestamp) * 1e-6 : nan;
     }
     for (size_t motor = 0; motor < 4; ++motor) {
       int slot = slots_[motor];
@@ -160,8 +168,8 @@ public:
       out.armed[motor] = latest_.esc_armed_flags & (1u << slot);
       const bool fresh = sequence_ && out.online[motor] &&
         out.esc_receive_age_s >= 0 && out.esc_receive_age_s <= timeout_ &&
-        out.report_receive_age_s[slot] >= 0 && out.report_receive_age_s[slot] <= timeout_ &&
-        out.report_source_age_s[slot] >= 0 && out.report_source_age_s[slot] <= timeout_;
+        r.timestamp && out.report_receive_age_s[slot] >= 0 &&
+        out.report_receive_age_s[slot] <= timeout_;
       out.motor_rpm[motor] = r.esc_rpm;
       out.motor_rad[motor] = r.esc_rpm * (2.0 * pi / 60.0);
       out.motor_voltage[motor] = r.esc_voltage;

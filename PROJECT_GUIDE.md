@@ -190,7 +190,7 @@ RLS 实现在 [controller.cpp](src/realflight_modules/px4ctrl/src/controller.cpp
 
 阶跃目标 `euler_des_*_deg` 用度，`rate_des_*_deg` 用度/秒；由代码转换为弧度。它们覆盖正常参考，用于单环响应实验，不会自动求出 PID 最优增益。当前两个调参开关都为 false。
 
-模型使用已有 16 V 标定条件元数据，但没有据此自动执行电压补偿；离线分析也不把实时电压直接乘到推力模型上。当前源码树未找到从台架原始数据一键重新拟合这些系数的专门脚本。
+模型保留名义 16 V 元数据，实际台架标定电压尚未核实；控制不使用该值或实时电压补偿，离线分析也不把实时电压直接乘到推力模型上。当前源码树未找到从台架原始数据一键重新拟合这些系数的专门脚本。
 
 本地另有 [近期推力辨识与转速映射讨论](0913/近10天交互问题汇总_20260927.md)，它是分析记录，且所在目录被 Git 忽略；不能当作已实现功能或随仓库自动分发的文件。
 
@@ -201,6 +201,12 @@ RLS 实现在 [controller.cpp](src/realflight_modules/px4ctrl/src/controller.cpp
 输入 `/fmu/out/esc_status`，输出 `/debugPx4/motor_feedback` 和扩充的 `/debugPx4/ratectrl`。包含转速、电压、电流、电功率、映射与有效性、期望转速误差、模型推力/力矩、PID、分配残差、限幅、TVR 状态和耗时。
 
 默认按 `actuator_function` 对应 `[101,102,103,104]`。仅当驱动不提供该映射时才显式配置已核实的 `esc_slots`；不能把 ESC 数组顺序自然等同于控制器电机顺序。两类默认超时均为 0.25 s。
+
+电机转速闭环采用 Tal/Karaman 文中式 (36) 的静态前馈加积分：`throttle = clamp(inverse_curve(ω_des) + I, 0, 1)`，`I += ki × (ω_des − ω_measured) × Δt`，内部转速单位 rad/s。四个电机独立积分，沿用原二次曲线反解作为前馈；不新增电压补偿、转速低通或微分。前馈每个内环周期更新，积分只在对应 ESC 报告时间戳变化时更新，Δt 取同一电机连续报告的源时间差，首次报告与超过超时的间隔不积分。新鲜度使用主机接收时间和每个槽位最后更新的接收时间，避免混减 DDS 已同步的外层时间与未同步的嵌套报告时间；`report_source_age_s` 改为相对最新在线报告的源时间差，仅供诊断。
+
+`motor_speed.ki: 0.0002`（归一化油门 / (rad/s·s)）和 `motor_speed.integral_limit: 0.10` 是初始参数，需实机台架整定；`ki: 0.0` 关闭该反馈，修改后重启内环。积分幅值最多补偿 ±10 个百分点，输出饱和时停止向该方向累积，但允许反向退出。收到 `/fmu/out/vehicle_status_v1` 的解锁状态且总推力指令为正才启用；上锁、控制停用时清零。转速失效或参考超时后，补偿在不超过一个 ESC 超时时间内退回零，恢复后重新建立积分时间基准。仿真缺少 ESC 反馈时保留前馈输出。
+
+`/debugPx4/ratectrl.thro_setpoint` 保留静态前馈，`actuator_control` 是叠加补偿并限幅后的实际输出，两者之差可观察实际施加的补偿（排除 `actuator_fallback` 周期）。`motor_feedback.rpm_error` 的符号是“实测−期望”，与积分使用的误差符号相反。先在台架核实四路映射、`rpm_valid`、误差收敛和饱和情况；当前约 30 Hz 的转速反馈限制可用闭环带宽，不能把提高积分增益当作消除遥测延迟的方法。
 
 ```bash
 ros2 topic echo /debugPx4/motor_feedback --once
