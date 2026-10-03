@@ -1,0 +1,27 @@
+# TRAJECTORY-ONLY candidate; merge these fields into the actual onboard YAML.
+# Do not replace a complete controller configuration with this partial file.
+# Diagnosis: datalog/analysis/helix_failure_214627/corrected_analysis.pdf
+# Keeps three main rolls, with no extra connector rolls. Not flight validated.
+# Compared with the previous side-entry proposal, the connectors avoid low thrust
+# but tilt up to 80.7 deg and require 86.54 rad/s^2 angular acceleration.
+# Main peak rate remains 12.28 rad/s: this does NOT fix motion-capture timing/estimation.
+# Relative CMD bounds: X [0,0.975], Y [0,2.4], Z [0,1.6] m.
+# takeoff_height and connector_height must be changed together.
+px4ctrl_node:
+  ros__parameters:
+    trajectory:
+      type: helix
+      takeoff_height: 1.05
+      takeoff_duration: 3.0
+      settle_duration: 0.5
+      helix:
+        radius: 0.8
+        turns: 3
+        axis_transition_duration: 1.0
+        pitch: 0.2
+        centripetal_g: 1.55
+        entry_duration: 0.85
+        exit_duration: 0.85
+        entry_distance: 1.2
+        exit_distance: 1.2
+        connector_height: 1.05

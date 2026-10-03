@@ -1,6 +1,9 @@
-# OMMPC 八字专用配置；本轮改动行标注旧翻转值。
-# 切回翻转请整套加载 params_ommpc_flip.yaml，再选 vertical_circle / helix。
-# 仅改 trajectory.type 不会自动切换 PID、前馈和预测模型。
+# 0.8 m helix: three main turns with upright side-entry and side-exit connectors.
+# Replaces the earlier five-roll candidate; controller/motor parameters remain unchanged.
+# CMD rises 1.6 m before entry; the circle bottom is at CMD activation height.
+# Reserve about 2.9 m along Y plus tracking/body clearance; X advance is about 1.072 m.
+# At CMD height 0.2 m, nominal maximum reference height is about 1.8 m.
+# Current-model offline checks only; this side-entry helix has not been flight validated.
 px4ctrl_node:
   ros__parameters:
     # sun: 外环与内环频率分别对应两个 ROS 2 节点，滤波器设计也使用这两个采样频率。
@@ -12,7 +15,7 @@ px4ctrl_node:
 
     # All controllers use the same source. Selection/parameters take effect after restart.
     trajectory:
-      type: helix  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj
+      type: helix
       takeoff_height: 1.6 # relative to CMD activation position [m]
       takeoff_duration: 3.0
       settle_duration: 0.5
@@ -32,15 +35,15 @@ px4ctrl_node:
         connector_height: 0.4 # hover endpoints above circle bottom [m]
       helix:
         radius: 0.8
-        turns: 3
+        turns: 3        # exactly three main rolls; connectors stay upright
         axis_transition_duration: 1.0
-        pitch: 0.2       # axial advance per revolution [m], not m/s
+        pitch: 0.2      # advance along trajectory +X per main revolution [m]
         centripetal_g: 1.55
         entry_duration: 1.2
         exit_duration: 1.2
-        entry_distance: 1.45
+        entry_distance: 1.45  # approach from -Y side, then depart toward +Y [m]
         exit_distance: 1.45
-        connector_height: 1.6
+        connector_height: 1.6 # must match takeoff_height to keep circle bottom at CMD height
       figure_eight:
         length: 2.0      # full bounding-box dimensions [m]
         width: 1.2

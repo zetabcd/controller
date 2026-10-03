@@ -1,6 +1,7 @@
-# OMMPC 八字专用配置；本轮改动行标注旧翻转值。
-# 切回翻转请整套加载 params_ommpc_flip.yaml，再选 vertical_circle / helix。
-# 仅改 trajectory.type 不会自动切换 PID、前馈和预测模型。
+# 0.8 m 垂直圆候选：按当前模型离线审查通过，尚未实飞验证。
+# AUTO_HOVER 当前上升 0.2 m；进入 CMD 后再升 0.4 m。
+# 完整参考最高约为 CMD 激活点上方 1.689 m；2 m 空间需计入实际激活高度及跟踪误差。
+# 内环和控制器参数沿用 params.yaml；本文件只调整轨迹参数。
 px4ctrl_node:
   ros__parameters:
     # sun: 外环与内环频率分别对应两个 ROS 2 节点，滤波器设计也使用这两个采样频率。
@@ -12,8 +13,8 @@ px4ctrl_node:
 
     # All controllers use the same source. Selection/parameters take effect after restart.
     trajectory:
-      type: helix  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj
-      takeoff_height: 1.6 # relative to CMD activation position [m]
+      type: vertical_circle  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj
+      takeoff_height: 0.4 # relative to CMD activation position [m]
       takeoff_duration: 3.0
       settle_duration: 0.5
       horizontal_circle:
@@ -24,23 +25,23 @@ px4ctrl_node:
       vertical_circle:
         radius: 0.8
         turns: 1
-        centripetal_g: 1.8 # A/g > 1; slowing arbitrarily destroys inversion
+        centripetal_g: 1.8 # Keep the same centripetal acceleration / peak thrust
         entry_duration: 1.8
         exit_duration: 1.8
         entry_distance: 0.3
         exit_distance: 0.3
-        connector_height: 0.4 # hover endpoints above circle bottom [m]
+        connector_height: 0.4 # same as takeoff_height: circle bottom at CMD activation height
       helix:
-        radius: 0.8
-        turns: 3
+        radius: 1.0
+        turns: 2
         axis_transition_duration: 1.0
-        pitch: 0.2       # axial advance per revolution [m], not m/s
-        centripetal_g: 1.55
-        entry_duration: 1.2
-        exit_duration: 1.2
-        entry_distance: 1.45
-        exit_distance: 1.45
-        connector_height: 1.6
+        pitch: 0.5       # axial advance per revolution [m], not m/s
+        centripetal_g: 1.8
+        entry_duration: 0.85
+        exit_duration: 0.85
+        entry_distance: 1.43
+        exit_distance: 1.43
+        connector_height: 1.1
       figure_eight:
         length: 2.0      # full bounding-box dimensions [m]
         width: 1.2
