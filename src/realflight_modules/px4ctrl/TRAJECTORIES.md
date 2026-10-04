@@ -203,3 +203,249 @@ ros2 run px4ctrl omtraj_visualizer_node --ros-args \
 当前规划和闭环数据见 `datalog/omtraj_fast/`。闭环使用当前 OMMPC 与 MuJoCo 电机/刚体/气动模型，位置噪声标准差 0.01 m、速度噪声标准差 0.03 m/s。更激进的 6.489869 s 候选最大误差达到 6.25 cm，未满足验收；跟踪配置据此收紧角加速度、推力变化率，并增加电机低端余量。
 
 每组实验冻结参考 CSV、配置、二进制和源码哈希。独立 ROS 域避免实验串扰；分析器拒绝时间倒退或控制数据未覆盖全程的实验。上述结果仅适用于已测工况，不是任意风扰、模型失配或实机下的跟踪保证。输出油门触限统计不等于分配器内部裁剪统计。部分运行在仿真时钟结束后出现既有内环估计器 `XTWX` 奇异异常，需同时核对电机消息覆盖时间，不能据此声称退出流程正常。
+
+## 外部 GCOPTER 动捕穿缝模式（2026-10-04）
+
+当前版本在 **CMD 中等待、接收并执行多次任务**。每段轨迹结束后仍在 CMD 悬停，
+由控制台选择继续往返或结束。外部模式关闭旧无遥控流程的自动 CMD/自动执行。
+
+### 启动与任务交互
+
+```bash
+source /opt/ros/humble/setup.bash
+# 新检出时取得固定提交的 GCOPTER 子模块
+# git submodule update --init 3rdpart/src/gcopter
+colcon build --packages-up-to gap_planner quadsim_mujoco --symlink-install \
+  --cmake-args -DCMAKE_BUILD_TYPE=Release -DPX4CTRL_SIMULATION=ON
+source install/setup.bash
+ros2 launch gap_planner gap_flight.launch.py simulation:=true
+```
+
+另开终端加载同一工作区，然后运行：
+
+```bash
+source install/setup.bash
+ros2 run gap_planner gap_console.py
+```
+
+| 输入 | 行为 |
+|---|---|
+| `c` | 仿真从稳定 AUTO_HOVER 进入 CMD 待命；实机用 AUX2 UP 进入 |
+| `1`、`2`、`3` | 选择本次配置列表前 N 个窗框并规划；仍在 CMD 悬停 |
+| `e` | READY 后明确执行这一段，仿真和实机均适用 |
+| `r` | 沿用上次数量，再次规划；在远端时自动按相反顺序穿回 |
+| `f` | 在 CMD 待命时结束任务，回 AUTO_HOVER 原地悬停，不自动降落 |
+| `q` | 仅关闭控制台，不中断飞机任务 |
+
+例如 `c → 1 → READY → e → COMPLETED → r → READY → e → COMPLETED → f`。
+每次完成后也可输入新的数量，改变下一段所用窗框。执行过程中拒绝新的规划、窗框切换和
+`f`；等待该段结束再决定下一步。现有遥控手动/安全/降落路径仍保留。
+实机 AUX2 从 UP 到 MID 仍沿用原降落语义，持续往返时保持 UP，用控制台选择下一任务。
+
+实机编译选项为 `-DPX4CTRL_SIMULATION=OFF`，launch 使用 `simulation:=false`；两者不一致
+会拒绝启动。`/gap/enter_cmd` 只在仿真暴露；实机先由遥控器授权进入 CMD，随后每段用
+`/gap/start` 或控制台 `e` 执行。`/gap/finish` 对应 `f`。
+控制器种类仍由 `PX4CTRL_PRIMARY_CONTROLLER` 编译选项决定，launch 的
+`controller_kind:=mpc|nmpc` 必须匹配；支持 OMMPC 和 acados。
+
+### 固定端点与窗框选择
+
+主配置是 `src/realflight_modules/gap_planner/config/gaps.yaml`，可用
+`gap_params:=/绝对路径/gaps.yaml` 替换；控制器配置用 `controller_params:=...` 替换。
+修改 YAML 后需要重启 launch，接口更新后也必须退出旧控制器/仿真/控制台进程。
+
+```yaml
+mission:
+  goal_offset_x: 4.0
+  flight_height: 1.0
+```
+
+控制器报告其保存的地面起飞原点 `p_takeoff`。两个固定端点分别为：
+
+* 起点上方：`home = p_takeoff + [0, 0, flight_height]`。
+* 远端：`far = home + [goal_offset_x, 0, 0]`，方向是世界 NWU 的 +X。
+
+AUTO_HOVER 首次起飞到上述飞行高度。每次规划从当前实际悬停状态出发，选择距离当前状态
+较远的那个固定端点作为目标；在 home 附近向 far 飞，在 far 附近向 home 飞。端点不随窗框
+数量变化，不再停在最后一个窗框后 0.6 m。返程反转窗框顺序和穿越法线，几何航向仍采用
+`planning.heading`，不要求机体先转头 180°。任意中途位置不保证能按全部所选窗框的顺序通过。
+
+按用户要求，**场地边界不参与此模式的轨迹规划或控制器验收**，不读取 `world.lower/upper`，
+不使用替代的大场地盒；地面高度也不作为外部轨迹审查下界。实际空间范围由使用者配置。
+窗框碰撞约束、动力学和电机可执行性检查保留。
+
+仿真启动时没有可见、可碰撞的窗框。选择数量后，规划器先通过 `/gap/sim/configure`
+启用前 N 个窗框，收到确认后才规划；其他窗框不显示、不碰撞、不参与规划。模型内部预分配
+窗框几何，切换只改变显隐与碰撞属性，不重载物理模型、不重置飞机位置。
+`/gap/sim/selected_count` 发布当前启用数量，启动为 0。RViz 只显示选中的窗框。
+
+实机数量表示本次实际布置、要穿越的前 N 个刚体，软件无法移除真实窗框；应与现场布置对应。
+仅检查这些刚体的位姿新鲜度，每次规划重新读取快照。执行期间假设窗框固定；规划/READY
+期间移动或过期会作废候选，执行期间失效会报告并保持执行不可变轨迹，未实现穿缝中断恢复规划。
+
+### 刚体与机体参数
+
+* `gate_order`：配置窗框编号。`gates.<id>.topic` 为实机 `geometry_msgs/msg/PoseStamped` 话题。
+  已核对 `flight_20261001_203447_613650_bc3a4984.ulg`：原始动捕为 `/sun1/pose`，
+  类型即 PoseStamped；这是飞机刚体，不能拿来表示窗框。默认窗框话题按同样的
+  `/<刚体名>/pose` 形式填写为 `/gap_1/pose` 等，需改成现场真实窗框刚体名。
+  `/fmu/in/vehicle_visual_odometry` 是已转为 NED/FRD、供飞控融合的飞机数据，
+  不作为窗框输入，也不需要给窗框复制这一步变换。
+* `width/height` 为净开口尺寸，`thickness` 为框体厚度，`frame_width` 为框条宽度，单位 m。
+* `opening_offset/opening_quaternion_wxyz` 为刚体坐标到开口坐标的标定变换。
+  开口 X 为有向穿越方向，Y 为宽，Z 为高。
+* `sim_position/sim_rpy_deg` 为仿真刚体位姿；欧拉角组合为 Rz Ry Rx，同样应用开口偏移。
+* `mocap.world_translation/world_quaternion_wxyz` 将动捕世界转换到控制器 `world_nwu`。
+  日志逐样本显示飞机桥采用位置 `(x,-y,-z)` 和四元数 `(w,x,-y,-z)`，当前控制器
+  输入又将它变回内部约定，因此窗框使用原始 PoseStamped 加实际标定，不重复变号。
+  这不证明飞控估计器原点与动捕原点始终相同，仍需核对现场标定。
+* `mocap.frame_id` 非空时必须精确匹配；默认空字符串表示锁定第一条有效消息的
+  `header.frame_id`，之后所有窗框必须使用同一父坐标系（首条为空也会锁定空标签）。
+  原记录器没有保存字符串 `header.frame_id`，不能从旧日志假定它叫 `mocap`。
+  自动锁定只识别标签，不求解坐标标定。异常位姿、错误坐标系、零/倒序/过期/超前
+  时间戳会拒收并限频告警，规划时也报告最近的拒收原因。
+* `vehicle.body_model=polytope` 使用外包顶点，`ellipsoid` 保留论文 5.6 的椭球选项。
+  `vehicle.vertices` 为以质心为原点、与控制器机体系一致的 `[x,y,z,x,y,z,...]` 数组，4～64 个
+  非共面点，其凸包必须包住机身、桨叶、电池和动捕球，不能仅用电机中心。
+* 不提供顶点时使用外包盒，半轴为 `[l+rp,l+rp,height/2]`；力臂和桨半径来自控制器 YAML，
+  总高度为用户给出的 `vehicle.height=0.10` m。实际高度关于质心不对称时应提供实测顶点。
+  椭球模式默认半轴 `[sqrt(2)*(l+rp),sqrt(2)*(l+rp),height/sqrt(2)]`，可用
+  `vehicle.ellipsoid_half_axes` 覆盖为实测外接椭球。
+* `planning.margin` 为每侧净空，`optimization_buffer` 为额外数值余量；默认分别 0.02/0.002 m。
+* `planning.time_weight` 在总时间与 `∫||jerk/gravity||² dt` 之间权衡；数值越大越倾向于短时间。
+  所有速度、角速度、推力等限制仍采用配置中的物理单位。
+* `planning.solve_budget` 默认为 5 秒，总任务预算；最后一次独立审查可能带来少量额外耗时。
+  超时且没有通过审查的轨迹不会发送给控制器。
+* 旧的 `tunnel_length/path_length_weight/backward_weight/penalty` 已退出问题构造；旧配置仍包含
+  它们时节点会明确警告并忽略。窗框位置、尺寸、机体顶点和物理限制无需因此重调。
+
+### 稀疏 MINCO 构造与失败诊断
+
+底层直接调用固定提交 `e0444f6d47b84f972ced91746b05feb36ce1fd4f` 的 GCOPTER
+`MINCO_S3NU` 和 L-BFGS。与原来的“自由点 + 人工走廊罚函数”不同：
+
+1. 每个缝对应一个**窗平面内的航点**，只优化局部 Y/Z 两个坐标，法向坐标通过参数化严格消元。
+   起终点为悬停 P/V/A 边界。相邻任务航点之间仅插入两个自由过渡点，初值沿窗法线进出。
+   N 个缝共 `3*(N+1)` 个五次多项式段，`11*N+9` 个决策变量；增加检查采样点不会增加决策变量。
+2. 所有多项式系数由 MINCO 带状系统求解，梯度由伴随系统回传到航点与正时间变量。
+   不独立优化多项式系数，也不在所有段强加全局 X 单调性或场地盒。
+3. 穿窗瞬间检查机体凸包投影能否装进开口，并要求正向穿越；全程碰撞检查的是**四根有限长的
+   有厚度框条**，与 MuJoCo 中的几何一致。没有无限墙面，也没有长隧道。
+   凸多面体使用面法向和边叉积的完整分离轴集合，顶点支持函数通过平坦映射影响姿态。
+   椭球使用真实椭球支持函数和有限候选分离轴，是保守净空证书，可能拒绝部分可行姿态。
+4. 代价为归一化 jerk、时间及归一化的平滑约束罚函数。先求一次，再进行 1 ms 稠密独立审查。
+   若薄框附近漏采样，把最小净空位置反馈给优化器局部补点并热启动；仅失败时做可行性恢复。
+   不再无条件跑四级完整优化，也不随重试把全部段的积分点翻倍。
+5. 规划与控制器共用同一空气动力学参考模型；局部自动微分、碰撞梯度和完整 MINCO 目标梯度
+   均有数值差分测试。静态单电机推力与角加速度约束使用控制器的惯量、机臂和电机参数，
+   由 launch 从同一 controller YAML 派生，无需在窗框 YAML 中重复配置。只有电机约束激活时
+   才计算含 snap 的 12 维局部梯度；其他样点使用 9 维梯度。独立验收还直接复用控制器
+   `auditTrajectory`，避免“规划成功、控制器拒收”的物理模型缺口。无论 L-BFGS 返回收敛、迭代上限还是线搜索退出，只有独立审查通过才可上传。
+
+这解决了旧构造中的假冲突：例如 X 相隔 0.1 m、上下相隔 1.5 m 的两个有限窗框，并不构成
+两面相隔 0.1 m 的无限墙。优化器仍是局部非凸求解器，失败应读作“预算内没找到通过审查的
+轨迹”，不能直接证明物理上无解。当前穿窗瞬间的全机体投影约束也比只要求截面穿过更保守。
+
+设计参考：[MINCO/GCOPTER 论文与实现](https://github.com/ZJU-FAST-Lab/GCOPTER)、
+[Fast-Racing](https://github.com/ZJU-FAST-Lab/Fast-Racing) 的机体顶点几何表示，以及
+[Fast-Perching 实现](https://github.com/ZJU-FAST-Lab/Fast-Perching/blob/master/src/traj_opt/src/traj_opt_perching.cc)
+的任务几何参数化、时间变换与事后可行性检查。这里的有限窗框和自适应采样是本项目的实现，
+不是声称原样复现 Fast-Racing，也没有 GPU 后端。
+
+离线复现**与启动相同的 YAML**（无需启动 ROS 或仿真）：
+
+```bash
+source install/setup.bash
+ros2 run gap_planner gap_plan_check --yaml \
+  src/realflight_modules/gap_planner/config/gaps.yaml 3 outbound \
+  src/realflight_modules/px4ctrl/config/params.yaml
+# outbound 换成 return 可检查返程；默认起飞位置与 launch 的 [-1.65,0,0.05] 一致。
+```
+
+每次成功或失败，在 `/gap/planner_status`、节点日志和控制台输出墙钟计时：
+
+| 字段 | 含义 |
+|---|---|
+| `setup_ms` | 几何和求解器初始化 |
+| `optimize_ms`、`stages_ms` | 总优化耗时及初次求解/恢复求解耗时 |
+| `audit_ms`、`total_ms` | 独立稠密审查、规划线程总耗时；不含传输和控制器验收 |
+| `pieces/variables` | 多项式段数、稀疏决策变量数 |
+| `evaluations/iterations` | 目标与梯度计算次数、L-BFGS 迭代次数 |
+| `lbfgs_status/phase` | 各次退出码及完成/失败阶段；退出码不替代可行性检查 |
+| `retry[i]` | 本次补采样/恢复的原因，含最小净空的窗框与时间、动力学峰值 |
+| `controller_validation_ms` | 控制器重建与独立验收耗时 |
+| `upload_ack_ms` | 发送器上传服务往返时间；ACK 不代表通过验收 |
+| `flight_duration` | 飞行时间，区别于求解时间 |
+| `path_length/endpoint_distance` | 轨迹弧长与起终点直线距离 |
+| `backward_distance` | 沿本段起终点方向累计后退距离；它是统计量，不是约束 |
+| `crossing_roll_deg/crossing_tilt_deg` | 计划穿窗时刻的滚转角与总倾角 |
+
+### FSM 与数据流程
+
+```text
+AUTO_HOVER（起飞）
+  → AUX2 UP / 仿真 c
+CMD / WAITING（持续悬停）
+  → 数量：配置本次场景 → PLANNING → VALIDATING → READY（仍悬停）
+  → e：EXECUTING
+  → COMPLETED（仍在 CMD 悬停）
+      → r 或新数量：下一段规划，通常反向返回
+      → f：AUTO_HOVER 原地悬停
+```
+
+AUTO_HOVER 不再接收轨迹。到达 READY 不自动飞行，提前 `e` 被拒绝且不锁存。
+验证在独立线程中执行，离开 CMD 或结束任务会丢弃待执行数据及过期验证结果。
+开始执行前检查当前反馈、场景、起点位置/速度/姿态，防止候选等待后已失效。
+
+`/gap/polynomial → gap_trajectory_sender → /gap/upload → ExternalTrajectory → TrajectoryPlayer`
+构成数据链。发送器默认 5 ms 采样并保留所有分段边界，一次可靠服务上传有界数组；
+控制器从 p/v/a 五次 Hermite 重建原 S3 位置曲线，按自己的时钟执行，网络抖动不直接改变采样节奏。
+模型、参考坐标、端点静止、动力学及静态电机分配均做检查。S3 首末 jerk 没有强制为零，
+完整姿态参考进入/退出的平滑性仍不能称作 C4。离散审查和仿真通过不构成连续时间或实机安全证明。
+
+### 验证记录与复现
+
+本轮保留用户当前场景：第一缝中心 `[0,0,1]`、滚转 50°、开口 0.50×0.25 m；第二缝
+中心 `[0.1,0,2.5]`；第三缝 `[1.1,0,1]`。起终点世界 X 相隔 4 m。
+旧实现直接读取这份 YAML 时，1/2/3 缝均失败，分别约 0.63/2.55/2.30 秒。
+
+新实现对当前场景、悬停位置扰动 `[8,9,-3]` mm、窗框侧移 10 mm/滚转扰动 1°、以及
+原同高 30° 场景，分别测试 1/2/3 缝去返程，**24/24 通过**，包含电机执行性审查。
+一次串行运行中，当前场景的离线优化耗时为：
+
+| 缝数 | 去程 | 返程 | 去程路径长度 |
+|---|---:|---:|---:|
+| 1 | 425 ms | 466 ms | 4.37 m |
+| 2 | 1126 ms | 840 ms | 8.17 m |
+| 3 | 1760 ms | 2103 ms | 8.87 m |
+
+多缝路线必须升到第二缝 2.5 m 再下降，且几乎同 X 的两个窗都要求正向穿越，因此仍需转弯和
+部分 X 回退；没有人为的“只许向前”约束。对原同高 30° 场景，三缝路径约 4.12 m、累计回退
+约为数值零。以上是当前机器单次结果，不是全局最优或实时性能保证。
+
+完整 MuJoCo 闭环的三缝去程/改选两缝返程均通过：优化约 1798/719 ms，端点误差
+2/9 mm；从实际位置插值确认按顺序、正确方向穿过**有限开口**，未检测到窗框接触。
+一缝往返也已通过。检查覆盖启动窗框数 0、AUTO_HOVER 拒绝规划、CMD 待命、READY 等待 `e`、
+执行时拒绝重规划和改场景、完成后 CMD 等待、以及 `f` 回 AUTO_HOVER。
+实机尚未飞行验证。启动握手偶发 DDS response timeout 的一次测试在规划前超时，换隔离域重试通过；
+仿真结束时仍可能打印现有 SIGINT/KeyboardInterrupt 退出信息。
+
+```bash
+ctest --test-dir build/gap_planner -R gap_geometry_test --output-on-failure
+ctest --test-dir build/px4ctrl \
+  -R '^(external_trajectory_test|trajectory_test|control_reference_test|takeoff_origin_test|landing_reference_test)$' \
+  --output-on-failure
+python3 src/realflight_modules/gap_planner/test/simulation_flow.py --count 1 --return-count 1
+python3 src/realflight_modules/gap_planner/test/simulation_flow.py --count 3 --return-count 2
+```
+
+离线回归（读取 YAML，不启动 ROS）：
+
+```bash
+python3 src/realflight_modules/gap_planner/test/planning_regression.py
+```
+
+结果默认写入 `/tmp/gap_planning_regression.json`，保留每个场景的完整成功/失败输出。
+`gap_plan_check --yaml gaps.yaml count outbound|return controller.yaml [dx dy dz]` 的最后三个可选
+参数用于扰动实际悬停起点（m），固定目标不变。离线 controller YAML 分支默认采用 `mpc` 参数；
+`launch` 的 `controller_kind` 则支持选择 `mpc/nmpc`。旧位置参数命令仍保留用于简单合成场景。

@@ -1,0 +1,85 @@
+gap_planner:
+  ros__parameters:
+    # launch simulation:=true uses these rigid-body poses; false subscribes topics.
+    simulation: true
+    mission:
+      goal_offset_x: 4.0  # fixed outbound endpoint: takeoff XY + world X offset
+      flight_height: 1.0  # above ground takeoff origin; return to home at this height
+    vehicle:
+      height: 0.10  # user supplied, including battery and mocap markers
+      body_model: polytope  # polytope (Fast-Racing vertex constraints) or ellipsoid (thesis 5.6)
+      # Optional body-frame NWU bounding vertices, flattened [x,y,z,x,y,z,...].
+      # Omitted: 8 corners of a box with half-axes [arm+prop_radius, arm+prop_radius, height/2].
+      # The convex hull MUST enclose propellers, battery and mocap markers.
+      # vertices: [-0.18635, -0.18635, -0.05, -0.18635, -0.18635, 0.05,
+      #            -0.18635,  0.18635, -0.05, -0.18635,  0.18635, 0.05,
+      #             0.18635, -0.18635, -0.05,  0.18635, -0.18635, 0.05,
+      #             0.18635,  0.18635, -0.05,  0.18635,  0.18635, 0.05]
+      # mass/arm/prop_radius/gravity/aero are supplied from controller YAML by launch.
+      # Default ellipsoid encloses the full cylinder with radius arm+prop_radius:
+      # horizontal=sqrt(2)*(arm+prop_radius), vertical=height/sqrt(2).
+      # Optional measured enclosing ellipsoid override:
+      # ellipsoid_half_axes: [0.26354, 0.26354, 0.070711]
+    planning:
+      heading: 0.0  # geometric body-X heading in world NWU, radians
+      margin: 0.02
+      optimization_buffer: 0.002  # extra numerical reserve per face, explicit (formerly hidden 0.015)
+      speed_max: 2.0
+      rate_max: 6.0
+      thrust_min: 3.0  # thrust / mass, m/s^2
+      thrust_max: 18.0
+      tilt_max: 1.52
+      time_weight: 100.0  # time versus gravity-normalized jerk energy
+      solve_budget: 5.0  # total planning budget in seconds; audit may add a small overhead
+    mocap:
+      # Raw VRPN rigid-body input: geometry_msgs/msg/PoseStamped.
+      # Recorded /sun1/pose is the AIRCRAFT, not a window.
+      # The ULog omitted header.frame_id; "" learns and locks the first valid
+      # parent frame for ALL gates. Or set the exact live header.frame_id.
+      frame_id: ""
+      timeout: 0.3
+      position_tolerance: 0.01
+      angle_tolerance: 0.02
+      # Raw pose -> controller world_nwu; calibrate origin/axes before flight.
+      # Do NOT repeat the aircraft PX4 bridge's (x,-y,-z) conversion here.
+      world_translation: [0.0, 0.0, 0.0]
+      world_quaternion_wxyz: [1.0, 0.0, 0.0, 0.0]
+    gate_order: [gap_1, gap_2, gap_3]
+    gates:
+      # Opening axes: +X through, Y width, Z height. Sizes are CLEAR OPENING.
+      # The rigid body's shape is NOT present in PoseStamped; these dimensions
+      # and rigid-body -> opening transform must be measured/configured.
+      gap_1:
+        topic: /gap_1/pose  # /<actual window rigid-body name>/pose; edit to match VRPN
+        width: 0.50
+        height: 0.22
+        thickness: 0.04
+        frame_width: 0.05
+        opening_offset: [0.0, 0.0, 0.0]
+        opening_quaternion_wxyz: [1.0, 0.0, 0.0, 0.0]
+        sim_position: [0.0, 0.0, 1.5]
+        sim_rpy_deg: [60.0, 0.0, 0.0]
+      gap_2:
+        topic: /gap_2/pose
+        width: 0.90
+        height: 0.34
+        thickness: 0.04
+        frame_width: 0.05
+        opening_offset: [0.0, 0.0, 0.0]
+        opening_quaternion_wxyz: [1.0, 0.0, 0.0, 0.0]
+        sim_position: [0.1, 0.0, 2.5]
+        sim_rpy_deg: [-30.0, 0.0, 0.0]
+      gap_3:
+        topic: /gap_3/pose
+        width: 0.90
+        height: 0.34
+        thickness: 0.04
+        frame_width: 0.05
+        opening_offset: [0.0, 0.0, 0.0]
+        opening_quaternion_wxyz: [1.0, 0.0, 0.0, 0.0]
+        sim_position: [1.1, 0.0, 1.0]
+        sim_rpy_deg: [30.0, 0.0, 0.0]
+
+gap_trajectory_sender:
+  ros__parameters:
+    sample_dt: 0.005

@@ -90,6 +90,7 @@ struct TrajectoryLimits
   Eigen::Vector3d rate_max{Eigen::Vector3d::Constant(14.0)};
   double angular_acceleration_max{100.0};
   double minimum_relative_altitude{-0.01};
+  bool enforce_minimum_altitude{true};
 };
 struct TrajectoryAudit
 {

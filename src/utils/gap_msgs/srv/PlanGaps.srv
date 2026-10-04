@@ -1,0 +1,5 @@
+# Count selects the first N entries of configured gate_order.
+uint32 count
+---
+bool accepted
+string message

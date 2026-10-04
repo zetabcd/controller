@@ -1,0 +1,12 @@
+std_msgs/Header header
+string state
+string trajectory_id
+string reason
+bool hovering
+bool command_mode
+bool origin_valid
+geometry_msgs/Point takeoff_position
+bool feedback_valid
+geometry_msgs/Pose pose
+geometry_msgs/Vector3 velocity
+float64 elapsed

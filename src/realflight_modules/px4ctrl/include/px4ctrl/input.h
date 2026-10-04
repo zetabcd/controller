@@ -4,12 +4,19 @@
 // sun: 本文件将不同 PX4/仿真消息统一整理为控制器内部状态，并在接收入口完成
 // sun: 坐标系、单位、遥控曲线和时间戳转换，使后续控制算法不依赖消息格式。
 
+#ifndef PX4CTRL_SIMULATION
+#define PX4CTRL_SIMULATION 1
+#endif
+#if PX4CTRL_SIMULATION
 #define SIMULATION
+#endif
 // [NON-CONTROLLER MODE CHANGE]
 // 该宏与 QuadControl/OmMpc/NMPC 算法无关。启用后 FSM 默认从 manual 开始，
 // process() 会合成遥控器挡位，并按启动相对时间自动切换 AUTO_HOVER/CMD。
 // 它会让“第一帧传感器是否早于一次性挡位边沿到达”影响仿真启动结果。
+#if PX4CTRL_SIMULATION
 #define USE_WITHOUT_RC
+#endif
 
 // IMU 数据源统一开关，外环和角速度内环共用；修改后重新编译 px4ctrl。
 // 0：保留原 /fmu/out/sensor_combined 实现（当前 quadsim 也使用此话题）。

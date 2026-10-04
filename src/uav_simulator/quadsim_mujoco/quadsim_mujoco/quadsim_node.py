@@ -13,6 +13,11 @@ from uav_utils.project_paths import project_path
 import os
 import csv
 import glfw
+from contextlib import nullcontext
+from .gap_scene import scene_xml, GateSelection
+from gap_msgs.srv import ConfigureGates
+from gap_msgs.msg import ExecutionStatus
+from std_msgs.msg import UInt32
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 import re
@@ -718,13 +723,57 @@ def main(args=None):
     # 读取mujoco模型
     package_path = get_package_share_directory('quadsim_mujoco')
     mjcf_path = os.path.join(package_path,'mjcf','quad.xml')
-    model = mujoco.MjModel.from_xml_path(mjcf_path)
+    gap_file = node.declare_parameter('gap_scene_file', '').value
+    headless = node.declare_parameter('headless', False).value
+    initial_position = node.declare_parameter('initial_position', [0.0, 0.0, 0.0]).value
+    if len(initial_position) != 3 or not np.all(np.isfinite(initial_position)):
+        raise ValueError('initial_position must contain 3 finite NWU coordinates')
+    model = (mujoco.MjModel.from_xml_string(scene_xml(mjcf_path, gap_file)) if gap_file
+             else mujoco.MjModel.from_xml_path(mjcf_path))
+    if gap_file:
+        selection = GateSelection(model, gap_file)
+        selection_pub = node.create_publisher(UInt32, '/gap/sim/selected_count', 10)
+        node.create_timer(0.2, lambda: selection_pub.publish(UInt32(data=selection.count)))
+        def execution_status(message):
+            selection.executing = message.state == 'EXECUTING'
+            selection.command_holding = message.command_mode and message.hovering
+            selection.status_received = time.monotonic()
+        node.create_subscription(ExecutionStatus, '/gap/execution', execution_status, 10)
+        def configure_gates(request, response):
+            if (selection.executing or not selection.command_holding or
+                    time.monotonic()-selection.status_received > 1.0):
+                response.message = 'Change gates only while controller holds in CMD'
+                return response
+            try:
+                selection.select(request.count)
+                response.accepted = True
+                response.message = f'Activated {request.count} gates; aircraft state preserved'
+            except ValueError as error:
+                response.message = str(error)
+            return response
+        node.create_service(ConfigureGates, '/gap/sim/configure', configure_gates)
     init_mujoco(model, quad, node)
     data = mujoco.MjData(model) # 用来存储仿真数据
+    if initial_position != [0.0, 0.0, 0.0]:
+        data.qpos[:3] = initial_position
+    mujoco.mj_forward(model, data)
+    quad.state.pos = data.qpos[:3].copy()
     clock_pub = node.create_publisher(Clock, '/clock', 10)
+    if headless:
+        class HeadlessViewer:
+            cam = mujoco.MjvCamera()
+            user_scn = mujoco.MjvScene(model, maxgeom=10000)
+            def is_running(self):
+                return rclpy.ok()
+            def sync(self):
+                pass
+        viewer_context = nullcontext(HeadlessViewer())
+    else:
+        viewer_context = mujoco.viewer.launch_passive(model, data)
+    gap_collision_reported = False
     
 
-    with mujoco.viewer.launch_passive(model, data) as viewer:
+    with viewer_context as viewer:
         quad_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "quad")
         
         # 修改相机参数
@@ -892,6 +941,14 @@ def main(args=None):
                         traj_draw_last_time = quad.now_time
                             
 
+                if gap_file and not gap_collision_reported:
+                    for contact_index in range(data.ncon):
+                        contact = data.contact[contact_index]
+                        names = [model.geom(int(contact.geom1)).name, model.geom(int(contact.geom2)).name]
+                        if any(name.startswith('gap_') for name in names):
+                            node.get_logger().error('GAP COLLISION: ' + ', '.join(names))
+                            gap_collision_reported = True
+                            break
                 viewer.sync()
                 # sun: 积分完成后从 MuJoCo 传感器读取新状态，下一周期动力学和本周期消息均使用该快照。
                 quad.state.quat = data.sensor("body_quat").data.copy()

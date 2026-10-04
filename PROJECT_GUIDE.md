@@ -293,7 +293,7 @@ bash script/start_onboard_terminals.sh
 
 此脚本开启 `MicroXRCEAgent udp4 -p 8888`、`vrpn_client_ros sample.launch.py`、`vrpn_client_ros px4_bridge.launch.py`。依赖 `~/nokov_ws/install/setup.bash` 和 `~/px4Msg/install/setup.bash`，相关动捕/桥接实现不在当前仓库中，需要按目标机器调整。它需要 GNOME 图形终端。
 
-自研实机控制需关闭 `input.h` 中的 `SIMULATION` 与 `USE_WITHOUT_RC`，重新编译；否则保留仿真握手和自动流程。记录器实飞解锁触发则另外设置 `simulation_mode=false`。
+自研实机控制需用 `-DPX4CTRL_SIMULATION=OFF` 重新编译 `px4ctrl`；仿真用 `ON`（默认）。该 CMake 选项统一控制 `input.h` 中的 `SIMULATION` 与 `USE_WITHOUT_RC`，避免只关闭其中一个宏。记录器实飞解锁触发则另外设置 `simulation_mode=false`。
 
 本仓库提供消息一致性检查：
 
@@ -356,3 +356,9 @@ launch 默认读取安装空间配置。使用 `--symlink-install` 时应核实�
 | `docs` / `0913` | 本地说明、论文和分析记录，当前 Git 忽略 |
 
 `datalog` 也被 Git 忽略，因此切换/同步分支不会自动带走实验日志或离线优化 CSV。本文放在工程根目录，避免和被忽略的本地 docs 混在一起。本次只新增说明文件，没有提交或推送。
+
+## 动捕穿缝规划
+
+新增独立 `gap_planner`、`gap_msgs` 和 GCOPTER 子模块。矩形窗框通过参数尺寸和刚体位姿构建，仿真使用同一参数文件的固定刚体位姿。
+控制器选择 `trajectory.type=external` 后进入 CMD 悬停待命，在 CMD 接收并校验轨迹；数字选择本次数量，`e` 执行，完成后仍在 CMD，可用 `r` 往返或 `f` 结束。仿真初始无活动窗框，先输入 `c` 进入 CMD。端点为起飞点上方和其世界 X 加 `mission.goal_offset_x`；不加入场地边界约束。
+详细参数、FSM 状态、构建/启动命令和验证边界见 [外部 GCOPTER 动捕穿缝模式](src/realflight_modules/px4ctrl/TRAJECTORIES.md#外部-gcopter-动捕穿缝模式2026-10-04)。

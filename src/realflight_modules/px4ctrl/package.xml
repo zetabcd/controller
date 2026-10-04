@@ -20,6 +20,7 @@
   <depend>px4debug_msgs</depend>
   <depend>joy_msgs</depend>
   <depend>ratectrl_msgs</depend>
+  <depend>gap_msgs</depend>
   <depend>visualization_msgs</depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch_ros</exec_depend>

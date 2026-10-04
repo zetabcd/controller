@@ -1,0 +1,4 @@
+uint32 count
+---
+bool accepted
+string message

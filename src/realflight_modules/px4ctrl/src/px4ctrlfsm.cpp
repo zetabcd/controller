@@ -63,8 +63,18 @@ void PX4CtrlFSM::process()
     dt_ = (now_time - last_time_).seconds();
     last_time_ = now_time;
 
+    if (external_) {
+        const auto state=get_curr_state(&fsm_);
+        external_->poll(now_time.seconds(), state==FSM_STATE(cmd), state==FSM_STATE(auto_hover) && !landing_.active(),
+            pose_is_received(now_time) && pose_is_valid(pose_data) && att_is_received(now_time) &&
+            sens_is_received(now_time), pose_data.p, pose_data.v, att_data.q,
+            takeoff_origin_.valid(),takeoff_origin_.position());
+    }
     // 执行状态机，使其步进一次
+    const auto state_before=get_curr_state(&fsm_);
     cur_state_ = run_state_machine_once(&fsm_);
+    if (external_ && state_before==FSM_STATE(cmd) && cur_state_!=FSM_STATE(cmd) &&
+        !external_->finished(now_time.seconds())) {external_->stop();}
     // manual/auto_hover/cmd/safe 都属于外部控制状态。心跳在
     // process() 中统一发布，保证状态处理函数提前返回时也不会中断。
     if (cur_state_ == FSM_STATE(manual) ||
@@ -105,7 +115,7 @@ void PX4CtrlFSM::process()
 
         if (!px4controlnode_.param.tuning.attitude_loop && 
             !px4controlnode_.param.tuning.angular_rate_loop){
-                if (t_ > (enter_auto_hover_after_launch + enter_cmd_after_hover))
+                if (!external_ && t_ > (enter_auto_hover_after_launch + enter_cmd_after_hover))
                 {
                     // 切换到 cmd
                     joy_empty_msg->aux2 = 1.0;
@@ -364,6 +374,7 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
             next_disarm_request_time_ = landing_start_time_;
         } else {
             hover_target_ = takeoff_origin_.enterHover(record_state_data.p + record_state_data.v * 0.3);
+            if(taking_off && external_) {hover_target_.z()=takeoff_origin_.position().z()+external_->takeoffHeight();}
         }
         const auto &origin = takeoff_origin_.position();
         RCLCPP_INFO(px4controlnode_.get_logger(),
@@ -399,9 +410,13 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
     if (pending_mode_switch_ == ModeSwitchTarget::OFFBOARD && switch_to_offboard_mode_()) {
         pending_mode_switch_ = ModeSwitchTarget::NONE;
     }
-    if(pd->aux2_changed){
-        switch (pd->aux2){
+    const bool external_start = external_ && external_->requestEnter();
+    if(pd->aux2_changed || external_start){
+        switch (external_start ? GEARS::UP : pd->aux2){
             case GEARS::UP:
+                // Consume this edge even when no trajectory is ready. A later
+                // upload must never turn an old switch edge into automatic flight.
+                if (external_) {pd->aux2_changed=false;}
                 if (landing_.active()) {
                     pd->aux2_changed = false;
                     RCLCPP_WARN(px4controlnode_.get_logger(),
@@ -490,11 +505,30 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
         record_position();
         set_hover_ref();
         reset_controller_();
-        if (!load_cmd_trajectory_()) {
+        if(external_) {
+            trajectory_reference_.clear();cmd_trajectory_.reset();
+            hover_target_=pose_data.p;reset_point_reference_(hover_target_);
+        } else if (!load_cmd_trajectory_()) {
             set_next_state((FSM *)this_fsm, FSM_STATE(auto_hover));
             return NULL;
         }
         set_last_state((FSM *)this_fsm);
+    }
+    if(external_) {
+        if(external_->finished(now_time.seconds())) {
+            hover_target_=cmd_trajectory_->evaluate(cmd_trajectory_->duration()).position;
+            external_->complete();trajectory_reference_.clear();cmd_trajectory_.reset();
+            reset_point_reference_(hover_target_);
+        }
+        if(external_->requestFinish()) {
+            trajectory_reference_.clear();cmd_trajectory_.reset();landing_.cancel();
+            set_next_state((FSM *)this_fsm,FSM_STATE(auto_hover));return NULL;
+        }
+        if(external_->requestStart()) {
+            cmd_trajectory_=external_->activate(now_time.seconds());
+            if(cmd_trajectory_) {load_cmd_trajectory_();}
+        }
+        if(!external_->active()) {set_point_hover(hover_target_.x(),hover_target_.y(),hover_target_.z());}
     }
     /* 状态切换 */ 
     RC_Data_t *pd = (RC_Data_t *)get_data_entry((FSM *)this_fsm);
@@ -610,6 +644,38 @@ bool PX4CtrlFSM::prepare_cmd_trajectory()
     try {
         const auto &p = px4controlnode_.param;
         const auto type = px4controlnode_.get_parameter("trajectory.type").as_string();
+        if (type == "external") {
+            px4ctrl::TrajectoryLimits limits;
+            limits.gravity=p.gra; limits.mass=p.uav.mass;
+            limits.inertia={p.uav.Jvx,p.uav.Jvy,p.uav.Jvz};
+            limits.arm=p.uav.l; limits.arm_angle=p.uav.beta_deg*3.141592653589793/180;
+            limits.torque_to_thrust=p.motor.cq0/p.motor.ct0;
+            limits.motor_min=p.motor.u_min;
+            const double fraction=px4controlnode_.get_parameter("trajectory.limits.motor_fraction").as_double();
+            if(!std::isfinite(fraction) || fraction<=0 || fraction>1) {
+                throw std::invalid_argument("trajectory.limits.motor_fraction must be in (0,1]");
+            }
+            limits.motor_max=p.motor.u_max*fraction;
+            limits.thrust_min=4*limits.motor_min/limits.mass;
+            limits.thrust_max=4*limits.motor_max/limits.mass;
+            limits.angular_acceleration_max=px4controlnode_.get_parameter("trajectory.limits.angular_acceleration").as_double();
+            px4ctrl::ExternalModel model; model.gravity=p.gra;model.mass=p.uav.mass;
+#if PX4CTRL_PRIMARY_CONTROLLER != 0
+            model.drag=controller.options().linear_drag;
+            model.lift=controller.options().horizontal_lift;
+            limits.rate_max=controller.options().body_rate_max;
+#else
+            throw std::invalid_argument("External SE3 references require OMMPC or acados controller");
+#endif
+#ifdef SIMULATION
+            const bool simulation=true;
+#else
+            const bool simulation=false;
+#endif
+            external_=std::make_unique<px4ctrl::ExternalExecution>(px4controlnode_,limits,model,simulation);
+            RCLCPP_INFO(px4controlnode_.get_logger(), "External mode: enter CMD, hold while planning; explicit start for every leg");
+            return true;
+        }
         if (type == "omtraj") {
             cmd_trajectory_ = px4ctrl::loadOmTrajectoryReference(
                 px4controlnode_.get_parameter("trajectory.omtraj.file").as_string(), p.gra);
@@ -698,8 +764,10 @@ bool PX4CtrlFSM::prepare_cmd_trajectory()
 bool PX4CtrlFSM::load_cmd_trajectory_()
 {
     if (!cmd_trajectory_) {return false;}
+    if (external_) {external_->startClock(px4controlnode_.get_clock()->now().seconds());}
     trajectory_reference_.start(cmd_trajectory_, px4controlnode_.get_clock()->now().seconds(),
-        record_state_data.p, get_yaw_from_quaternion(record_state_data.q));
+        external_ ? Eigen::Vector3d::Zero().eval() : record_state_data.p,
+        external_ ? 0.0 : get_yaw_from_quaternion(record_state_data.q));
     return true;
 }
 

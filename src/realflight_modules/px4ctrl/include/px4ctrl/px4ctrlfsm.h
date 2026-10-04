@@ -22,6 +22,7 @@
 #include <px4ctrl/input.h>
 #include <px4ctrl/acados_nmpc.h>
 #include <px4ctrl/trajectory.h>
+#include <px4ctrl/external_execution.h>
 #include <px4ctrl/takeoff_origin.h>
 #include <px4ctrl/landing_reference.h>
 #include <px4_msgs/msg/vehicle_land_detected.hpp>
@@ -196,6 +197,7 @@ private:
     void update_point_reference_(double dt);
     std::shared_ptr<const px4ctrl::Trajectory> cmd_trajectory_;
     bool load_cmd_trajectory_();
+    std::unique_ptr<px4ctrl::ExternalExecution> external_;
     bool switch_to_offboard_mode_();
     bool switch_to_manual_mode_();
     void set_requested_landing_ref_();

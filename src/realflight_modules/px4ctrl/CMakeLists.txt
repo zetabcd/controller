@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(px4ctrl)
+option(PX4CTRL_SIMULATION "Build simulator inputs and automatic hover" ON)
+add_compile_definitions(PX4CTRL_SIMULATION=$<BOOL:${PX4CTRL_SIMULATION}>)
 
 # sun: px4ctrl_node 运行外环与状态机，px4ctrlrate_node 运行高频角速度环和电机分配。
 # sun: 两个可执行程序通过 /rates_thrust_setpoint 解耦，频率可分别配置。
@@ -35,6 +37,7 @@ find_package(uav_utils REQUIRED)
 find_package(px4debug_msgs REQUIRED)
 find_package(joy_msgs REQUIRED)
 find_package(ratectrl_msgs REQUIRED)
+find_package(gap_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
 # All third-party libraries are built natively and installed into a normal
@@ -77,8 +80,13 @@ target_include_directories(px4ctrl_acados_ocp_solver PUBLIC
 target_link_libraries(px4ctrl_acados_ocp_solver PUBLIC acados hpipm blasfeo m)
 
 # ROS-independent acados solver, also exercised directly by regression tests.
-add_library(px4ctrl_reference STATIC src/control_reference.cpp src/trajectory.cpp src/sampled_trajectory.cpp)
-target_include_directories(px4ctrl_reference PUBLIC include)
+add_library(px4ctrl_reference STATIC src/control_reference.cpp src/trajectory.cpp src/sampled_trajectory.cpp src/external_trajectory.cpp)
+target_include_directories(px4ctrl_reference PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+install(TARGETS px4ctrl_reference EXPORT px4ctrl_referenceTargets ARCHIVE DESTINATION lib)
+ament_export_targets(px4ctrl_referenceTargets HAS_LIBRARY_TARGET)
+ament_export_dependencies(Eigen3)
 target_link_libraries(px4ctrl_reference PUBLIC Eigen3::Eigen)
 
 add_library(px4ctrl_omtraj STATIC src/omtraj.cpp src/omtraj_dynamics.cpp src/omtraj_io.cpp src/omtraj_reference.cpp)
@@ -101,6 +109,7 @@ target_link_libraries(px4ctrl_ommpc PUBLIC px4ctrl_reference osqp::osqp)
 add_executable(px4ctrl_node 
   src/px4ctrl_node.cpp
   src/fcu_reboot.cpp
+  src/external_execution.cpp
 	src/input.cpp
   src/px4ctrlfsm.cpp
   src/controller.cpp
@@ -120,6 +129,7 @@ ament_target_dependencies(px4ctrl_node
   px4debug_msgs 
   joy_msgs 
   ratectrl_msgs
+  gap_msgs
   std_srvs
 )
 target_include_directories(px4ctrl_node PRIVATE include)
@@ -174,6 +184,7 @@ ament_target_dependencies(px4ctrlrate_node
   px4debug_msgs 
   joy_msgs 
   ratectrl_msgs
+  gap_msgs
   std_srvs
 )
 target_include_directories(px4ctrlrate_node SYSTEM PRIVATE
@@ -203,6 +214,8 @@ install(DIRECTORY config DESTINATION share/${PROJECT_NAME}/)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(external_trajectory_test test/external_trajectory_test.cpp)
+  target_link_libraries(external_trajectory_test px4ctrl_reference)
   ament_add_gtest(takeoff_origin_test test/takeoff_origin_test.cpp)
   target_include_directories(takeoff_origin_test PRIVATE include)
   target_link_libraries(takeoff_origin_test Eigen3::Eigen)

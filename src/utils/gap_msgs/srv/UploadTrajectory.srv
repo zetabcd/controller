@@ -1,0 +1,10 @@
+# One bounded reliable transaction. DDS fragments transport, not flight timing.
+std_msgs/Header header
+string trajectory_id
+string scene_id
+gap_msgs/FlightModel model
+gap_msgs/FlatSample[] samples
+---
+# Accepted means queued for asynchronous validation; await ExecutionStatus READY.
+bool accepted
+string message

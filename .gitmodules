@@ -19,3 +19,6 @@
 [submodule "3rdpart/src/acados"]
 	path = 3rdpart/src/acados
 	url = https://github.com/acados/acados.git
+[submodule "3rdpart/src/gcopter"]
+	path = 3rdpart/src/gcopter
+	url = https://github.com/ZJU-FAST-Lab/GCOPTER.git

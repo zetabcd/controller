@@ -297,7 +297,7 @@ TrajectoryAudit auditTrajectory(
     l.thrust_max <= l.thrust_min ||
     !l.rate_max.allFinite() || (l.rate_max.array() <= 0).any() ||
     !std::isfinite(l.angular_acceleration_max) || l.angular_acceleration_max <= 0 ||
-    !std::isfinite(l.minimum_relative_altitude))
+    (l.enforce_minimum_altitude && !std::isfinite(l.minimum_relative_altitude)))
   {throw std::invalid_argument("Invalid trajectory audit bounds");}
   Eigen::Matrix4d B;
   const double a = l.arm * std::cos(l.arm_angle), b = l.arm * std::sin(l.arm_angle),
@@ -330,7 +330,7 @@ TrajectoryAudit auditTrajectory(
         fail(t, "thrust acceleration limit");
       }
       if ((r.body_rate.cwiseAbs().array() > l.rate_max.array()).any()) {fail(t, "body rate limit");}
-      if (r.position.z() < l.minimum_relative_altitude) {fail(t, "relative altitude limit");}
+      if (l.enforce_minimum_altitude && r.position.z() < l.minimum_relative_altitude) {fail(t, "relative altitude limit");}
       if (r.angular_acceleration_valid) {
         out.max_angular_acceleration = std::max(
           out.max_angular_acceleration,

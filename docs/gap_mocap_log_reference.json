@@ -1,0 +1,59 @@
+{
+  "source": "datalog/realflight/10012037TOP/flight_20261001_203447_613650_bc3a4984.ulg",
+  "sha256": "0c6919f2481fb24f6410cb7e1ae7f5945027bba76854eec9a92ed89893257e4a",
+  "raw_topic": "/sun1/pose",
+  "raw_type": "geometry_msgs/msg/PoseStamped",
+  "raw_samples": 2074,
+  "recorded_duration_s": 31.241190999999986,
+  "recorded_average_rate_hz": 66.3547045949689,
+  "header_frame_id": null,
+  "frame_id_evidence": [
+    {
+      "path": [
+        "header",
+        "frame_id"
+      ],
+      "reason": "string"
+    }
+  ],
+  "header_stamp_nonincreasing_count": 0,
+  "recorder_ros_time_minus_header_stamp_ms": {
+    "min": 0.7648468017578125,
+    "median": 7.728934288024902,
+    "p95": 21.329367160797098,
+    "max": 77.49032974243164
+  },
+  "quaternion_norm_min_max": [
+    0.9999999701107206,
+    1.0000000396775
+  ],
+  "bridge_topic": "/fmu/in/vehicle_visual_odometry",
+  "bridge_type": "px4_msgs/msg/VehicleOdometry",
+  "bridge_samples": 2074,
+  "bridge_pose_frame_values": [
+    1
+  ],
+  "bridge_position_mapping": "(x, -y, -z)",
+  "bridge_position_max_samplewise_error_m": 0.0,
+  "bridge_orientation_mapping_wxyz": "(w, x, -y, -z)",
+  "bridge_quaternion_max_sign_invariant_component_norm_error": 5.972094663188382e-08,
+  "first_raw_pose": {
+    "position_xyz": [
+      -1.2188478708267212,
+      -0.16532912850379944,
+      0.06636977195739746
+    ],
+    "quaternion_wxyz": [
+      0.9993492960929871,
+      0.028699833899736404,
+      0.011320396326482296,
+      0.018685413524508476
+    ]
+  },
+  "limitations": [
+    "ULog omits header.frame_id string; its actual label cannot be recovered.",
+    "Only the aircraft /sun1/pose was recorded; no window topic names were observed.",
+    "Bridge comparison does not establish estimator-origin calibration or ROS publisher QoS.",
+    "Average rate is observed in the recorder, not a guaranteed mocap sampling frequency."
+  ]
+}
