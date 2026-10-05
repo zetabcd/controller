@@ -461,8 +461,8 @@ latexmk -xelatex ommpc_tuning_and_realflight_audit_20260930.tex
 
 # Simulation only: both controller nodes must use /clock
 ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true
-# Or launch the simulator and controllers together:
-ros2 launch px4ctrl run_sim.launch.py
+# Another terminal with the workspace sourced:
+ros2 launch quadsim_mujoco mujoco.launch.py
 \end{lstlisting}
 修改 YAML 后需重启两个控制节点；前馈参数启动时读取。
 实物使用非仿真时钟，但这只是时钟选择，不替代编译开关、坐标、固件、估计和执行链验证。

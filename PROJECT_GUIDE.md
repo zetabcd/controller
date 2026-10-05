@@ -1,6 +1,6 @@
 > OMMPC 分支更新（2026-09-29）：控制器 1 已扩展角速度/推力响应、气动补偿和 OSQP 复用。
 > 默认参数与仿真启动方式见 [OMMPC.md](src/realflight_modules/px4ctrl/OMMPC.md)。
-> 仿真建议使用 `ros2 launch px4ctrl run_sim.launch.py`，统一 `/clock`；下文旧 OMMPC 参数描述以新说明为准。
+> 普通轨迹仿真分别启动 `run_ctrl.launch.py use_sim_time:=true` 和 `quadsim_mujoco mujoco.launch.py`；穿缝使用 `gap_planner gap_flight.launch.py` 统一启动。下文旧 OMMPC 参数描述以新说明为准。
 
 **工程模块与使用手册**
 
@@ -293,7 +293,7 @@ bash script/start_onboard_terminals.sh
 
 此脚本开启 `MicroXRCEAgent udp4 -p 8888`、`vrpn_client_ros sample.launch.py`、`vrpn_client_ros px4_bridge.launch.py`。依赖 `~/nokov_ws/install/setup.bash` 和 `~/px4Msg/install/setup.bash`，相关动捕/桥接实现不在当前仓库中，需要按目标机器调整。它需要 GNOME 图形终端。
 
-自研实机控制需用 `-DPX4CTRL_SIMULATION=OFF` 重新编译 `px4ctrl`；仿真用 `ON`（默认）。该 CMake 选项统一控制 `input.h` 中的 `SIMULATION` 与 `USE_WITHOUT_RC`，避免只关闭其中一个宏。记录器实飞解锁触发则另外设置 `simulation_mode=false`。
+自研控制器在 `src/realflight_modules/px4ctrl/include/px4ctrl/input.h` 设置 `PX4CTRL_SIMULATION`：`0` 为实机，`1` 为仿真，修改后重新编译 `px4ctrl`。该源码开关统一控制 `SIMULATION` 与 `USE_WITHOUT_RC`，不再使用 CMake 的同名选项。穿缝统一启动时还需将 `gap_flight.launch.py` 顶部 `SIMULATION` 设为相应的 `False/True`；配置文件和窗口选项也在其顶部修改，不传 launch 参数。完整参数优先级见 [TRAJECTORIES.md](src/realflight_modules/px4ctrl/TRAJECTORIES.md#穿缝配置入口与覆盖关系)。记录器实飞解锁触发则另外设置 `simulation_mode=false`。
 
 本仓库提供消息一致性检查：
 
@@ -360,5 +360,5 @@ launch 默认读取安装空间配置。使用 `--symlink-install` 时应核实�
 ## 动捕穿缝规划
 
 新增独立 `gap_planner`、`gap_msgs` 和 GCOPTER 子模块。矩形窗框通过参数尺寸和刚体位姿构建，仿真使用同一参数文件的固定刚体位姿。
-控制器选择 `trajectory.type=external` 后进入 CMD 悬停待命，在 CMD 接收并校验轨迹；数字选择本次数量，`e` 执行，完成后仍在 CMD，可用 `r` 往返或 `f` 结束。仿真初始无活动窗框，先输入 `c` 进入 CMD。端点为起飞点上方和其世界 X 加 `mission.goal_offset_x`；不加入场地边界约束。
+控制器选择 `trajectory.type=external` 后由原 AUX2 流程进入 CMD 悬停待命，在 CMD 接收并校验轨迹；数字选择本次数量，`e` 执行，完成后仍在 CMD，可用 `r` 重新规划往返。控制台不提供进入/退出 CMD 的命令。仿真初始无活动窗框，使用原无遥控合成 AUX2 自动切入 CMD；实物仍由遥控器切换。端点为起飞点上方和其世界 X 加 `mission.goal_offset_x`；不加入场地边界约束。
 详细参数、FSM 状态、构建/启动命令和验证边界见 [外部 GCOPTER 动捕穿缝模式](src/realflight_modules/px4ctrl/TRAJECTORIES.md#外部-gcopter-动捕穿缝模式2026-10-04)。

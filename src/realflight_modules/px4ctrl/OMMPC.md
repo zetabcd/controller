@@ -60,12 +60,14 @@ colcon build --packages-up-to px4ctrl flight_data_recorder quadsim_mujoco \
   --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
 source install/setup.bash
 ctest --test-dir build/px4ctrl --output-on-failure -R 'ommpc_test|trajectory_test|control_reference_test|controller_adapter_test|acados_nmpc_test'
-ros2 launch px4ctrl run_sim.launch.py
+ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true
+# 另一个已加载工作区的终端：
+ros2 launch quadsim_mujoco mujoco.launch.py
 ```
 
-新 `run_sim.launch.py` 同时启动 GUI 仿真、两个控制节点与记录器，控制节点使用 `/clock`。仿真刚体与电机积分均使用固定物理步长，墙钟只用于节流；姿态矩阵使用当步四元数。
+`run_ctrl.launch.py` 启动两个控制节点与记录器，`mujoco.launch.py` 启动 GUI 仿真，以上命令使控制节点使用 `/clock`。仿真刚体与电机积分均使用固定物理步长，墙钟只用于节流；姿态矩阵使用当步四元数。
 
-若分终端启动，控制侧必须使用 `ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true`。实机继续使用 `run_ctrl.launch.py` 默认 `use_sim_time=false`，并关闭源码中的仿真/无遥控开关。不要把仿真时钟带入实机。
+实机继续使用 `run_ctrl.launch.py` 默认 `use_sim_time=false`，并关闭源码中的仿真/无遥控开关。不要把仿真时钟带入实机。
 
 无渲染闭环实验复用 `script/acados_closed_loop/`，虽然目录沿用旧名称，但支持 OMMPC/acados，使用真实 C++ 控制节点、自研内环和 MuJoCo 电机/气动模型。分析窗口由当前轨迹生成器的 main_start/main_end 确定，不再硬编码旧八字时长。
 

@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 project(px4ctrl)
-option(PX4CTRL_SIMULATION "Build simulator inputs and automatic hover" ON)
-add_compile_definitions(PX4CTRL_SIMULATION=$<BOOL:${PX4CTRL_SIMULATION}>)
+# 仿真/实机选择在 include/px4ctrl/input.h；不再读取 CMake 缓存中的同名选项。
 
 # sun: px4ctrl_node 运行外环与状态机，px4ctrlrate_node 运行高频角速度环和电机分配。
 # sun: 两个可执行程序通过 /rates_thrust_setpoint 解耦，频率可分别配置。

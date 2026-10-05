@@ -4,9 +4,10 @@
 // sun: 本文件将不同 PX4/仿真消息统一整理为控制器内部状态，并在接收入口完成
 // sun: 坐标系、单位、遥控曲线和时间戳转换，使后续控制算法不依赖消息格式。
 
-#ifndef PX4CTRL_SIMULATION
+// 在这里选择模式，修改后重新编译 px4ctrl：1=MuJoCo 仿真，0=实机。
+// 穿缝启动时，gap_flight.launch.py 顶部的 SIMULATION 必须与这里一致。
+// 此开关由源码决定，不再通过 colcon --cmake-args 设置。
 #define PX4CTRL_SIMULATION 1
-#endif
 #if PX4CTRL_SIMULATION
 #define SIMULATION
 #endif

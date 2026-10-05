@@ -115,7 +115,7 @@ void PX4CtrlFSM::process()
 
         if (!px4controlnode_.param.tuning.attitude_loop && 
             !px4controlnode_.param.tuning.angular_rate_loop){
-                if (!external_ && t_ > (enter_auto_hover_after_launch + enter_cmd_after_hover))
+                if (t_ > (enter_auto_hover_after_launch + enter_cmd_after_hover))
                 {
                     // 切换到 cmd
                     joy_empty_msg->aux2 = 1.0;
@@ -410,13 +410,9 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
     if (pending_mode_switch_ == ModeSwitchTarget::OFFBOARD && switch_to_offboard_mode_()) {
         pending_mode_switch_ = ModeSwitchTarget::NONE;
     }
-    const bool external_start = external_ && external_->requestEnter();
-    if(pd->aux2_changed || external_start){
-        switch (external_start ? GEARS::UP : pd->aux2){
+    if(pd->aux2_changed){
+        switch (pd->aux2){
             case GEARS::UP:
-                // Consume this edge even when no trajectory is ready. A later
-                // upload must never turn an old switch edge into automatic flight.
-                if (external_) {pd->aux2_changed=false;}
                 if (landing_.active()) {
                     pd->aux2_changed = false;
                     RCLCPP_WARN(px4controlnode_.get_logger(),
@@ -519,10 +515,6 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
             hover_target_=cmd_trajectory_->evaluate(cmd_trajectory_->duration()).position;
             external_->complete();trajectory_reference_.clear();cmd_trajectory_.reset();
             reset_point_reference_(hover_target_);
-        }
-        if(external_->requestFinish()) {
-            trajectory_reference_.clear();cmd_trajectory_.reset();landing_.cancel();
-            set_next_state((FSM *)this_fsm,FSM_STATE(auto_hover));return NULL;
         }
         if(external_->requestStart()) {
             cmd_trajectory_=external_->activate(now_time.seconds());

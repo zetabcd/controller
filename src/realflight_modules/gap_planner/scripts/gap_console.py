@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive selection outside the control process: c enters CMD in simulation; numbers/r plan; e executes; f finishes."""
+"""Task console: the controller's original AUX2 path owns CMD entry; numbers/r plan and e executes."""
 import queue
 import threading
 import rclpy
@@ -15,8 +15,6 @@ class Console(Node):
         super().__init__('gap_console')
         self.planner = self.create_client(PlanGaps, '/gap/plan')
         self.start = self.create_client(Trigger, '/gap/start')
-        self.enter = self.create_client(Trigger, '/gap/enter_cmd')
-        self.finish = self.create_client(Trigger, '/gap/finish')
         self.last_count = None
         self.commands = queue.Queue()
         self.last_state = None
@@ -24,7 +22,7 @@ class Console(Node):
         self.create_subscription(String, '/gap/planner_status', lambda m: print(m.data, flush=True), 10)
         self.create_timer(0.1, self.command)
         threading.Thread(target=self.read_input, daemon=True).start()
-        print('先进入 CMD：仿真输入 c，实机 AUX2 UP。随后输入数量选择本次窗框并规划；e 执行；r 同数量反向继续；f 结束任务回 AUTO_HOVER；q 仅退出控制台。', flush=True)
+        print('等待原 AUX2 流程进入 CMD（无遥控仿真自动切换，实机拨到 UP）。随后输入数量规划；e 执行；r 同数量重新规划；q 仅退出控制台，不停止飞机。模式切换仍由 AUX2 负责。', flush=True)
 
     def status(self, message):
         key = (message.state, message.reason)
@@ -50,17 +48,13 @@ class Console(Node):
             text = str(self.last_count)
         if text.isdecimal() and 0 < int(text) <= 10:
             client, request = self.planner, PlanGaps.Request(count=int(text))
-        elif text == 'c':
-            client, request = self.enter, Trigger.Request()
-        elif text == 'f':
-            client, request = self.finish, Trigger.Request()
         elif text == 'e':
             client, request = self.start, Trigger.Request()
         else:
-            print('请输入 1..10、c、e、r、f 或 q', flush=True)
+            print('请输入 1..10、e、r 或 q；模式切换由 AUX2 负责。', flush=True)
             return
         if not client.service_is_ready():
-            print('服务未就绪；实机用 AUX2 UP 进入 CMD 后，再选择数量和 e 执行。', flush=True)
+            print('服务未就绪；检查 gap_flight 是否启动。进入 CMD 后再选择数量和 e 执行。', flush=True)
             return
         def response(future):
             try:

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import tempfile
 import time
 
 
@@ -33,9 +34,20 @@ def main():
         cfg = yaml.safe_load(config)['gap_planner']['ros__parameters']
 
     stream = open(args.log, 'w', encoding='utf-8')
-    process = subprocess.Popen(['ros2', 'launch', 'gap_planner', 'gap_flight.launch.py',
-        'simulation:=true', 'headless:=true', 'rviz:=false',
-        'gap_params:=' + str(Path(args.gap_params).resolve())], stdout=stream,
+    # Production launch uses editable constants. Override them only in a
+    # temporary test wrapper, keeping the user's launch file untouched.
+    from ament_index_python.packages import get_package_share_directory
+    launch_file = Path(get_package_share_directory('gap_planner')) / 'launch' / 'gap_flight.launch.py'
+    test_directory = tempfile.TemporaryDirectory(prefix='gap_flow_')
+    test_launch = Path(test_directory.name) / 'test.launch.py'
+    test_launch.write_text(
+        'import runpy\n'
+        f'settings = runpy.run_path({str(launch_file)!r})\n'
+        'generate_launch_description = settings["generate_launch_description"]\n'
+        'generate_launch_description.__globals__.update('
+        f'SIMULATION=True, HEADLESS=True, RVIZ=False, GAP_PARAMS={str(Path(args.gap_params).resolve())!r})\n',
+        encoding='utf-8')
+    process = subprocess.Popen(['ros2', 'launch', str(test_launch)], stdout=stream,
         stderr=subprocess.STDOUT, start_new_session=True)
     rclpy.init()
     node = Node('gap_flow_test')
@@ -81,8 +93,6 @@ def main():
     node.create_subscription(UInt32, '/gap/sim/selected_count', lambda m: selected_count.__setitem__(0, m.data), 10)
     planner = node.create_client(PlanGaps, '/gap/plan')
     start = node.create_client(Trigger, '/gap/start')
-    enter = node.create_client(Trigger, '/gap/enter_cmd')
-    finish = node.create_client(Trigger, '/gap/finish')
     upload = node.create_client(UploadTrajectory, '/gap/upload')
     configure = node.create_client(ConfigureGates, '/gap/sim/configure')
 
@@ -107,13 +117,23 @@ def main():
         until(lambda: time.monotonic() >= deadline, seconds+2)
 
     try:
-        until(lambda: latest[0] is not None and latest[0].hovering and latest[0].feedback_valid, 40)
+        # No console or mode-switch service: the existing synthetic AUX2
+        # sequence must enter CMD and hold without a trajectory.
+        until(lambda: latest[0] is not None and latest[0].command_mode
+              and latest[0].hovering and latest[0].feedback_valid, 40)
         settle(3)
         assert selected_count[0] == 0, 'Simulator must start with no active gates'
-        assert not call(start, Trigger.Request()).success
-        assert not call(planner, PlanGaps.Request(count=args.count)).accepted, 'Planning outside CMD must fail'
-        assert call(enter, Trigger.Request()).success
-        until(lambda: latest[0].command_mode and latest[0].hovering, 5)
+        assert latest[0].state == 'WAITING', 'Entering CMD must not execute an old trajectory'
+        service_names = {name for name, _ in node.get_service_names_and_types()}
+        assert '/gap/enter_cmd' not in service_names and '/gap/finish' not in service_names
+        # A console opened after the switch receives the current periodic
+        # status; it does not need the original AUX2 edge or first status frame.
+        late_states = []
+        late_subscription = node.create_subscription(ExecutionStatus, '/gap/execution', late_states.append, 10)
+        until(lambda: bool(late_states) and late_states[-1].command_mode, 3)
+        assert late_states[-1].state == 'WAITING'
+        node.destroy_subscription(late_subscription)
+        print('PASS AUX2 entered CMD; no console mode services; late subscriber sees WAITING', flush=True)
         assert not call(start, Trigger.Request()).success, 'Empty CMD must hold without starting'
         origin = latest[0].takeoff_position
         home = np.array([origin.x, origin.y, origin.z+cfg['mission']['flight_height']])
@@ -147,7 +167,6 @@ def main():
             assert call(start, Trigger.Request()).success
             until(lambda: latest[0].state == 'EXECUTING', 5)
             assert not call(planner, PlanGaps.Request(count=1)).accepted
-            assert not call(finish, Trigger.Request()).success
             assert not call(configure, ConfigureGates.Request(count=0)).accepted
             until(lambda: latest[0].state == 'COMPLETED' and latest[0].hovering, 60)
             assert latest[0].command_mode, 'Completed leg must stay in CMD'
@@ -159,9 +178,8 @@ def main():
             assert all(distance < 0.2 for distance, _ in crossing_samples.values())
             assert len(crossing_samples) == count
             print(f'PASS leg={leg} count={count} endpoint_error={error:.3f} m crossings={crossing_samples}', flush=True)
-        assert call(finish, Trigger.Request()).success
-        until(lambda: not latest[0].command_mode and latest[0].hovering, 5)
-        assert not call(planner, PlanGaps.Request(count=1)).accepted
+        settle(1)
+        assert latest[0].command_mode and latest[0].hovering and latest[0].state == 'COMPLETED'
         assert 'GAP COLLISION' not in Path(args.log).read_text(), 'MuJoCo detected frame contact'
         print(f'PASS mission states={history}', flush=True)
     finally:
@@ -174,6 +192,7 @@ def main():
             os.killpg(process.pid, signal.SIGTERM)
             process.wait(timeout=5)
         stream.close()
+        test_directory.cleanup()
 
 
 if __name__ == '__main__':

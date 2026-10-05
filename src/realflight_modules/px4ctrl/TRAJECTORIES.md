@@ -207,7 +207,7 @@ ros2 run px4ctrl omtraj_visualizer_node --ros-args \
 ## 外部 GCOPTER 动捕穿缝模式（2026-10-04）
 
 当前版本在 **CMD 中等待、接收并执行多次任务**。每段轨迹结束后仍在 CMD 悬停，
-由控制台选择继续往返或结束。外部模式关闭旧无遥控流程的自动 CMD/自动执行。
+由控制台选择数量、重新规划和明确执行。进入/退出 CMD 恢复原 AUX2 流程：无遥控仿真保留原有合成 AUX2 自动切档，实物使用遥控器；控制台不切换 FSM 模式。进入 CMD 不自动执行轨迹。
 
 ### 启动与任务交互
 
@@ -216,9 +216,9 @@ source /opt/ros/humble/setup.bash
 # 新检出时取得固定提交的 GCOPTER 子模块
 # git submodule update --init 3rdpart/src/gcopter
 colcon build --packages-up-to gap_planner quadsim_mujoco --symlink-install \
-  --cmake-args -DCMAKE_BUILD_TYPE=Release -DPX4CTRL_SIMULATION=ON
+  --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
-ros2 launch gap_planner gap_flight.launch.py simulation:=true
+ros2 launch gap_planner gap_flight.launch.py
 ```
 
 另开终端加载同一工作区，然后运行：
@@ -230,28 +230,144 @@ ros2 run gap_planner gap_console.py
 
 | 输入 | 行为 |
 |---|---|
-| `c` | 仿真从稳定 AUTO_HOVER 进入 CMD 待命；实机用 AUX2 UP 进入 |
 | `1`、`2`、`3` | 选择本次配置列表前 N 个窗框并规划；仍在 CMD 悬停 |
 | `e` | READY 后明确执行这一段，仿真和实机均适用 |
 | `r` | 沿用上次数量，再次规划；在远端时自动按相反顺序穿回 |
-| `f` | 在 CMD 待命时结束任务，回 AUTO_HOVER 原地悬停，不自动降落 |
 | `q` | 仅关闭控制台，不中断飞机任务 |
 
-例如 `c → 1 → READY → e → COMPLETED → r → READY → e → COMPLETED → f`。
-每次完成后也可输入新的数量，改变下一段所用窗框。执行过程中拒绝新的规划、窗框切换和
-`f`；等待该段结束再决定下一步。现有遥控手动/安全/降落路径仍保留。
+例如 `原 AUX2 流程进入 CMD → 1 → READY → e → COMPLETED → r → READY → e → COMPLETED`。
+每次完成后也可输入新的数量，改变下一段所用窗框。执行过程中拒绝新的规划和窗框切换；等待该段结束再决定下一步。遥控手动/安全/降落仍走原 FSM 路径。
+控制台可在 CMD 前或后启动；`/gap/execution` 持续约 10 Hz 发布，晚启动不会错过一次性的切换事件。
+不再提供 `c`、`f` 或对应的进入/退出模式服务。`q` 只关闭控制台，不停止飞行。
 实机 AUX2 从 UP 到 MID 仍沿用原降落语义，持续往返时保持 UP，用控制台选择下一任务。
 
-实机编译选项为 `-DPX4CTRL_SIMULATION=OFF`，launch 使用 `simulation:=false`；两者不一致
-会拒绝启动。`/gap/enter_cmd` 只在仿真暴露；实机先由遥控器授权进入 CMD，随后每段用
-`/gap/start` 或控制台 `e` 执行。`/gap/finish` 对应 `f`。
+实机将 `input.h` 中 `PX4CTRL_SIMULATION` 改为 `0` 并重新编译，将
+`gap_flight.launch.py` 顶部 `SIMULATION` 改为 `False`；两者不一致会拒绝启动。实机先由遥控器 AUX2 UP 进入 CMD，仿真由原无遥控逻辑合成 AUX2 UP；随后每段都用 `/gap/start` 或控制台 `e` 执行。
 控制器种类仍由 `PX4CTRL_PRIMARY_CONTROLLER` 编译选项决定，launch 的
-`controller_kind:=mpc|nmpc` 必须匹配；支持 OMMPC 和 acados。
+`CONTROLLER_KIND = 'mpc'` 或 `'nmpc'` 必须匹配；支持 OMMPC 和 acados。
+
+### 穿缝配置入口与覆盖关系
+
+模式开关和启动配置已集中整理；FSM 的模式触发恢复原 AUX2 路径，控制台只管理轨迹任务。MINCO、消息格式和场景新鲜度检查保持原实现。
+穿缝只启动 `gap_flight.launch.py`，它已包含两级控制器、规划器、轨迹发送器，以及按开关启动的 MuJoCo 和 RViz。
+不要再同时启动 `run_ctrl.launch.py`，否则会重复启动控制节点。
+
+| 修改位置 | 参数与作用 | 生效方式 |
+|---|---|---|
+| `px4ctrl/include/px4ctrl/input.h` | `PX4CTRL_SIMULATION=1` 仿真；`0` 实机。选择传感器处理分支，同时启用/关闭无遥控仿真流程 | 重新编译 px4ctrl 并重启 |
+| `px4ctrl/include/px4ctrl/px4ctrlfsm.h` | `PX4CTRL_PRIMARY_CONTROLLER=1` OMMPC；`2` acados；`0` 原 QuadControl | 重新编译；当前穿缝模型导入按 OMMPC/acados 配置 |
+| `gap_flight.launch.py` 顶部 | 以下启动配置 | 重启 launch；非 symlink 安装需重新 build 安装 |
+| 选中的控制器 YAML | 原有质量、惯量、电机、气动、控制增益、MPC 和轨迹校验参数 | 重启 |
+| 选中的 gaps YAML | 任务端点、窗框几何、动捕、规划参数、采样间隔 | 重启 |
+
+源码模式与 launch 模式是两个明确入口：前者决定编译进去的控制逻辑，后者决定启动哪些节点、窗框数据来源及 ROS 时钟。
+launch 不读取头文件来猜模式，也不会通过参数改变已编译的模式。两处必须一致。
+以前缓存中的 `PX4CTRL_SIMULATION:BOOL=ON/OFF` 即使还在 CMakeCache.txt，也不再参与编译定义；不用清空整个 build。
+以后构建不传 `-DPX4CTRL_SIMULATION`，直接使用上面的构建命令或 `colcon build` 即可。
+
+| launch 顶部变量（当前默认） | 含义 |
+|---|---|
+| `SIMULATION = True` | 启动 MuJoCo；规划器使用 YAML 框位姿；控制器、规划器、发送器、RViz 统一使用 `/clock`。`False` 时不启动 MuJoCo，规划器订阅框刚体，所有上述节点使用系统时间 |
+| `HEADLESS = False` | 是否隐藏 MuJoCo 窗口；True 仍运行仿真，仅在仿真时有效 |
+| `RVIZ = True` | 是否显示 RViz |
+| `CONTROLLER_KIND = 'mpc'` | 为规划器导入控制器模型时选择 YAML 的 `mpc`（OMMPC）或 `nmpc`（acados）节；不切换控制算法 |
+| `CONTROLLER_PARAMS = 'params.yaml'` | px4ctrl/config 下的控制器配置；可以改为 `params_ommpc_flip.yaml` 或绝对路径 |
+| `GAP_PARAMS = 'gaps.yaml'` | gap_planner/config 下的任务配置；也可填写绝对路径 |
+| `RATECTRL_PARAMS = 'ratectrl_diagnostics.yaml'` | 内环诊断配置；主要飞行器/控制参数仍由内环通过参数服务从外环获取 |
+| `SIM_PARAMS = 'params.yaml'` | quadsim_mujoco/config 下的仿真器配置，与控制器的同名文件是不同文件 |
+| `RVIZ_CONFIG = 'gaps.rviz'` | gap_planner/config 下的可视化配置 |
+| `SIM_INITIAL_POSITION = [-1.65, 0.0, 0.05]` | 仿真机体初始世界 NWU 位置，单位 m |
+| `SIM_LOG_ROOT = 'datalog/gap_sim'` | 仿真记录根目录，每次创建时间命名的子目录 |
+
+配置优先级是**节点默认值 < YAML < launch 后置字典**。后置覆盖已在 launch 中明列为
+`controller_overrides`、`clock_parameters`、`model` 和 MuJoCo 参数字典：
+
+| 接收节点 | launch 覆盖 YAML 的字段 | 来源/目的 |
+|---|---|---|
+| 外环 px4ctrl_node | `trajectory.type = external` | 穿缝入口固定选择外部轨迹；即使控制器 YAML 写 helix/omtraj，也不会执行它 |
+| 外环 | `trajectory.external.simulation`、`use_sim_time` | 顶部 `SIMULATION`；前者检查与已编译模式是否匹配，后者选择时间来源 |
+| 外环 | `trajectory.external.takeoff_height` | gaps YAML 的 `mission.flight_height`；普通轨迹的 `trajectory.takeoff_height` 不控制穿缝高度 |
+| 内环、发送器、RViz | `use_sim_time` | 顶部 `SIMULATION` |
+| 规划器 | `simulation`、`use_sim_time` | 顶部 `SIMULATION`；因此统一 launch 下仅改 gaps.yaml 的 simulation 无效 |
+| 规划器 | 下表的 `vehicle.*` 模型参数 | 从所选控制器 YAML 导出，确保规划与执行使用一致模型 |
+| MuJoCo | `initial_position`、`headless`、`log_directory` | 顶部仿真配置；覆盖仿真器 YAML 同名项 |
+| MuJoCo | `gap_scene_file` | 使用与规划器相同的 gaps 文件；启动时无激活窗框，选择数量后构建本次场景 |
+
+模型导入具体关系如下；这些都是原版已有的计算，此次没有新增约束：
+
+| 规划器字段 | 控制器 YAML 来源 |
+|---|---|
+| `vehicle.mass / arm / prop_radius / gravity` | `uav.mass / uav.l / uav.rp / gra` |
+| `vehicle.drag_acceleration` | `[aero.kdx, kdy, kdz] / mass`；所选控制器 `drag_compensation=false` 时置零 |
+| `vehicle.lift_acceleration` | `aero.kh / mass`；同样受气动补偿开关控制 |
+| `vehicle.inertia / arm_angle` | `uav.Jvx/Jvy/Jvz`；`uav.beta_deg` 转弧度 |
+| `vehicle.torque_to_thrust` | `2 * rp * motor.Cq_c / motor.Ct_c` |
+| `vehicle.motor_min` | `ct * motor.rc2speed_c²`，其中 `ct = motor.Ct_c * 4 * aero.rho * rp⁴ / π²` |
+| `vehicle.motor_max` | `ct * (rc2speed_a + rc2speed_b + rc2speed_c)² * trajectory.limits.motor_fraction` |
+| `vehicle.execution_rate_max` | 所选 `mpc/nmpc.body_rate_max`，逐轴 rad/s |
+| `vehicle.angular_acceleration_max` | `trajectory.limits.angular_acceleration`，rad/s² |
+
+`gaps.yaml` 中仍直接由用户配置的项目如下：
+
+| 参数 | 含义 |
+|---|---|
+| `simulation` | 单独运行规划器时的默认模式；统一启动时被 launch 覆盖 |
+| `mission.goal_offset_x` | 去程终点相对起飞点的世界 X 偏移，默认 4 m；返程回起飞点上方 |
+| `mission.flight_height` | 相对记录的地面起飞原点高度，默认 1 m；同时设置外部模式高度和往返端点 Z |
+| `vehicle.height` | 含桨、电池和动捕球的机体包络总高，当前 0.10 m |
+| `vehicle.body_model` | `polytope` 顶点凸包或 `ellipsoid` 外接椭球 |
+| `vehicle.vertices` | 可选机体系包络顶点 `[x,y,z,...]`，m；未填时按力臂、桨半径、高度生成盒子八顶点 |
+| `vehicle.ellipsoid_half_axes` | 可选椭球三半轴，m；仅椭球模型使用 |
+| `planning.heading` | 世界 NWU 中机体 X 方向的航向，rad |
+| `planning.margin / optimization_buffer` | 碰撞净空 / 优化额外数值余量，m，默认 0.02 / 0.002 |
+| `planning.speed_max / rate_max` | 优化与审计使用的速度、角速度限值，m/s、rad/s |
+| `planning.thrust_min / thrust_max` | 单位质量推力范围，m/s²，不是 N |
+| `planning.tilt_max` | 倾角上限，rad |
+| `planning.time_weight` | 时间成本权重，与归一化 jerk 能量权衡 |
+| `planning.solve_budget` | 规划求解总预算，实际墙上耗时的秒数；审计可增加少量开销 |
+| `mocap.frame_id` | 要求的输入父坐标系；空串表示学习并锁定首个有效消息的 frame_id（它本身也可能为空） |
+| `mocap.timeout` | 实物框位姿新鲜度，默认 0.3 s |
+| `mocap.position_tolerance / angle_tolerance` | 对比本次规划快照，框移动超过 0.01 m / 0.02 rad 则场景失效 |
+| `mocap.world_translation / world_quaternion_wxyz` | 动捕父系到控制器世界 NWU 系的固定变换；平移 m，四元数顺序 wxyz |
+| `gate_order` | 输入 N 时选择列表前 N 个框；返程倒序穿越，每次请求重新取当前框位姿 |
+| `gates.<id>.topic` | 该框刚体的 `geometry_msgs/msg/PoseStamped` 话题，不能填飞机刚体的话题 |
+| `width / height / thickness / frame_width` | 净开口宽、高，沿穿越轴的厚度，框条宽度，单位 m |
+| `opening_offset / opening_quaternion_wxyz` | 刚体系中的开口中心及姿态；开口 X 为穿越方向，Y 为宽，Z 为高 |
+| `sim_position / sim_rpy_deg` | 仿真刚体在世界系的位置和姿态；旋转使用 `Rz(yaw) Ry(pitch) Rx(roll)`，之后再复合开口变换 |
+| `gap_trajectory_sender.ros__parameters.sample_dt` | 离散采样间隔，默认 0.005 s；整条轨迹一次上传并缓存，不是每 5 ms 发一条 ROS 消息 |
+
+可在控制器 YAML 的 `trajectory.external` 下配置启动容差：`start_position_tolerance` 默认 0.10 m，
+`start_speed_tolerance` 默认 0.15 m/s，`start_attitude_tolerance` 默认 0.15 rad，`scene_timeout` 默认 0.5 s。
+这些是启动检查，不加入 MINCO 优化。`trajectory.limits` 和控制器模型另用于轨迹动力学校验。
+场地长宽没有作为优化边界加入。YAML 参数在构造时读取，修改后应重启，不应假定 `ros2 param set` 会重建内部模型。
+
+### 时间检查为何会立即拒绝
+
+这里说的是**时间来源不一致**，不是 MINCO 优化耗时。`use_sim_time=false` 时 ROS `now()` 是系统时间，
+`true` 时取仿真器发布的 `/clock`（通常从接近 0 开始）。例如控制器当前系统时间是约 18 亿秒，
+规划器场景消息时间戳是仿真第 12 秒，二者相减会远大于 0.5 秒；消息刚到也会被误判过期。
+
+规划器每 100 ms 的墙上定时回调发布 `/gap/scene`，其中 stamp 使用规划器的 ROS 时钟。
+控制器要求场景有效、scene_id 一致，且：
+
+- 收到最后一条已接受场景消息后，控制器 ROS 时间过去不超过 `scene_timeout=0.5 s`。
+- 消息 stamp 相对控制器当前 ROS 时间，不能旧于 0.5 s，也不能超前超过 0.05 s。
+- 实机规划器另外检查窗框 PoseStamped 的接收时间和 stamp，不得旧于 `mocap.timeout=0.3 s`，stamp 不得超前超过 0.05 s。
+
+`Scene moved, expired or unavailable; replan` 是这些场景检查的共用提示，仅凭此文本无法确定是时钟、消息中断还是框移动。
+统一 launch 原来就将控制器和规划器的 `use_sim_time` 设为同一个 simulation 值，正常情况下不会混用时钟。
+后来拆分启动，`run_ctrl.launch.py` 默认 `use_sim_time=false`，而规划器可能使用仿真时钟，这条路径能解释立即拒绝；
+要证明某次运行的唯一原因仍需要该次节点参数/日志。更早的本地解析轨迹也没有跨节点的场景心跳比较。
+
+此次保留原统一启动和时间检查，不放宽超时。模式为 True 时所有消费时间的节点用 `/clock`，False 时都用系统时间。
+实物动捕如果运行在其他电脑，发布的 ROS stamp 与控制电脑系统时间仍需同步；不要把设备自身启动秒数直接填成 ROS 系统时间。
+在当前实现中，框失效、场景消息延迟/丢失或时钟重置仍可能触发拒绝，这与参数入口简化是不同问题。
+优化日志 `setup_ms/optimize_ms/audit_ms/total_ms` 使用单调时钟统计实际计算耗时，不受 `use_sim_time` 控制。
 
 ### 固定端点与窗框选择
 
-主配置是 `src/realflight_modules/gap_planner/config/gaps.yaml`，可用
-`gap_params:=/绝对路径/gaps.yaml` 替换；控制器配置用 `controller_params:=...` 替换。
+主配置是 `src/realflight_modules/gap_planner/config/gaps.yaml`，在 launch 顶部用
+`GAP_PARAMS` 选择；控制器配置用 `CONTROLLER_PARAMS` 选择。均支持配置文件名或绝对路径。
 修改 YAML 后需要重启 launch，接口更新后也必须退出旧控制器/仿真/控制台进程。
 
 ```yaml
@@ -384,17 +500,17 @@ ros2 run gap_planner gap_plan_check --yaml \
 
 ```text
 AUTO_HOVER（起飞）
-  → AUX2 UP / 仿真 c
+  → AUX2 UP（实机遥控器 / 无遥控仿真原有自动切档）
 CMD / WAITING（持续悬停）
   → 数量：配置本次场景 → PLANNING → VALIDATING → READY（仍悬停）
   → e：EXECUTING
   → COMPLETED（仍在 CMD 悬停）
       → r 或新数量：下一段规划，通常反向返回
-      → f：AUTO_HOVER 原地悬停
+      → 模式退出/降落：原 AUX2 路径，控制台不切模式
 ```
 
 AUTO_HOVER 不再接收轨迹。到达 READY 不自动飞行，提前 `e` 被拒绝且不锁存。
-验证在独立线程中执行，离开 CMD 或结束任务会丢弃待执行数据及过期验证结果。
+验证在独立线程中执行，离开 CMD 会丢弃待执行数据及过期验证结果。
 开始执行前检查当前反馈、场景、起点位置/速度/姿态，防止候选等待后已失效。
 
 `/gap/polynomial → gap_trajectory_sender → /gap/upload → ExternalTrajectory → TrajectoryPlayer`
@@ -404,6 +520,14 @@ AUTO_HOVER 不再接收轨迹。到达 READY 不自动飞行，提前 `e` 被拒
 完整姿态参考进入/退出的平滑性仍不能称作 C4。离散审查和仿真通过不构成连续时间或实机安全证明。
 
 ### 验证记录与复现
+
+恢复 AUX2 触发后的验证：7 项控制器/规划器相关 CTest 通过；独立 ROS 域、无窗口 MuJoCo
+临时单框 30° 场景完成去程和返程，终点误差约 3/8 mm。启动时没有控制台模式请求，
+原合成 AUX2 自动进入 CMD 并保持 WAITING；新建晚订阅者收到当前状态，两个模式切换服务均不存在。
+选框前无活动窗框、READY 不自动飞行、两段均需明确启动、完成后持续保持 CMD 均已检查。
+此测试未修改主 gaps.yaml，不代表当前主场景或实物已经完成同等验证。
+
+以下为此前优化器版本的历史实验记录，场景值和模式接口以当时版本为准：
 
 本轮保留用户当前场景：第一缝中心 `[0,0,1]`、滚转 50°、开口 0.50×0.25 m；第二缝
 中心 `[0.1,0,2.5]`；第三缝 `[1.1,0,1]`。起终点世界 X 相隔 4 m。
@@ -426,7 +550,7 @@ AUTO_HOVER 不再接收轨迹。到达 READY 不自动飞行，提前 `e` 被拒
 完整 MuJoCo 闭环的三缝去程/改选两缝返程均通过：优化约 1798/719 ms，端点误差
 2/9 mm；从实际位置插值确认按顺序、正确方向穿过**有限开口**，未检测到窗框接触。
 一缝往返也已通过。检查覆盖启动窗框数 0、AUTO_HOVER 拒绝规划、CMD 待命、READY 等待 `e`、
-执行时拒绝重规划和改场景、完成后 CMD 等待、以及 `f` 回 AUTO_HOVER。
+执行时拒绝重规划和改场景、完成后 CMD 等待。以上为此前版本验证记录；其中旧版曾通过控制台进入/退出 CMD，当前已移除这两个服务，模式触发恢复 AUX2。
 实机尚未飞行验证。启动握手偶发 DDS response timeout 的一次测试在规划前超时，换隔离域重试通过；
 仿真结束时仍可能打印现有 SIGINT/KeyboardInterrupt 退出信息。
 
@@ -448,4 +572,4 @@ python3 src/realflight_modules/gap_planner/test/planning_regression.py
 结果默认写入 `/tmp/gap_planning_regression.json`，保留每个场景的完整成功/失败输出。
 `gap_plan_check --yaml gaps.yaml count outbound|return controller.yaml [dx dy dz]` 的最后三个可选
 参数用于扰动实际悬停起点（m），固定目标不变。离线 controller YAML 分支默认采用 `mpc` 参数；
-`launch` 的 `controller_kind` 则支持选择 `mpc/nmpc`。旧位置参数命令仍保留用于简单合成场景。
+`launch` 顶部的 `CONTROLLER_KIND` 则支持选择 `mpc/nmpc`。旧位置参数命令仍保留用于简单合成场景。

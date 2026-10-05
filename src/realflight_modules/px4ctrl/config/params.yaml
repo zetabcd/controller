@@ -12,7 +12,7 @@ px4ctrl_node:
 
     # All controllers use the same source. Selection/parameters take effect after restart.
     trajectory:
-      type: helix  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj
+      type: external  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj external
       takeoff_height: 1.6 # relative to CMD activation position [m]
       takeoff_duration: 3.0
       settle_duration: 0.5

@@ -11,7 +11,7 @@ ExternalExecution::ExternalExecution(rclcpp::Node &n, TrajectoryLimits limits,
   ExternalModel model, bool simulation) : node_(n), limits_(limits), model_(model)
 {
   if(n.declare_parameter("trajectory.external.simulation",simulation)!=simulation) {
-    throw std::invalid_argument("Launch simulation setting differs from PX4CTRL_SIMULATION build option");
+    throw std::invalid_argument("gap_flight.launch.py SIMULATION differs from input.h PX4CTRL_SIMULATION; match both settings and rebuild px4ctrl after editing input.h");
   }
   takeoff_height_=n.declare_parameter("trajectory.external.takeoff_height",1.0);
   if(!std::isfinite(takeoff_height_) || takeoff_height_<=0) {throw std::invalid_argument("Invalid external takeoff height");}
@@ -37,7 +37,7 @@ ExternalExecution::ExternalExecution(rclcpp::Node &n, TrajectoryLimits limits,
     [this](const std::shared_ptr<gap_msgs::srv::UploadTrajectory::Request> req,
       std::shared_ptr<gap_msgs::srv::UploadTrajectory::Response> res) {
       res->accepted=false;
-      if(!command_mode_ || !hovering_ || !feedback_valid_ || active_ || validation_.valid() || finish_requested_) {
+      if(!command_mode_ || !hovering_ || !feedback_valid_ || active_ || validation_.valid()) {
         res->message="Upload requires CMD holding and idle validator"; return;
       }
       if(req->samples.size()<2 || req->samples.size()>50000 || req->trajectory_id.empty() ||
@@ -73,7 +73,7 @@ ExternalExecution::ExternalExecution(rclcpp::Node &n, TrajectoryLimits limits,
       });
       res->accepted=true; res->message="Validation queued; await READY on /gap/execution";
     });
-  // The pilot authorizes CMD entry on real hardware. Each task then has an
+  // The original AUX2 path owns CMD entry in both modes. Each task has an
   // explicit planner-console start; no trajectory arrival auto-starts flight.
   start_=n.create_service<std_srvs::srv::Trigger>("/gap/start",
     [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
@@ -81,29 +81,13 @@ ExternalExecution::ExternalExecution(rclcpp::Node &n, TrajectoryLimits limits,
       res->success=ready(res->message);
       if(res->success) {start_requested_=true;res->message="Execution requested in CMD";}
     });
-  finish_=n.create_service<std_srvs::srv::Trigger>("/gap/finish",
-    [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-      std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
-      res->success=command_mode_ && !active_;
-      res->message=res->success?"Finish requested: return to AUTO_HOVER without landing":"Finish requires CMD holding; wait for the running leg";
-      if(res->success) {finish_requested_=true;pending_.reset();start_requested_=false;++generation_;}
-    });
-  if(simulation) {
-    enter_=n.create_service<std_srvs::srv::Trigger>("/gap/enter_cmd",
-      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-        std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
-        res->success=auto_hover_ && feedback_valid_ && v_.norm()<speed_tolerance_;
-        res->message=res->success?"CMD entry requested; hold and select count":"Wait for stable AUTO_HOVER";
-        if(res->success) {enter_requested_=true;}
-      });
-  }
 }
 
 bool ExternalExecution::ready(std::string &why) const
 {
   const double now=node_.now().seconds();
   if(!pending_) {why="No validated trajectory; stay in CMD holding"; return false;}
-  if(!command_mode_ || !hovering_ || !feedback_valid_ || finish_requested_) {why="Requires valid CMD holding"; return false;}
+  if(!command_mode_ || !hovering_ || !feedback_valid_) {why="Requires valid CMD holding"; return false;}
   if(!scene_valid_ || latest_scene_!=scene_id_ || now-scene_received_<0 ||
     now-scene_received_>scene_timeout_ || now-scene_stamp_<-0.05 || now-scene_stamp_>scene_timeout_) {
     why="Scene moved, expired or unavailable; replan"; return false;
@@ -121,9 +105,9 @@ void ExternalExecution::poll(double now, bool command_mode, bool auto_hover, boo
   const Eigen::Vector3d &p, const Eigen::Vector3d &v, const Eigen::Quaterniond &q,
   bool origin_valid,const Eigen::Vector3d &origin)
 {
-  if(command_mode && !command_mode_) {state_="WAITING";reason_="CMD holding: select gap count, or finish";}
+  if(command_mode && !command_mode_) {state_="WAITING";reason_="CMD holding: select gap count";}
   if(!command_mode && command_mode_) {stop();}
-  command_mode_=command_mode;auto_hover_=auto_hover;
+  command_mode_=command_mode;
   const bool hovering=(command_mode && !active_) || auto_hover;
   hovering_=hovering; feedback_valid_=valid; p_=p; v_=v; q_=q;
   if(last_now_>=0 && now<last_now_) {
@@ -164,10 +148,6 @@ void ExternalExecution::poll(double now, bool command_mode, bool auto_hover, boo
   m.velocity.x=v.x();m.velocity.y=v.y();m.velocity.z=v.z();m.elapsed=active_?now-started_:0;
   status_->publish(m);
 }
-bool ExternalExecution::requestEnter()
-{const bool requested=enter_requested_;enter_requested_=false;return requested;}
-bool ExternalExecution::requestFinish()
-{const bool requested=finish_requested_;finish_requested_=false;return requested;}
 bool ExternalExecution::requestStart()
 {const bool requested=start_requested_; start_requested_=false; return requested;}
 std::shared_ptr<const Trajectory> ExternalExecution::activate(double now)
@@ -180,7 +160,7 @@ std::shared_ptr<const Trajectory> ExternalExecution::activate(double now)
 bool ExternalExecution::finished(double now) const
 {return active_ && now-started_>=active_->duration();}
 void ExternalExecution::complete()
-{active_.reset();state_="COMPLETED";reason_="CMD holding: continue with another count (return leg), or finish";}
+{active_.reset();state_="COMPLETED";reason_="CMD holding: select another count or r to replan; AUX2 controls flight mode";}
 void ExternalExecution::stop()
-{active_.reset();pending_.reset();start_requested_=false;enter_requested_=false;finish_requested_=false;++generation_;state_="OUTSIDE_CMD";reason_="Enter CMD to select a new task";}
+{active_.reset();pending_.reset();start_requested_=false;++generation_;state_="OUTSIDE_CMD";reason_="Enter CMD to select a new task";}
 }

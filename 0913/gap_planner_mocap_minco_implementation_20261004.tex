@@ -212,7 +212,7 @@ $\operatorname{atan2}(R_{32},R_{33})$；\code{crossing_tilt_deg} 是机体推力
 返程把所选窗框顺序逆转，并令每个开口旋转右乘 $R_z(\pi)$，从而反转穿越法向；对当前中心对称的矩形框，实体几何不变。控制台 \code{r} 实际上重新提交上次数量，去返程仍由当前位置判断，不是无条件翻转一个方向变量。
 
 \subsection{仿真位姿和“启动时没有窗框”}
-\code{simulation:=true} 时不订阅窗框动捕，而用 YAML 的 \code{sim_position} 与 \code{sim_rpy_deg} 作为\textbf{刚体}在 W 系的位姿：
+\code{SIMULATION = True} 时不订阅窗框动捕，而用 YAML 的 \code{sim_position} 与 \code{sim_rpy_deg} 作为\textbf{刚体}在 W 系的位姿：
 \[
  R_{WR}=R_z(\psi)R_y(\theta)R_x(\phi),\quad
  p_{WG}=p_{WR}+R_{WR}p_{RG},\quad R_{WG}=R_{WR}R_{RG}.
@@ -458,7 +458,7 @@ gap\_3 & 0.90 & 0.34 & 0.04 & 0.05 & $(1.1,0,1)$；$(30,0,0)$\\\bottomrule
 \node[box,text width=96mm,below=of plan] (ready) {CMD / READY：轨迹已审核，等待每航段的 e};
 \node[box,text width=96mm,below=of ready] (exec) {CMD / EXECUTING：本地时钟播放不可变轨迹};
 \node[box,text width=96mm,below=of exec] (done) {CMD / COMPLETED：固定终点悬停，可继续选择数量};
-\draw[arr] (hover)--node[right,font=\scriptsize]{仿真 c / 实机 AUX2 UP}(wait);
+\draw[arr] (hover)--node[right,font=\scriptsize]{原 AUX2 UP 流程}(wait);
 \draw[arr] (wait)--(plan);
 \draw[arr] (plan)--node[right,font=\scriptsize]{检查成功}(ready);
 \draw[arr] (ready)--node[right,font=\scriptsize]{e}(exec);
@@ -469,9 +469,9 @@ gap\_3 & 0.90 & 0.34 & 0.04 & 0.05 & $(1.1,0,1)$；$(30,0,0)$\\\bottomrule
 规划失败或控制器 REJECTED 时，飞机仍使用 CMD 悬停参考，可重新选择任务。CMD 等待是持续运行控制循环，不是阻塞等待 ROS 消息或求解线程。规划器和控制器的耗时审核都在独立工作线程运行。
 
 \subsection{进入 CMD 与状态检查}
-外部模式进入 CMD 时清理旧播放器，记录当前位置作为悬停目标，\textbf{不自动激活轨迹}。仿真 \code{/gap/enter_cmd} 只在 AUTO\_HOVER、反馈有效且速度低于阈值时接受；实机不提供这个代替遥控器的入口，仍由飞手切 AUX2 UP。
+外部模式进入 CMD 时清理旧播放器，记录当前位置作为悬停目标，\textbf{不自动激活轨迹}。进入 CMD 恢复原 AUX2 触发：无遥控仿真沿用原有合成 AUX2 自动切档，实机由飞手切 AUX2 UP。控制台不再提供进入/退出 CMD 服务；选框与 e 执行在两种模式下使用相同流程。控制器持续发布执行状态，控制台晚启动也能收到当前 CMD 待命状态。
 
-上传服务仅在 CMD 保持、反馈有效、没有正在执行轨迹且审核器空闲时接受。\code{accepted=true} 意味着任务已排入异步验证，不等于 READY。验证以约 2 ms 间隔检查重建后的参考及静态电机分配；验证结果用代次编号隔离，离开 CMD 或结束任务后旧线程的结果不能重新激活旧轨迹。
+上传服务仅在 CMD 保持、反馈有效、没有正在执行轨迹且审核器空闲时接受。\code{accepted=true} 意味着任务已排入异步验证，不等于 READY。验证以约 2 ms 间隔检查重建后的参考及静态电机分配；验证结果用代次编号隔离，离开 CMD 后旧线程的结果不能重新激活旧轨迹。
 
 \subsection{READY 和启动条件}
 启动前要求场景 ID 与轨迹绑定一致、场景有效且心跳默认不超过 0.5 s，并要求当前位置距轨迹起点不超过 0.10 m、当前速度不超过 0.15 m/s、当前姿态与起点参考角距离不超过 0.15 rad。READY 过程中每次轮询仍核对这些条件，条件失效后丢弃待执行轨迹，要求重新规划。
@@ -481,7 +481,7 @@ gap\_3 & 0.90 & 0.34 & 0.04 & 0.05 & $(1.1,0,1)$；$(30,0,0)$\\\bottomrule
 \subsection{完成、继续和结束}
 到达轨迹总时长后，FSM 清理执行对象，将轨迹终点设为 CMD 悬停目标，状态报告 COMPLETED。悬停判据中的 \code{hovering} 主要表示处于保持分支，不是测得速度严格为零；下一次规划还会检查实际速度。输入数量或 \code{r} 发起下一段，仍需等待 READY 并输入 \code{e}。
 
-输入 \code{f} 在 CMD 保持时结束外部任务并回 AUTO\_HOVER，不自动降落；执行中拒绝该服务。\code{q} 只退出控制台，不停止轨迹。原遥控器手动切换、降落和失效处理仍由既有 FSM 路径负责。
+控制台不切换飞行模式；\code{q} 只退出控制台，不停止轨迹。退出 CMD、遥控手动切换、降落和失效处理均由原 AUX2/FSM 路径负责。实机 AUX2 从 UP 到 MID 仍表示请求降落。
 
 \subsection{执行期间场景变化的现状}
 执行前场景变化会阻止启动。\textbf{执行期间}若动捕过期、窗框移动或心跳丢失，当前控制器只报告
@@ -498,8 +498,6 @@ gap\_3 & 0.90 & 0.34 & 0.04 & 0.05 & $(1.1,0,1)$；$(30,0,0)$\\\bottomrule
 \code{/gap/scene} & \code{gap_msgs/msg/SceneStatus} & 规划器 $\to$ 控制器；scene\_id、valid、reason，约 10 Hz。\\
 \code{/gap/execution} & \code{gap_msgs/msg/ExecutionStatus} & 控制器 $\to$ 其他节点；FSM 状态、反馈、起飞原点、轨迹进度，约 10 Hz。\\
 \code{/gap/start} & \code{std_srvs/srv/Trigger} & 每航段显式启动，控制台 e。\\
-\code{/gap/finish} & \code{std_srvs/srv/Trigger} & CMD 保持时结束外部任务，控制台 f。\\
-\code{/gap/enter_cmd} & \code{std_srvs/srv/Trigger} & 仅仿真，控制台 c。\\
 \code{/gap/sim/configure} & \code{gap_msgs/srv/ConfigureGates} & 规划器 $\to$ 仿真器；激活数量。\\
 \code{/gap/sim/selected_count} & \code{std_msgs/msg/UInt32} & 仿真器发布实际活动数量，约 5 Hz。\\
 \code{/gap/planner_status} & \code{std_msgs/msg/String} & 人可读状态、失败原因及时间；可靠持久深度 1 发布。\\
@@ -541,7 +539,7 @@ gap\_3 & 0.90 & 0.34 & 0.04 & 0.05 & $(1.1,0,1)$；$(30,0,0)$\\\bottomrule
 旧参数 \code{planning.tunnel_length}、\code{planning.path_length_weight}、\code{planning.backward_weight} 和 \code{planning.penalty} 已不参与当前稀疏规划；若传入会告警并忽略。不要用修改这些字段的方式期待改变现有解。
 
 \subsection{实机接入配置示意}
-以下仅展示应填写的字段层次；单位旋转与零偏置只有实际标定恰好如此时才正确。窗框完整尺寸仍需结合现有 YAML 填写。
+统一启动还需将 launch 顶部 SIMULATION 设为 False；下列 YAML 的 simulation 只作独立节点默认值。以下仅展示应填写的字段层次；单位旋转与零偏置只有实际标定恰好如此时才正确。窗框完整尺寸仍需结合现有 YAML 填写。
 \begin{lstlisting}
 gap_planner:
   ros__parameters:
@@ -577,7 +575,6 @@ many_controllerV3/
       src/
       scripts/gap_console.py
       config/gaps.yaml
-      config/gaps_tilt_demo.yaml
       config/gaps.rviz
       launch/gap_flight.launch.py
       test/
@@ -623,7 +620,7 @@ CMD 行为 & 进入后加载既有轨迹源 & external 分支先悬停，READY �
 \file{src/plan_check.cpp} & 离线合成场景/YAML 规划检查及耗时输出。\\
 \file{scripts/gap_console.py} & c、数量、e、r、f、q 人机命令与状态显示。\\
 \file{launch/gap_flight.launch.py} & 模型参数联通及控制器、规划器、发送器、仿真、RViz 统一启动。\\
-\file{config/gaps.yaml}\newline\file{config/gaps_tilt_demo.yaml}\newline\file{config/gaps.rviz} & 主任务配置、演示配置和 RViz 视图。\\
+\file{config/gaps.yaml}\newline\file{config/gaps.rviz} & 主任务配置和 RViz 视图。\\
 \file{test/geometry_test.cpp} & 几何、参考映射和目标梯度等单元检查。\\
 \file{test/planning_regression.py}\newline\file{test/simulation_flow.py} & 多场景往返离线回归及 ROS 闭环流程验证。\\
 \file{CMakeLists.txt}\newline\file{package.xml} & 新包依赖、GCOPTER 头文件、可执行程序与脚本安装、测试注册。\\\bottomrule
@@ -635,7 +632,7 @@ CMD 行为 & 进入后加载既有轨迹源 & external 分支先悬停，READY �
 \toprule 文件 & 改动内容\\\midrule\endhead
 \file{px4ctrl/include/px4ctrl/external_trajectory.h}\newline\file{px4ctrl/src/external_trajectory.cpp} & 新增飞行模型、PVA 样本轨迹、五次重建及统一外部参考解算。\\
 \file{px4ctrl/include/px4ctrl/external_execution.h}\newline\file{px4ctrl/src/external_execution.cpp} & 新增上传/启动/结束服务、异步检查、场景匹配、READY/EXECUTING 等执行状态。\\
-\file{px4ctrl/include/px4ctrl/px4ctrlfsm.h}\newline\file{px4ctrl/src/px4ctrlfsm.cpp} & 增加 external 管理对象；CMD 等待、逐段激活、完成悬停和回 AUTO\_HOVER；仿真不再自动进入外部轨迹执行。\\
+\file{px4ctrl/include/px4ctrl/px4ctrlfsm.h}\newline\file{px4ctrl/src/px4ctrlfsm.cpp} & 增加 external 管理对象；CMD 等待、逐段激活和完成悬停；进入/退出模式恢复原 AUX2 触发，仿真自动切 CMD 但不自动执行轨迹。\\
 \file{px4ctrl/include/px4ctrl/input.h} & 增加 \code{PX4CTRL_SIMULATION} 编译开关控制 SIMULATION、USE\_WITHOUT\_RC，原传感器坐标转换未因本功能重写。\\
 \file{px4ctrl/include/px4ctrl/trajectory.h}\newline\file{px4ctrl/src/trajectory.cpp} & 新增 \code{enforce_minimum_altitude}；external 关闭此项，其他模式默认保留；复用已有名义执行检查。\\
 \file{px4ctrl/CMakeLists.txt}\newline\file{px4ctrl/package.xml} & 引入 gap\_msgs；将 ExternalTrajectory 加入公共参考库并导出；编译 ExternalExecution，新增外部轨迹测试。\\
@@ -654,21 +651,59 @@ CMD 行为 & 进入后加载既有轨迹源 & external 分支先悬停，READY �
 \section{构建、运行与接入核查}
 以下命令从仓库根目录执行，使用本工程已有 ROS 2 和第三方依赖环境；完整依赖安装仍按原工程指南。文档生成过程未重新执行飞行或规划性能测试。
 
+\subsection{集中配置与参数覆盖}
+当前仍为统一启动结构，不另行启动 run\_ctrl 或 MuJoCo。
+\file{input.h} 决定编译模式，\file{px4ctrlfsm.h} 决定控制算法；launch 顶部集中列出运行配置：
+\begin{lstlisting}
+SIMULATION = True
+HEADLESS = False
+RVIZ = True
+CONTROLLER_KIND = 'mpc'
+CONTROLLER_PARAMS = 'params.yaml'
+GAP_PARAMS = 'gaps.yaml'
+RATECTRL_PARAMS = 'ratectrl_diagnostics.yaml'
+SIM_PARAMS = 'params.yaml'
+RVIZ_CONFIG = 'gaps.rviz'
+SIM_INITIAL_POSITION = [-1.65, 0.0, 0.05]
+SIM_LOG_ROOT = 'datalog/gap_sim'
+\end{lstlisting}
+各配置文件名相对所属 ROS 包的 config 目录，也支持绝对路径。控制器、窗框和仿真配置分别来自各自的软件包。
+
+HEADLESS 仅隐藏仿真窗口，不关闭仿真；RVIZ 决定是否启动可视化。CONTROLLER\_KIND 选择模型导入节，不改变编译的控制算法。
+
+参数优先级为节点默认值、YAML、launch 后置字典。穿缝入口覆盖控制器 \code{trajectory.type=external}，
+将 \code{mission.flight_height} 传给 \code{trajectory.external.takeoff_height}，将 SIMULATION 同时用于模式检查和所有相关节点的 \code{use_sim_time}。
+规划器的 simulation 也由此覆盖，所以统一启动时只改 gaps.yaml 中的 simulation 不起作用。
+规划器机体物理参数来自所选控制器 YAML；窗框几何、外包络、规划权重和限值来自 gaps YAML。
+MuJoCo 的初始位置、headless、记录目录由顶部配置覆盖，其 gap\_scene\_file 指向同一份 gaps 文件。
+完整字段映射、单位和默认值另列于 \file{src/realflight_modules/px4ctrl/TRAJECTORIES.md} 的“穿缝配置入口与覆盖关系”。
+
+\subsection{场景时间检查与求解耗时的区别}
+\code{use_sim_time=true} 使用 MuJoCo 的 /clock，false 使用系统时间。
+规划器场景消息的 stamp 和控制器当前时间必须属于同一时间基准：控制器检查场景接收间隔不超过 0.5 秒，
+并检查 stamp 不能落后超过 0.5 秒或超前超过 0.05 秒。实机框动捕另有 0.3 秒默认新鲜度要求。
+若控制器使用 Unix 系统秒而规划器使用从零开始的仿真秒，消息即使刚到也会被判过期。
+
+原统一 launch 将相关节点设置为同一时钟；拆分后 run\_ctrl 默认使用系统时间，而规划器可能仍使用仿真时间，因而出现冲突。
+通用提示 Scene moved, expired or unavailable 本身也可能代表框移动、场景不匹配或消息中断，不能只凭该提示断言唯一原因。
+此次保留统一启动及原检查机制。更早的本地解析轨迹不涉及跨节点场景时间戳比较。
+实机跨电脑动捕需同步 ROS 消息时间戳对应的系统时钟。优化日志中的毫秒耗时使用单调时钟统计，与 /clock 无关。
+
 \subsection{构建并启动仿真}
 \begin{lstlisting}[language=bash]
 source /opt/ros/humble/setup.bash
 git submodule update --init 3rdpart/src/gcopter
 colcon build --packages-up-to gap_planner quadsim_mujoco \
   --symlink-install \
-  --cmake-args -DCMAKE_BUILD_TYPE=Release -DPX4CTRL_SIMULATION=ON
+  --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
-ros2 launch gap_planner gap_flight.launch.py simulation:=true
+ros2 launch gap_planner gap_flight.launch.py
 \end{lstlisting}
 另一个已 source 工作区的终端执行
 \begin{lstlisting}[language=bash]
 ros2 run gap_planner gap_console.py
 \end{lstlisting}
-待 AUTO\_HOVER 稳定后，按 \code{c}、\code{1}（或其他数量）、等待 READY、\code{e} 的顺序。完成后 \code{r} 或重新输入数量，再等待 READY 并 \code{e}；结束用 \code{f}。
+由原 AUX2 流程进入 CMD 后，按 \code{1}（或其他数量）、等待 READY、\code{e} 的顺序。完成后 \code{r} 或重新输入数量，再等待 READY 并 \code{e}。控制台不负责模式切换，无遥控仿真沿用原自动 AUX2 流程，实物沿用遥控器。
 
 此前的 \code{No executable found} 应从脚本安装和当前终端所 source 的工作区排查。现有 CMake 已有
 \begin{lstlisting}
@@ -679,17 +714,17 @@ install(PROGRAMS scripts/gap_console.py DESTINATION lib/${PROJECT_NAME})
 ros2 pkg executables gap_planner
 ros2 pkg prefix gap_planner
 \end{lstlisting}
-若选择控制器类型，launch 的 \code{controller_kind:=mpc} 或 \code{nmpc} 必须与现有控制器编译选择一致；它负责导入对应模型参数，不在运行时替换已经编译的控制器。
+若选择控制器类型，launch 顶部的 \code{CONTROLLER_KIND}（mpc 或 nmpc）必须与现有控制器编译选择一致；它负责导入对应模型参数，不在运行时替换已经编译的控制器。
 
 \subsection{实机模式}
-实机需用 \code{-DPX4CTRL_SIMULATION=OFF} 构建控制器及依赖它的规划包，运行时使用
+实机将 \file{px4ctrl/include/px4ctrl/input.h} 中的 \code{PX4CTRL_SIMULATION} 改成 0 并重新编译；仿真设为 1。CMake 不再定义该宏，旧缓存同名项不再生效。
+同时将 \file{gap_flight.launch.py} 顶部的 \code{SIMULATION} 改为 False，仿真则为 True。
+配置文件直接在顶部 \code{CONTROLLER_PARAMS} 与 \code{GAP_PARAMS} 中填写文件名或绝对路径，不再传 launch 参数：
 \begin{lstlisting}[language=bash]
-ros2 launch gap_planner gap_flight.launch.py \
-  simulation:=false \
-  gap_params:=/absolute/path/to/gaps.yaml \
-  controller_params:=/absolute/path/to/controller.yaml
+ros2 launch gap_planner gap_flight.launch.py
 \end{lstlisting}
-编译开关和运行参数不一致会被拒绝。此 launch 不自动提供厂商动捕驱动、飞控通信代理或飞机外部定位融合节点，需使用实验现有输入链路。进入 CMD 使用实机遥控器；后续数量选择、READY 与 e 启动流程一致。
+头文件编译模式与 launch 模式不一致会被拒绝。
+此 launch 不自动提供厂商动捕驱动、飞控通信代理或飞机外部定位融合节点，需使用实验现有输入链路。进入 CMD 使用实机遥控器；后续数量选择、READY 与 e 启动流程一致。
 
 \subsection{可独立检查的接口}
 \begin{lstlisting}[language=bash]

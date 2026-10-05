@@ -116,7 +116,7 @@ ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true \
   params_file:="$PWD/src/realflight_modules/px4ctrl/config/params_acados_flip.yaml"
 ```
 
-MuJoCo 可按原方式单独启动；需要同时启动仿真时，把 `run_ctrl.launch.py` 改为 `run_sim.launch.py`（该入口已统一 `/clock`）。配置改动后重启内外环；同一控制器内仅换轨迹无需重新编译。恢复 OMMPC 用相同 build 命令将编译宏改为 1，再加载对应 OMMPC 参数文件。
+MuJoCo 在另一终端使用 `ros2 launch quadsim_mujoco mujoco.launch.py` 单独启动；控制侧使用 `run_ctrl.launch.py use_sim_time:=true` 统一 `/clock`。配置改动后重启内外环；同一控制器内仅换轨迹无需重新编译。恢复 OMMPC 用相同 build 命令将编译宏改为 1，再加载对应 OMMPC 参数文件。
 
 本轮保持原有轨迹规格：八字 2×1.2 m、1.5 m/s、2 圈、3 s 加减速；水平圆半径 1 m、巡航 2 圈、1.5 m/s、3 s 加减速；垂直圆/螺旋半径 1 m、向心加速度 1.8g、分别 1/2 圈、螺距 0.5 m。改变尺寸、速度或翻转几何后需要重新验证。
 

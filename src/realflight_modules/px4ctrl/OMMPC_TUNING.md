@@ -15,7 +15,7 @@ source install/setup.bash
 ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true
 ```
 
-也可以使用 `ros2 launch px4ctrl run_sim.launch.py` 一起启动。实机仍使用默认 `use_sim_time=false`。修改参数后需要重启控制节点；当前安装采用符号链接，无需因 YAML 修改重新编译。
+另开终端使用 `ros2 launch quadsim_mujoco mujoco.launch.py` 启动仿真器。实机仍使用默认 `use_sim_time=false`。修改参数后需要重启控制节点；当前安装采用符号链接，无需因 YAML 修改重新编译。
 
 ## 采用的参数
 

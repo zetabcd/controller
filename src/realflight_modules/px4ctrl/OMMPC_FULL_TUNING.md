@@ -59,7 +59,7 @@ ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true \
   params_file:="$PWD/src/realflight_modules/px4ctrl/config/params_ommpc_flip.yaml"
 ```
 
-若使用一键仿真，把 `run_ctrl.launch.py` 换成 `run_sim.launch.py`，省略显式 `use_sim_time`，`params_file` 同样适用。避免重复启动控制节点。配置通过启动时参数服务传到内环，修改 YAML 后两个节点都要重启。
+另开已加载工作区的终端，使用 `ros2 launch quadsim_mujoco mujoco.launch.py` 启动仿真。避免重复启动控制节点。配置通过启动时参数服务传到内环，修改 YAML 后两个节点都要重启。
 
 已重新编译并通过 OMMPC、轨迹、参考、控制接口四组测试。数据目录的 `validation_summary.json`、`validation.png` 和 `all_metrics.json` 保存对照；`before.yaml` 为本轮原件。另有两次启动失败（环境未加载、实验 YAML 整数/浮点类型不匹配）保留日志，因未进入飞行而未计入 17 次有效仿真，不是剔除失飞数据。
 
@@ -173,10 +173,12 @@ D 使用已有 TVR 角加速度估计。`filter.lpf_gyro_*` 仅用于监视，�
 ```bash
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-ros2 launch px4ctrl run_sim.launch.py
+ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true
+# 另一个已加载工作区的终端：
+ros2 launch quadsim_mujoco mujoco.launch.py
 ```
 
-若分终端启动 MuJoCo，控制侧使用 `ros2 launch px4ctrl run_ctrl.launch.py use_sim_time:=true`；两种启动方式任选其一，避免重复节点。实机仍使用默认非仿真时钟。此前日志发现的墙钟/物理时钟不一致需要先解决，但统一时钟不能替代内外环稳定性验证。
+按上面两个终端分别启动，避免重复节点。实机仍使用默认非仿真时钟。此前日志发现的墙钟/物理时钟不一致需要先解决，但统一时钟不能替代内外环稳定性验证。
 
 数据位于 `datalog/ommpc_tuning_v3/`，被 Git 忽略，需要单独留存。`baseline.yaml` 是本轮开始前原件，`configs/p20_ff16.yaml` 为推荐实验配置；每次运行包含 YAML、二进制/源码哈希、原始数组、指标和节点日志。`parameter_differences.json` 记录 33 套控制参数差异，`all_metrics.json` 汇总 75 次结果，`final_summary.json` 汇总选型，`validation.png` 为复测对比。
 
