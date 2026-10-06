@@ -12,7 +12,7 @@ px4ctrl_node:
 
     # All controllers use the same source. Selection/parameters take effect after restart.
     trajectory:
-      type: external  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj external
+      type: vertical_circle  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj external
       takeoff_height: 1.6 # relative to CMD activation position [m]
       takeoff_duration: 3.0
       settle_duration: 0.5
@@ -22,14 +22,14 @@ px4ctrl_node:
         speed: 1.5
         ramp_duration: 3.0
       vertical_circle:
-        radius: 0.8
+        radius: 0.8 #心型，0.9正常，takeoff1.5
         turns: 1
         centripetal_g: 1.8 # A/g > 1; slowing arbitrarily destroys inversion
-        entry_duration: 1.8
-        exit_duration: 1.8
-        entry_distance: 0.3
-        exit_distance: 0.3
-        connector_height: 0.4 # hover endpoints above circle bottom [m]
+        entry_duration: 1.8 # 0.85
+        exit_duration: 1.8 # 0.85
+        entry_distance: 0.3 # 1.35
+        exit_distance: 0.3 # 1.35
+        connector_height: 0.4 # 1.1 hover endpoints above circle bottom [m]
       helix:
         radius: 0.8
         turns: 3
