@@ -12,6 +12,7 @@
 #include <future>
 #include <chrono>
 #include <memory>
+#include <optional>
 
 using namespace gap_planner;
 class GapPlannerNode : public rclcpp::Node
@@ -29,7 +30,8 @@ class GapPlannerNode : public rclcpp::Node
   std::vector<Gate> snapshot_;
   std::string scene_id_,trajectory_id_,mocap_frame_;
   bool simulation_,scene_valid_{false};
-  double pose_timeout_,move_tolerance_,angle_tolerance_,goal_offset_x_,flight_height_;
+  double pose_timeout_,move_tolerance_,angle_tolerance_,goal_offset_x_;
+  std::optional<Eigen::Vector3d> home_;
   Eigen::Vector3d task_start_,task_goal_;
   std::vector<Gate> task_gates_;
   std::size_t selected_count_{0};
@@ -111,8 +113,8 @@ class GapPlannerNode : public rclcpp::Node
     res->accepted=false;std::string why;const double now=this->now().seconds();
     if(worker_.valid() || configuring_) {res->message="Planner/scene selection is busy";return;}
     if(req->count==0 || req->count>tracked_.size()) {res->message="Count must be 1..gate_order.size";return;}
-    if(now-state_received_>0.5 || state_received_<0 || !state_.feedback_valid || !state_.origin_valid) {
-      res->message="Waiting for fresh controller feedback and takeoff origin";return;
+    if(now-state_received_>0.5 || state_received_<0 || !state_.feedback_valid) {
+      res->message="Waiting for fresh controller feedback";return;
     }
     if(!state_.command_mode) {res->message="Enter CMD before choosing count";return;}
     if(!state_.hovering) {res->message="Wait for the current flight to finish in CMD";return;}
@@ -121,14 +123,19 @@ class GapPlannerNode : public rclcpp::Node
       res->message="CMD is settling: measured speed="+std::to_string(holding_speed)+
         " m/s; choose count again once below 0.12 m/s";return;
     }
+    const auto position=vector(state_.pose.position);
+    if(!position.allFinite()) {res->message="Invalid controller position";return;}
     const auto old_count=selected_count_;selected_count_=req->count;
     if(!fresh(why)) {selected_count_=old_count;res->message=why;return;}
     if(simulation_ && !configure_->service_is_ready()) {
       selected_count_=old_count;res->message="Simulation gate-selection service is unavailable";return;
     }
-    const Eigen::Vector3d home=vector(state_.takeoff_position)+Eigen::Vector3d(0,0,flight_height_);
+    // Anchor this CMD session only after accepting its first planning request.
+    // Subsequent replans use live starts but keep both mission endpoints fixed.
+    if(!home_) {home_=position;}
+    const Eigen::Vector3d home=*home_;
     const Eigen::Vector3d far=home+Eigen::Vector3d(goal_offset_x_,0,0);
-    task_start_=vector(state_.pose.position);
+    task_start_=position;
     returning_=(task_start_-far).norm()<(task_start_-home).norm();
     task_goal_=returning_?home:far;
     displayed_plan_.reset();snapshot_.clear();
@@ -211,7 +218,7 @@ class GapPlannerNode : public rclcpp::Node
       visualize(displayed_plan_.get());last_visual_=time;
     }
     if(last_tick_>=0 && time<last_tick_) {
-      scene_valid_=false;for(auto &t:tracked_) {t.stamp=-1;t.received=-1;}
+      home_.reset();scene_valid_=false;for(auto &t:tracked_) {t.stamp=-1;t.received=-1;}
       report("Clock reset; select a new plan");
     }
     last_tick_=time;
@@ -302,9 +309,8 @@ public:
     }
     options_.tilt=declare_parameter("planning.tilt_max",1.52);
     goal_offset_x_=declare_parameter("mission.goal_offset_x",4.0);
-    flight_height_=declare_parameter("mission.flight_height",1.0);
-    if(!std::isfinite(goal_offset_x_) || goal_offset_x_<=0 || !std::isfinite(flight_height_) || flight_height_<=0) {
-      throw std::invalid_argument("mission.goal_offset_x and flight_height must be finite and positive");
+    if(!std::isfinite(goal_offset_x_) || goal_offset_x_<=0) {
+      throw std::invalid_argument("mission.goal_offset_x must be finite and positive");
     }
     pose_timeout_=declare_parameter("mocap.timeout",0.3);
     move_tolerance_=declare_parameter("mocap.position_tolerance",0.01);
@@ -354,7 +360,13 @@ public:
     markers_=create_publisher<visualization_msgs::msg::MarkerArray>("/gap/markers",latched);
     status_=create_publisher<std_msgs::msg::String>("/gap/planner_status",latched);
     state_sub_=create_subscription<gap_msgs::msg::ExecutionStatus>("/gap/execution",10,
-      [this](gap_msgs::msg::ExecutionStatus::ConstSharedPtr m) {state_=*m;state_received_=now().seconds();});
+      [this](gap_msgs::msg::ExecutionStatus::ConstSharedPtr m) {
+        // Handle every observed exit, even if CMD is re-entered before tick().
+        if(!m->command_mode) {
+          home_.reset();scene_valid_=false;configuring_=false;displayed_plan_.reset();
+        }
+        state_=*m;state_received_=now().seconds();
+      });
     service_=create_service<gap_msgs::srv::PlanGaps>("/gap/plan",
       std::bind(&GapPlannerNode::request,this,std::placeholders::_1,std::placeholders::_2));
     timer_=create_wall_timer(std::chrono::milliseconds(100),std::bind(&GapPlannerNode::tick,this));

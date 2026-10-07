@@ -213,6 +213,11 @@ install(DIRECTORY config DESTINATION share/${PROJECT_NAME}/)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(external_execution_test test/external_execution_test.cpp src/external_execution.cpp)
+  target_link_libraries(external_execution_test px4ctrl_reference)
+  ament_target_dependencies(external_execution_test rclcpp gap_msgs std_srvs)
+  set_tests_properties(external_execution_test PROPERTIES ENVIRONMENT
+    "ROS_DOMAIN_ID=188;ROS_LOCALHOST_ONLY=1;ROS_LOG_DIR=/tmp/px4ctrl_external_execution_test")
   ament_add_gtest(external_trajectory_test test/external_trajectory_test.cpp)
   target_link_libraries(external_trajectory_test px4ctrl_reference)
   ament_add_gtest(takeoff_origin_test test/takeoff_origin_test.cpp)

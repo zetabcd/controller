@@ -13,8 +13,14 @@ ExternalExecution::ExternalExecution(rclcpp::Node &n, TrajectoryLimits limits,
   if(n.declare_parameter("trajectory.external.simulation",simulation)!=simulation) {
     throw std::invalid_argument("gap_flight.launch.py SIMULATION differs from input.h PX4CTRL_SIMULATION; match both settings and rebuild px4ctrl after editing input.h");
   }
-  takeoff_height_=n.declare_parameter("trajectory.external.takeoff_height",1.0);
-  if(!std::isfinite(takeoff_height_) || takeoff_height_<=0) {throw std::invalid_argument("Invalid external takeoff height");}
+  takeoff_height_=n.get_parameter("trajectory.takeoff_height").as_double();
+  if(!std::isfinite(takeoff_height_) || takeoff_height_<0) {throw std::invalid_argument("Invalid trajectory.takeoff_height");}
+  takeoff_duration_=n.get_parameter("trajectory.takeoff_duration").as_double();
+  settle_duration_=n.get_parameter("trajectory.settle_duration").as_double();
+  if(!std::isfinite(takeoff_duration_) || takeoff_duration_<=0 ||
+    !std::isfinite(settle_duration_) || settle_duration_<0) {
+    throw std::invalid_argument("Invalid external preparation duration / settling time");
+  }
   position_tolerance_=n.declare_parameter("trajectory.external.start_position_tolerance",0.10);
   speed_tolerance_=n.declare_parameter("trajectory.external.start_speed_tolerance",0.15);
   attitude_tolerance_=n.declare_parameter("trajectory.external.start_attitude_tolerance",0.15);
@@ -38,7 +44,9 @@ ExternalExecution::ExternalExecution(rclcpp::Node &n, TrajectoryLimits limits,
       std::shared_ptr<gap_msgs::srv::UploadTrajectory::Response> res) {
       res->accepted=false;
       if(!command_mode_ || !hovering_ || !feedback_valid_ || active_ || validation_.valid()) {
-        res->message="Upload requires CMD holding and idle validator"; return;
+        res->message=active_kind_==ActiveKind::Preparation ?
+          "CMD is preparing: wait for target height and stable hold" :
+          "Upload requires CMD holding and idle validator"; return;
       }
       if(req->samples.size()<2 || req->samples.size()>50000 || req->trajectory_id.empty() ||
         req->scene_id.empty() || req->header.frame_id!="world_nwu" || req->model.version!=1 ||
@@ -86,6 +94,9 @@ ExternalExecution::ExternalExecution(rclcpp::Node &n, TrajectoryLimits limits,
 bool ExternalExecution::ready(std::string &why) const
 {
   const double now=node_.now().seconds();
+  if(active_) {why=active_kind_==ActiveKind::Preparation ?
+    "CMD is preparing: wait for target height and stable hold" : "A trajectory is executing";
+    return false;}
   if(!pending_) {why="No validated trajectory; stay in CMD holding"; return false;}
   if(!command_mode_ || !hovering_ || !feedback_valid_) {why="Requires valid CMD holding"; return false;}
   if(!scene_valid_ || latest_scene_!=scene_id_ || now-scene_received_<0 ||
@@ -105,17 +116,27 @@ void ExternalExecution::poll(double now, bool command_mode, bool auto_hover, boo
   const Eigen::Vector3d &p, const Eigen::Vector3d &v, const Eigen::Quaterniond &q,
   bool origin_valid,const Eigen::Vector3d &origin)
 {
-  if(command_mode && !command_mode_) {state_="WAITING";reason_="CMD holding: select gap count";}
+  // beginCommand() owns CMD entry; never advertise WAITING before preparation.
   if(!command_mode && command_mode_) {stop();}
   command_mode_=command_mode;
   const bool hovering=(command_mode && !active_) || auto_hover;
   hovering_=hovering; feedback_valid_=valid; p_=p; v_=v; q_=q;
   if(last_now_>=0 && now<last_now_) {
-    pending_.reset(); scene_valid_=false; scene_stamp_=-1; start_requested_=false;++generation_;
+    pending_.reset(); scene_valid_=false; scene_stamp_=-1; start_requested_=false;
+    settled_since_=-1;++generation_;
     reason_="Clock reset; new scene and trajectory required"; state_="REJECTED";
     publish_at_=0;
   }
   last_now_=now;
+  if(active_kind_==ActiveKind::Preparation && active_) {
+    const auto end=active_->evaluate(active_->duration());
+    const bool stable=now-started_>=active_->duration() && valid && p.allFinite() &&
+      v.allFinite() && q.coeffs().allFinite() && q.norm()>1e-8 &&
+      (p-end.position).norm()<=position_tolerance_ && v.norm()<=speed_tolerance_ &&
+      q.normalized().angularDistance(end.attitude)<=attitude_tolerance_;
+    if(!stable) {settled_since_=-1;}
+    else if(settled_since_<0) {settled_since_=now;}
+  }
   if(validation_.valid() && validation_.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
     auto result=validation_.get();
     if(result.generation==generation_ && command_mode_) {
@@ -132,7 +153,7 @@ void ExternalExecution::poll(double now, bool command_mode, bool auto_hover, boo
     if(ready(reason_)) {state_="READY";}
     else {pending_.reset(); state_="REJECTED"; start_requested_=false;}
   }
-  if(active_ && !hovering && (!scene_valid_ || latest_scene_!=scene_id_ ||
+  if(active_kind_==ActiveKind::Uploaded && active_ && !hovering && (!scene_valid_ || latest_scene_!=scene_id_ ||
     now-scene_received_<0 || now-scene_received_>scene_timeout_ ||
     now-scene_stamp_<-0.05 || now-scene_stamp_>scene_timeout_)) {
     reason_="Scene changed or monitor lost during flight; executing immutable static-scene plan";
@@ -150,17 +171,48 @@ void ExternalExecution::poll(double now, bool command_mode, bool auto_hover, boo
 }
 bool ExternalExecution::requestStart()
 {const bool requested=start_requested_; start_requested_=false; return requested;}
+
+std::shared_ptr<const Trajectory> ExternalExecution::beginCommand(
+  double now, const ReferencePoint &start)
+{
+  stop();
+  if(!std::isfinite(now)) {
+    throw std::invalid_argument("Invalid external preparation time");
+  }
+  Eigen::Vector3d target=start.position;target.z()+=takeoff_height_;
+  auto preparation=std::make_shared<PointToPointTrajectory>(start,target,takeoff_duration_,model_.gravity);
+  command_mode_=true;
+  active_=std::move(preparation);active_kind_=ActiveKind::Preparation;
+  started_=now;hovering_=false;state_="PREPARING";
+  reason_="CMD moving to task height; planning/upload/start wait for stable hold";
+  return active_;
+}
+
 std::shared_ptr<const Trajectory> ExternalExecution::activate(double now)
 {
   std::string why;
   if(!ready(why)) {reason_=why;return nullptr;}
-  active_=std::move(pending_); started_=now; state_="EXECUTING"; reason_="Playing buffered world trajectory";
+  active_=std::move(pending_);active_kind_=ActiveKind::Uploaded;hovering_=false;
+  started_=now; state_="EXECUTING"; reason_="Playing buffered world trajectory";
   return active_;
 }
 bool ExternalExecution::finished(double now) const
-{return active_ && now-started_>=active_->duration();}
+{return active_ && now-started_>=active_->duration() &&
+  (active_kind_!=ActiveKind::Preparation ||
+   (settled_since_>=0 && now-settled_since_>=settle_duration_));}
 void ExternalExecution::complete()
-{active_.reset();state_="COMPLETED";reason_="CMD holding: select another count or r to replan; AUX2 controls flight mode";}
+{
+  const bool preparation=active_kind_==ActiveKind::Preparation;
+  active_.reset();active_kind_=ActiveKind::None;settled_since_=-1;
+  hovering_=command_mode_;
+  state_=preparation ? "WAITING" : "COMPLETED";
+  reason_="CMD holding: select a count or r to replan; AUX2 controls flight mode";
+}
 void ExternalExecution::stop()
-{active_.reset();pending_.reset();start_requested_=false;++generation_;state_="OUTSIDE_CMD";reason_="Enter CMD to select a new task";}
+{
+  active_.reset();pending_.reset();active_kind_=ActiveKind::None;settled_since_=-1;
+  start_requested_=false;command_mode_=false;hovering_=false;
+  trajectory_id_.clear();scene_id_.clear();
+  ++generation_;state_="OUTSIDE_CMD";reason_="Enter CMD to select a new task";
+}
 }

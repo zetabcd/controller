@@ -77,7 +77,11 @@ int main(int argc,char **argv)
         if(n["opening_offset"]) {g.center+=g.rotation*vec(n["opening_offset"]);}
         g.rotation=g.rotation*quat(n["opening_quaternion_wxyz"]);gates.push_back(g);
       }
-      yaml_start.z()=0.05+read(mission,"flight_height",1);yaml_goal=yaml_start+Eigen::Vector3d(read(mission,"goal_offset_x",4),0,0);
+      // Offline checks have no live pose. Optional home XYZ follows the start
+      // perturbation arguments; otherwise retain the explicit sample fixture.
+      if(argc>11) {yaml_start={std::stod(argv[9]),std::stod(argv[10]),std::stod(argv[11])};}
+      yaml_goal=yaml_start+Eigen::Vector3d(read(mission,"goal_offset_x",4),0,0);
+      std::cout<<"Offline home=["<<yaml_start.transpose()<<"] far=["<<yaml_goal.transpose()<<"]\n";
       returning=argc>4 && std::string(argv[4])=="return";
     }
     if(count<1 || count>static_cast<int>(gates.size())) {throw std::invalid_argument("count must be 1..3");}

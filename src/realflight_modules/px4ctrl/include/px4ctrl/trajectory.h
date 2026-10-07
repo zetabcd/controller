@@ -35,6 +35,21 @@ private:
   Eigen::Quaterniond rotation_{Eigen::Quaterniond::Identity()};
 };
 
+// A C4 connector in world coordinates, with a stationary endpoint and fixed yaw.
+// Uses the same polynomial construction as the analytic trajectories' takeoff.
+class PointToPointTrajectory final : public Trajectory
+{
+public:
+  PointToPointTrajectory(const ReferencePoint &start, const Eigen::Vector3d &target,
+    double duration, double gravity);
+  ReferencePoint evaluate(double time) const override;
+  double duration() const override {return duration_;}
+private:
+  Eigen::Matrix<double, 3, 10> coefficients_;
+  Eigen::Vector3d target_;
+  double duration_, gravity_, yaw_;
+};
+
 enum class AnalyticPath {HorizontalCircle, VerticalCircle, Helix, FigureEight};
 struct AnalyticTrajectoryOptions
 {
@@ -65,8 +80,6 @@ public:
 
 private:
   using Polynomial = Eigen::Matrix<double, 3, 10>;
-  static Polynomial connect(const ReferencePoint & a, const ReferencePoint & b, double duration);
-  static ReferencePoint polynomial(const Polynomial & coefficients, double time, double duration);
   ReferencePoint main(double time) const;
   AnalyticTrajectoryOptions options_;
   Polynomial takeoff_, entry_, exit_, axis_entry_, axis_exit_;

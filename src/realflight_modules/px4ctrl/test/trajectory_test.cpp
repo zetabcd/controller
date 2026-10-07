@@ -17,6 +17,41 @@ std::array<Eigen::Vector3d, 5> derivatives(const ReferencePoint & r)
 {return {r.position, r.velocity, r.acceleration, r.jerk, r.snap};}
 }
 
+TEST(Trajectory, PointToPointMatchesEntryStateAndHoldsWorldEndpoint)
+{
+  ReferencePoint start;start.position={-1.5,-.9,.2};start.velocity={.02,-.01,.1};start.yaw=.6;
+  const Eigen::Vector3d target(-1.5,-.9,.5);
+  PointToPointTrajectory trajectory(start,target,3,9.805);
+  const auto first=trajectory.evaluate(0);
+  EXPECT_LT((first.position-start.position).norm(),1e-12);
+  EXPECT_LT((first.velocity-start.velocity).norm(),1e-12);
+  for(double boundary : {0.0,3.0}) {
+    const auto before=derivatives(trajectory.evaluate(boundary-1e-8));
+    const auto after=derivatives(trajectory.evaluate(boundary+1e-8));
+    for(int k=0;k<5;++k) {EXPECT_LT((before[k]-after[k]).norm(),1e-5);}
+  }
+  for(double t : {3.0,5.0}) {
+    const auto end=trajectory.evaluate(t);
+    EXPECT_LT((end.position-target).norm(),1e-12);
+    EXPECT_TRUE(end.velocity.isZero());EXPECT_TRUE(end.acceleration.isZero());
+    EXPECT_TRUE(end.jerk.isZero());EXPECT_TRUE(end.snap.isZero());
+    EXPECT_NEAR(end.yaw,start.yaw,1e-12);
+  }
+  for(double t=.01;t<2.99;t+=.017) {
+    const auto a=derivatives(trajectory.evaluate(t-1e-5));
+    const auto b=derivatives(trajectory.evaluate(t+1e-5));
+    const auto d=derivatives(trajectory.evaluate(t));
+    for(int k=0;k<4;++k) {EXPECT_LT(((b[k]-a[k])/2e-5-d[k+1]).norm(),1e-6);}
+  }
+  TrajectoryPlayer player;
+  player.start(std::make_shared<PointToPointTrajectory>(trajectory),10,Eigen::Vector3d::Zero(),0);
+  const auto preview=player.sample(12.8,16,.03);
+  EXPECT_LT((preview.points.back().position-target).norm(),1e-12);
+  EXPECT_TRUE(preview.points.back().velocity.isZero());
+  EXPECT_THROW(PointToPointTrajectory(start,target,0,9.805),std::invalid_argument);
+  EXPECT_THROW(trajectory.evaluate(std::numeric_limits<double>::quiet_NaN()),std::invalid_argument);
+}
+
 TEST(Trajectory, AllProfilesHaveConsistentAnalyticDerivatives)
 {
   for (auto path:paths) {

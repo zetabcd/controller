@@ -99,7 +99,10 @@ ReferenceWindow TrajectoryPlayer::sample(double now, int horizon, double dt)
   return w;
 }
 
-AnalyticTrajectory::Polynomial AnalyticTrajectory::connect(
+namespace
+{
+using Polynomial = Eigen::Matrix<double, 3, 10>;
+Polynomial connect(
   const ReferencePoint & a, const ReferencePoint & b, double duration)
 {
   Eigen::Matrix<double, 10, 10> matrix = Eigen::Matrix<double, 10, 10>::Zero();
@@ -117,7 +120,7 @@ AnalyticTrajectory::Polynomial AnalyticTrajectory::connect(
   }
   return matrix.partialPivLu().solve(rhs).transpose();
 }
-ReferencePoint AnalyticTrajectory::polynomial(const Polynomial & c, double t, double duration)
+ReferencePoint polynomial(const Polynomial & c, double t, double duration)
 {
   std::array<Eigen::Vector3d, 5> values;
   const double u = std::clamp(t / duration, 0.0, 1.0);
@@ -129,6 +132,32 @@ ReferencePoint AnalyticTrajectory::polynomial(const Polynomial & c, double t, do
   }
   ReferencePoint r;r.position = values[0];r.velocity = values[1];r.acceleration = values[2];
   r.jerk = values[3];r.snap = values[4];return r;
+}
+
+}  // namespace
+
+PointToPointTrajectory::PointToPointTrajectory(
+  const ReferencePoint &start, const Eigen::Vector3d &target, double duration, double gravity)
+: target_(target), duration_(duration), gravity_(gravity), yaw_(start.yaw)
+{
+  if (!std::isfinite(duration) || duration <= 0 || !std::isfinite(gravity) || gravity <= 0 ||
+    !std::isfinite(yaw_) || !target.allFinite() || !start.position.allFinite() ||
+    !start.velocity.allFinite() || !start.acceleration.allFinite() ||
+    !start.jerk.allFinite() || !start.snap.allFinite()) {
+    throw std::invalid_argument("Invalid point-to-point trajectory");
+  }
+  ReferencePoint end;end.position = target;
+  coefficients_ = connect(start, end, duration);
+}
+
+ReferencePoint PointToPointTrajectory::evaluate(double time) const
+{
+  if (!std::isfinite(time)) {throw std::invalid_argument("Nonfinite point-to-point time");}
+  ReferencePoint r;
+  if (time >= duration_) {r.position = target_;}
+  else {r = polynomial(coefficients_, time, duration_);}
+  r.yaw = yaw_;
+  return resolveReference(r, gravity_);
 }
 
 AnalyticTrajectory::AnalyticTrajectory(const AnalyticTrajectoryOptions & o)

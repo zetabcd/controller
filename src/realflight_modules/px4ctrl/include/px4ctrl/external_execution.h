@@ -19,7 +19,8 @@ public:
   void poll(double now, bool command_mode, bool auto_hover, bool feedback_valid, const Eigen::Vector3d &p,
     const Eigen::Vector3d &v, const Eigen::Quaterniond &q,bool origin_valid,const Eigen::Vector3d &origin);
   bool active() const {return static_cast<bool>(active_);}
-  double takeoffHeight() const {return takeoff_height_;}
+  // Local preparation and uploaded legs share active_, the clock and the FSM player.
+  std::shared_ptr<const Trajectory> beginCommand(double now, const ReferencePoint &start);
   bool requestStart();
   bool ready(std::string &reason) const;
   std::shared_ptr<const Trajectory> activate(double now);
@@ -28,6 +29,8 @@ public:
   void complete();
   void stop();
 private:
+  enum class ActiveKind {None, Preparation, Uploaded};
+  ActiveKind active_kind_{ActiveKind::None};
   struct Validation {std::shared_ptr<const Trajectory> trajectory; std::string reason; double elapsed_ms; uint64_t generation;};
   rclcpp::Node &node_;
   TrajectoryLimits limits_;
@@ -40,7 +43,8 @@ private:
   bool scene_valid_{false}, hovering_{false}, feedback_valid_{false}, start_requested_{false};
   bool command_mode_{false};
   uint64_t generation_{0};
-  double takeoff_height_{1.0};
+  double takeoff_height_;
+  double takeoff_duration_{3.0}, settle_duration_{0.5}, settled_since_{-1.0};
   Eigen::Vector3d p_{Eigen::Vector3d::Zero()}, v_{Eigen::Vector3d::Zero()};
   Eigen::Quaterniond q_{Eigen::Quaterniond::Identity()};
   double position_tolerance_, speed_tolerance_, attitude_tolerance_, scene_timeout_;

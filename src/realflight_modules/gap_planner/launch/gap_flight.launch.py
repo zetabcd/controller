@@ -39,8 +39,6 @@ def generate_launch_description():
     gap_file = config_file('gap_planner', GAP_PARAMS)
     with open(controller_file, encoding='utf-8') as stream:
         control = yaml.safe_load(stream)['px4ctrl_node']['ros__parameters']
-    with open(gap_file, encoding='utf-8') as stream:
-        gates = yaml.safe_load(stream)['gap_planner']['ros__parameters']
     mass = control['uav']['mass']
     controller_kind = CONTROLLER_KIND
     if controller_kind not in ('mpc', 'nmpc'):
@@ -76,7 +74,6 @@ def generate_launch_description():
         'trajectory.type': 'external',
         'use_sim_time': simulation,
         'trajectory.external.simulation': simulation,
-        'trajectory.external.takeoff_height': gates['mission']['flight_height'],
     }
     clock_parameters = {'use_sim_time': simulation}
     actions = [

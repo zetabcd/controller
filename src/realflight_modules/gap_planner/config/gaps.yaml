@@ -4,8 +4,7 @@ gap_planner:
     # true: YAML rigid-body poses; false: subscribe to mocap topics.
     simulation: true
     mission:
-      goal_offset_x: 4.0  # fixed outbound endpoint: takeoff XY + world X offset
-      flight_height: 0.5  # above ground takeoff origin; return to home at this height
+      goal_offset_x: 4.0  # outbound endpoint: first accepted planning position + world X offset
     vehicle:
       height: 0.10  # user supplied, including battery and mocap markers
       body_model: polytope  # polytope (Fast-Racing vertex constraints) or ellipsoid (thesis 5.6)

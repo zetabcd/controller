@@ -286,7 +286,6 @@ launch 不读取头文件来猜模式，也不会通过参数改变已编译的�
 |---|---|---|
 | 外环 px4ctrl_node | `trajectory.type = external` | 穿缝入口固定选择外部轨迹；即使控制器 YAML 写 helix/omtraj，也不会执行它 |
 | 外环 | `trajectory.external.simulation`、`use_sim_time` | 顶部 `SIMULATION`；前者检查与已编译模式是否匹配，后者选择时间来源 |
-| 外环 | `trajectory.external.takeoff_height` | gaps YAML 的 `mission.flight_height`；普通轨迹的 `trajectory.takeoff_height` 不控制穿缝高度 |
 | 内环、发送器、RViz | `use_sim_time` | 顶部 `SIMULATION` |
 | 规划器 | `simulation`、`use_sim_time` | 顶部 `SIMULATION`；因此统一 launch 下仅改 gaps.yaml 的 simulation 无效 |
 | 规划器 | 下表的 `vehicle.*` 模型参数 | 从所选控制器 YAML 导出，确保规划与执行使用一致模型 |
@@ -312,8 +311,7 @@ launch 不读取头文件来猜模式，也不会通过参数改变已编译的�
 | 参数 | 含义 |
 |---|---|
 | `simulation` | 单独运行规划器时的默认模式；统一启动时被 launch 覆盖 |
-| `mission.goal_offset_x` | 去程终点相对起飞点的世界 X 偏移，默认 4 m；返程回起飞点上方 |
-| `mission.flight_height` | 相对记录的地面起飞原点高度，默认 1 m；同时设置外部模式高度和往返端点 Z |
+| `mission.goal_offset_x` | 去程终点相对本轮首次接受规划时实际悬停点的世界 X 偏移，默认 4 m；返程回该悬停点 |
 | `vehicle.height` | 含桨、电池和动捕球的机体包络总高，当前 0.10 m |
 | `vehicle.body_model` | `polytope` 顶点凸包或 `ellipsoid` 外接椭球 |
 | `vehicle.vertices` | 可选机体系包络顶点 `[x,y,z,...]`，m；未填时按力臂、桨半径、高度生成盒子八顶点 |
@@ -373,15 +371,31 @@ launch 不读取头文件来猜模式，也不会通过参数改变已编译的�
 ```yaml
 mission:
   goal_offset_x: 4.0
-  flight_height: 1.0
 ```
 
-控制器报告其保存的地面起飞原点 `p_takeoff`。两个固定端点分别为：
+规划器在本次 CMD 内首次接受规划请求时保存实际悬停位置：
 
-* 起点上方：`home = p_takeoff + [0, 0, flight_height]`。
-* 远端：`far = home + [goal_offset_x, 0, 0]`，方向是世界 NWU 的 +X。
+* `home = 首次接受规划时 /gap/execution.pose.position`。
+* `far = home + [goal_offset_x, 0, 0]`，方向是世界 NWU 的 +X。
 
-AUTO_HOVER 首次起飞到上述飞行高度。每次规划从当前实际悬停状态出发，选择距离当前状态
+本轮往返和重新规划共用固定的 home/far；每段规划起点仍是当时的实际位置。
+退出 CMD 或时钟回退清除 home，下次任务重新记录。规划器不读取起飞高度，也不使用地面原点生成端点。
+
+external 的 AUTO_HOVER 与其他模式一样，首次只给地面原点上方 **0.2 m** 的固定位置目标。
+进入 CMD 后才执行前置升高轨迹：从进入时的实际位置和速度出发，保持进入时的 XY 目标和航向，
+用与普通解析轨迹共用的九次多项式连接段到达 `p_cmd + [0, 0, trajectory.takeoff_height]`。
+高度、执行时间和稳定等待统一使用控制器 YAML 的 `trajectory.takeoff_height`、
+`trajectory.takeoff_duration`、`trajectory.settle_duration`，run_ctrl 与 gap_flight 入口一致。
+例如 HOVER 在地面上方约 0.2 m，takeoff_height=1.0 时，CMD 前置终点约为地面上方 1.2 m。
+gap_flight 不再覆盖高度；旧的 `mission.flight_height` 和 `trajectory.external.takeoff_height` 已移除。
+前置轨迹结束后持续保持固定终点，位置误差、速度和姿态满足现有 external 启动容差，并连续稳定
+`trajectory.settle_duration`（默认 0.5 s），才进入 WAITING。PREPARING 期间 `hovering=false`，
+规划、上传和执行请求被拒绝且不缓存。退出 CMD 丢弃活动和待执行轨迹；每次重入 CMD 都从当时实际状态
+重新执行相对升高，不再按旧的绝对高度跳过。takeoff_height=0 时仍执行速度收敛和稳定等待。
+CMD 内连续上传执行多段轨迹不会重复前置升高。前置与上传轨迹共用活动轨迹、时钟及播放器，
+只有完成后的状态不同（WAITING / COMPLETED）。
+
+每次规划从当前实际悬停状态出发，选择距离当前状态
 较远的那个固定端点作为目标；在 home 附近向 far 飞，在 far 附近向 home 飞。端点不随窗框
 数量变化，不再停在最后一个窗框后 0.6 m。返程反转窗框顺序和穿越法线，几何航向仍采用
 `planning.heading`，不要求机体先转头 180°。任意中途位置不保证能按全部所选窗框的顺序通过。
@@ -475,7 +489,10 @@ source install/setup.bash
 ros2 run gap_planner gap_plan_check --yaml \
   src/realflight_modules/gap_planner/config/gaps.yaml 3 outbound \
   src/realflight_modules/px4ctrl/config/params.yaml
-# outbound 换成 return 可检查返程；默认起飞位置与 launch 的 [-1.65,0,0.05] 一致。
+# outbound 换成 return 可检查返程。
+# 离线工具没有实时飞机位置；默认测试 home=[-1.65,0,1.05]，不是推算起飞高度。
+# 可在控制器 YAML 后追加：起点扰动 dx dy dz，再追加本轮 home 的 x y z。
+# 例如追加 0 0 0 -1.65 0 1.85，使用该悬停点测试往返。
 ```
 
 每次成功或失败，在 `/gap/planner_status`、节点日志和控制台输出墙钟计时：
@@ -499,8 +516,10 @@ ros2 run gap_planner gap_plan_check --yaml \
 ### FSM 与数据流程
 
 ```text
-AUTO_HOVER（起飞）
+AUTO_HOVER（0.2 m 起飞）
   → AUX2 UP（实机遥控器 / 无遥控仿真原有自动切档）
+CMD / PREPARING（按时间升至任务高度，等待稳定）
+  → 前置完成
 CMD / WAITING（持续悬停）
   → 数量：配置本次场景 → PLANNING → VALIDATING → READY（仍悬停）
   → e：EXECUTING

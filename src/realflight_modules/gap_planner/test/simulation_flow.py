@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--count', type=int, default=1)
     parser.add_argument('--return-count', type=int, default=0, help='0: outbound only; 1..3: return leg')
+    parser.add_argument('--preparation-only', action='store_true', help='Check hover, CMD preparation and service gating only')
     parser.add_argument('--domain', type=int, default=78)
     parser.add_argument('--log', default='/tmp/gap_integration.log')
     parser.add_argument('--gap-params', default='src/realflight_modules/gap_planner/config/gaps.yaml')
@@ -24,6 +25,7 @@ def main():
     import rclpy
     from rclpy.node import Node
     from gap_msgs.msg import ExecutionStatus
+    from px4debug_msgs.msg import Px4ctrlDebug
     from gap_msgs.srv import PlanGaps, UploadTrajectory, ConfigureGates
     from std_srvs.srv import Trigger
     from std_msgs.msg import String, UInt32
@@ -38,6 +40,11 @@ def main():
     # temporary test wrapper, keeping the user's launch file untouched.
     from ament_index_python.packages import get_package_share_directory
     launch_file = Path(get_package_share_directory('gap_planner')) / 'launch' / 'gap_flight.launch.py'
+    import runpy
+    settings = runpy.run_path(str(launch_file))
+    control_file = Path(get_package_share_directory('px4ctrl')) / 'config' / settings['CONTROLLER_PARAMS']
+    with control_file.open(encoding='utf-8') as stream_config:
+        takeoff_height = yaml.safe_load(stream_config)['px4ctrl_node']['ros__parameters']['trajectory']['takeoff_height']
     test_directory = tempfile.TemporaryDirectory(prefix='gap_flow_')
     test_launch = Path(test_directory.name) / 'test.launch.py'
     test_launch.write_text(
@@ -52,7 +59,7 @@ def main():
     rclpy.init()
     node = Node('gap_flow_test')
     latest, planner_text, selected_count = [None], [''], [None]
-    history, crossing_samples = [], {}
+    history, crossing_samples, references = [], {}, []
     current_count = [args.count]
     returning, previous_position = [False], [None]
 
@@ -89,6 +96,8 @@ def main():
             print(message.state, message.reason, flush=True)
 
     node.create_subscription(ExecutionStatus, '/gap/execution', status, 10)
+    node.create_subscription(Px4ctrlDebug, '/debugPx4/ctrl',
+        lambda m: references.append((m.state, -m.ref_p_z)), 10)
     node.create_subscription(String, '/gap/planner_status', lambda m: planner_text.__setitem__(0, m.data), 10)
     node.create_subscription(UInt32, '/gap/sim/selected_count', lambda m: selected_count.__setitem__(0, m.data), 10)
     planner = node.create_client(PlanGaps, '/gap/plan')
@@ -117,10 +126,21 @@ def main():
         until(lambda: time.monotonic() >= deadline, seconds+2)
 
     try:
-        # No console or mode-switch service: the existing synthetic AUX2
-        # sequence must enter CMD and hold without a trajectory.
+        # Early requests during CMD preparation must be rejected, not cached.
+        until(lambda: latest[0] is not None and latest[0].state == 'PREPARING', 40)
+        assert latest[0].command_mode and not latest[0].hovering
+        assert not call(start, Trigger.Request()).success
+        assert not call(upload, UploadTrajectory.Request()).accepted
+        assert not call(planner, PlanGaps.Request(count=1)).accepted
         until(lambda: latest[0] is not None and latest[0].command_mode
               and latest[0].hovering and latest[0].feedback_valid, 40)
+        hover_z = [z for state, z in references if state == 2]
+        assert hover_z and abs(hover_z[0] - latest[0].takeoff_position.z - 0.2) < 1e-4
+        cmd_z = [z for state, z in references if state == 3]
+        assert cmd_z and abs(cmd_z[0] - hover_z[-1]) < 0.1, 'CMD height must start continuously'
+        target_z = cmd_z[0] + takeoff_height
+        assert abs(latest[0].pose.position.z - target_z) < 0.1
+        assert abs(cmd_z[-1] - target_z) < 0.01
         settle(3)
         assert selected_count[0] == 0, 'Simulator must start with no active gates'
         assert latest[0].state == 'WAITING', 'Entering CMD must not execute an old trajectory'
@@ -135,9 +155,10 @@ def main():
         node.destroy_subscription(late_subscription)
         print('PASS AUX2 entered CMD; no console mode services; late subscriber sees WAITING', flush=True)
         assert not call(start, Trigger.Request()).success, 'Empty CMD must hold without starting'
-        origin = latest[0].takeoff_position
-        home = np.array([origin.x, origin.y, origin.z+cfg['mission']['flight_height']])
-        far = home + np.array([cfg['mission']['goal_offset_x'], 0, 0])
+        if args.preparation_only:
+            print(f'PASS 0.2 m hover -> CMD preparation -> stable WAITING; states={history}', flush=True)
+            return
+        home = far = None
         counts = [args.count] + ([args.return_count] if args.return_count else [])
         for leg, count in enumerate(counts):
             settle(1)
@@ -155,6 +176,10 @@ def main():
             crossing_samples.clear()
             planner_text[0] = ''
             assert not call(planner, PlanGaps.Request(count=0)).accepted
+            if home is None:
+                p = latest[0].pose.position
+                home = np.array([p.x, p.y, p.z])
+                far = home + np.array([cfg['mission']['goal_offset_x'], 0, 0])
             response = call(planner, PlanGaps.Request(count=count))
             assert response.accepted, response.message
             until(lambda: latest[0].state in ('READY', 'REJECTED') or planner_text[0].startswith('FAILED'), 130)
@@ -180,6 +205,7 @@ def main():
             print(f'PASS leg={leg} count={count} endpoint_error={error:.3f} m crossings={crossing_samples}', flush=True)
         settle(1)
         assert latest[0].command_mode and latest[0].hovering and latest[0].state == 'COMPLETED'
+        assert history.count('PREPARING') == 1, 'Repeated uploaded legs must not repeat preparation'
         assert 'GAP COLLISION' not in Path(args.log).read_text(), 'MuJoCo detected frame contact'
         print(f'PASS mission states={history}', flush=True)
     finally:

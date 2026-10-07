@@ -73,8 +73,9 @@ void PX4CtrlFSM::process()
     // 执行状态机，使其步进一次
     const auto state_before=get_curr_state(&fsm_);
     cur_state_ = run_state_machine_once(&fsm_);
-    if (external_ && state_before==FSM_STATE(cmd) && cur_state_!=FSM_STATE(cmd) &&
-        !external_->finished(now_time.seconds())) {external_->stop();}
+    if (external_ && state_before==FSM_STATE(cmd) && cur_state_!=FSM_STATE(cmd)) {
+        external_->stop();
+    }
     // manual/auto_hover/cmd/safe 都属于外部控制状态。心跳在
     // process() 中统一发布，保证状态处理函数提前返回时也不会中断。
     if (cur_state_ == FSM_STATE(manual) ||
@@ -152,6 +153,7 @@ void PX4CtrlFSM::update_flight_origin()
     if (flight_was_armed_ && !armed) {
         landing_.cancel();
         trajectory_reference_.clear();
+        if (external_) {external_->stop();}
         reset_controller_();
         pending_mode_switch_ = ModeSwitchTarget::NONE;
         set_next_state(&fsm_, FSM_STATE(manual_on));
@@ -374,7 +376,6 @@ void* PX4CtrlFSM::FSM_FUNCT(auto_hover)(void * this_fsm)
             next_disarm_request_time_ = landing_start_time_;
         } else {
             hover_target_ = takeoff_origin_.enterHover(record_state_data.p + record_state_data.v * 0.3);
-            if(taking_off && external_) {hover_target_.z()=takeoff_origin_.position().z()+external_->takeoffHeight();}
         }
         const auto &origin = takeoff_origin_.position();
         RCLCPP_INFO(px4controlnode_.get_logger(),
@@ -504,6 +505,20 @@ void* PX4CtrlFSM::FSM_FUNCT(cmd)(void * this_fsm)
         if(external_) {
             trajectory_reference_.clear();cmd_trajectory_.reset();
             hover_target_=pose_data.p;reset_point_reference_(hover_target_);
+            // CMD owns the external preparation move; AUTO_HOVER always uses
+            // the common 0.2 m takeoff. Playback and completion are shared below.
+            try {
+                px4ctrl::ReferencePoint start;
+                start.position=pose_data.p;start.velocity=pose_data.v;
+                start.yaw=record_state_data.yaw;
+                cmd_trajectory_=external_->beginCommand(now_time.seconds(),start);
+                if(cmd_trajectory_) {load_cmd_trajectory_();}
+            } catch(const std::invalid_argument &error) {
+                external_->stop();trajectory_reference_.clear();cmd_trajectory_.reset();
+                RCLCPP_ERROR(px4controlnode_.get_logger(), "External preparation rejected: %s", error.what());
+                set_next_state((FSM *)this_fsm,FSM_STATE(auto_hover));
+                return NULL;
+            }
         } else if (!load_cmd_trajectory_()) {
             set_next_state((FSM *)this_fsm, FSM_STATE(auto_hover));
             return NULL;
@@ -665,7 +680,7 @@ bool PX4CtrlFSM::prepare_cmd_trajectory()
             const bool simulation=false;
 #endif
             external_=std::make_unique<px4ctrl::ExternalExecution>(px4controlnode_,limits,model,simulation);
-            RCLCPP_INFO(px4controlnode_.get_logger(), "External mode: enter CMD, hold while planning; explicit start for every leg");
+            RCLCPP_INFO(px4controlnode_.get_logger(), "External mode: CMD prepares task height, then holds for planning; explicit start for every uploaded leg");
             return true;
         }
         if (type == "omtraj") {
@@ -1362,6 +1377,7 @@ void PX4CtrlFSM::calculate_control_()
         RCLCPP_ERROR(px4controlnode_.get_logger(), "Invalid control reference: %s", error.what());
         trajectory_reference_.clear();
         landing_.cancel();
+        if (external_) {external_->stop();}
         reset_controller_();
         record_position();
         set_hover_ref();
