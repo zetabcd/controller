@@ -52,13 +52,13 @@ gap_planner:
       gap_1:
         topic: /gap_1/pose  # /<actual window rigid-body name>/pose; edit to match VRPN
         width: 0.50
-        height: 0.22
+        height: 0.20
         thickness: 0.04
         frame_width: 0.05
         opening_offset: [0.0, 0.0, 0.0]
         opening_quaternion_wxyz: [1.0, 0.0, 0.0, 0.0]
         sim_position: [0.0, 0.0, 1.5]
-        sim_rpy_deg: [60.0, 0.0, 0.0]
+        sim_rpy_deg: [30.0, 0.0, 0.0]
       gap_2:
         topic: /gap_2/pose
         width: 0.90

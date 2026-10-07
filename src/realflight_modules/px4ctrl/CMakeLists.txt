@@ -79,7 +79,7 @@ target_include_directories(px4ctrl_acados_ocp_solver PUBLIC
 target_link_libraries(px4ctrl_acados_ocp_solver PUBLIC acados hpipm blasfeo m)
 
 # ROS-independent acados solver, also exercised directly by regression tests.
-add_library(px4ctrl_reference STATIC src/control_reference.cpp src/trajectory.cpp src/sampled_trajectory.cpp src/external_trajectory.cpp)
+add_library(px4ctrl_reference STATIC src/control_reference.cpp src/trajectory.cpp src/sampled_trajectory.cpp src/external_trajectory.cpp src/obstacle_trajectory.cpp)
 target_include_directories(px4ctrl_reference PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -213,6 +213,8 @@ install(DIRECTORY config DESTINATION share/${PROJECT_NAME}/)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(obstacle_trajectory_test test/obstacle_trajectory_test.cpp)
+  target_link_libraries(obstacle_trajectory_test px4ctrl_reference)
   ament_add_gtest(external_execution_test test/external_execution_test.cpp src/external_execution.cpp)
   target_link_libraries(external_execution_test px4ctrl_reference)
   ament_target_dependencies(external_execution_test rclcpp gap_msgs std_srvs)

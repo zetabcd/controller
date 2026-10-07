@@ -258,6 +258,12 @@ void PX4ControlNode::config_from_ros_handle()
     this->declare_parameter<double>("trajectory.takeoff_height", 1.5);
     this->declare_parameter<double>("trajectory.takeoff_duration", 3.0);
     this->declare_parameter<double>("trajectory.settle_duration", 0.5);
+    this->declare_parameter<std::string>("trajectory.obstacle_trigger.topic", "/obs/pose");
+    this->declare_parameter<std::string>("trajectory.obstacle_trigger.frame_id", "");
+    this->declare_parameter<double>("trajectory.obstacle_trigger.trigger_distance", 1.0);
+    this->declare_parameter<double>("trajectory.obstacle_trigger.move_distance", 1.0);
+    this->declare_parameter<double>("trajectory.obstacle_trigger.move_duration", 3.0);
+    this->declare_parameter<double>("trajectory.obstacle_trigger.pose_timeout", 0.2);
     for (const std::string type : {"horizontal_circle", "vertical_circle", "helix", "figure_eight"}) {
         const std::string key = "trajectory." + type + ".";
         this->declare_parameter<double>(key + "radius", 1.0);

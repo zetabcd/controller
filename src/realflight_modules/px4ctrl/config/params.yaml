@@ -12,10 +12,17 @@ px4ctrl_node:
 
     # All controllers use the same source. Selection/parameters take effect after restart.
     trajectory:
-      type: omtraj  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj external
-      takeoff_height: 1.6 # relative to CMD activation position [m]
+      type: omtraj  # horizontal_circle / vertical_circle / helix / figure_eight / omtraj / external / obstacle_trigger
+      takeoff_height: 0.5 # relative to CMD activation position [m]
       takeoff_duration: 3.0
       settle_duration: 0.5
+      obstacle_trigger:
+        topic: /obs/pose
+        frame_id: ""  # learn/lock first frame; poses must already use controller world NWU
+        trigger_distance: 0.5  # 3-D aircraft-to-obstacle-origin distance, strictly less [m]
+        move_distance: 0.5  # signed WORLD X displacement from waiting target [m]
+        move_duration: 1.0  # smooth move, then hold; once per CMD entry [s]
+        pose_timeout: 0.2  # maximum obstacle source/receipt age [s]
       horizontal_circle:
         radius: 1.0      # main circle diameter <= 2 m, enforced by generator
         turns: 2         # cruise turns; acceleration/deceleration add phase

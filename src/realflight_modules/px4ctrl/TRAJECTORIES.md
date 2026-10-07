@@ -34,7 +34,47 @@ AUX2 复用起飞/降落：DOWN→MID（manual→hover）首次原地起飞；MI
 
 圆半径硬性要求 `0 < radius <= 1 m`，因此主体圆直径不超过 2 m。进出连接段占用额外空间：默认竖直圆在局部前向总跨度约 2.86 m；螺旋横向总跨度约 2.86 m。**直径约束不等于完整动作限制在 2 m 盒子内**。螺旋主体每圈推进严格为 0.5 m，进出段也有额外轴向位移。
 
-所有轨迹在局部原点生成。进入 CMD 时整体平移到实测位置、绕 z 轴旋转到实测航向；不使用经纬度或 NED 绝对航点。生成器假设激活时近似悬停，不从当前非零速度重新规划入口。既有 FSM 的模式切换/异常恢复机制未被替换为特技恢复规划器。
+上述解析/omtraj 轨迹在局部原点生成。进入 CMD 时整体平移到实测位置、绕 z 轴旋转到实测航向；不使用经纬度或 NED 绝对航点。下述 `obstacle_trigger` 仅平移位置原点，移动轴固定在世界 X 方向。生成器假设激活时近似悬停，不从当前非零速度重新规划入口。既有 FSM 的模式切换/异常恢复机制未被替换为特技恢复规划器。
+
+## 障碍物接近触发平移：obstacle_trigger
+
+普通 `run_ctrl.launch.py` 入口使用同一套 FSM。将 `trajectory.type` 设为
+`obstacle_trigger`：进入 CMD 后按公共 `takeoff_height/takeoff_duration` 上升，
+完成 `settle_duration` 后一直保持目标点。新鲜的障碍物位置与飞机 PX4 当前位置的
+**三维欧氏距离严格小于** `trigger_distance` 时，执行一次世界 X 轴平移，随后保持终点。
+距离是两个位置原点之间的距离，不是到障碍物表面的净距离。
+
+```yaml
+trajectory:
+  type: obstacle_trigger
+  takeoff_height: 0.5
+  takeoff_duration: 3.0
+  settle_duration: 0.5
+  obstacle_trigger:
+    topic: /obs/pose
+    frame_id: ""
+    trigger_distance: 1.0
+    move_distance: 1.0
+    move_duration: 3.0
+    pose_timeout: 0.2
+```
+
+`topic` 接收 `geometry_msgs/msg/PoseStamped`。`trigger_distance`、`move_distance`
+单位为米，时间参数为秒。正/负 `move_distance` 分别沿世界 +X/−X；以等待悬停目标
+为平移起点，目标 Y/Z 和进入 CMD 时的航向保持不变，方向不跟随飞机航向旋转。
+移动沿用九次多项式 C4 连接和普通轨迹名义执行器检查，`move_duration` 决定平移速度。
+上述数值是可修改的默认值，控制节点启动时读取。
+
+障碍物话题必须已处于控制器世界 NWU 坐标系；不要再次施加飞机 PX4 消息的
+`[x,-y,-z]` 转换。`frame_id` 非空时检查完全匹配，空时学习并锁定第一条有效消息
+的标签；标签检查不执行坐标变换。消息时间戳须与节点 ROS 时钟同步。缺失、过期、
+未来、乱序、非有限位置或坐标系不符的数据不触发移动。订阅只保留最新一条消息，
+每次进入 CMD 清除旧观测，起飞阶段的接近事件不缓存为待执行动作。
+
+每次进入 CMD 只触发一次；开始移动后不因障碍物离开或数据断流而中途切换轨迹，
+到终点后也不重复触发。重新进入 CMD 会复位。退出 CMD、遥控接管、异常悬停与
+UP→MID 降落继续使用原有逻辑。该模式由距离触发固定平移，不做障碍物外形或
+平移路径碰撞规划。`gap_flight.launch.py` 会强制 `external`，不适用于此模式。
 
 ## 连续时间实现
 

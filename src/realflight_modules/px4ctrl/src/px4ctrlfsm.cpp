@@ -683,7 +683,24 @@ bool PX4CtrlFSM::prepare_cmd_trajectory()
             RCLCPP_INFO(px4controlnode_.get_logger(), "External mode: CMD prepares task height, then holds for planning; explicit start for every uploaded leg");
             return true;
         }
-        if (type == "omtraj") {
+        if (type == "obstacle_trigger") {
+            px4ctrl::ObstacleTrajectoryOptions o;
+            o.gravity=p.gra;
+            o.takeoff_height=px4controlnode_.get_parameter("trajectory.takeoff_height").as_double();
+            o.takeoff_duration=px4controlnode_.get_parameter("trajectory.takeoff_duration").as_double();
+            o.settle_duration=px4controlnode_.get_parameter("trajectory.settle_duration").as_double();
+            o.trigger_distance=px4controlnode_.get_parameter("trajectory.obstacle_trigger.trigger_distance").as_double();
+            o.move_distance=px4controlnode_.get_parameter("trajectory.obstacle_trigger.move_distance").as_double();
+            o.move_duration=px4controlnode_.get_parameter("trajectory.obstacle_trigger.move_duration").as_double();
+            o.pose_timeout=px4controlnode_.get_parameter("trajectory.obstacle_trigger.pose_timeout").as_double();
+            obstacle_timeout_=o.pose_timeout;
+            obstacle_trajectory_=std::make_shared<px4ctrl::ObstacleTriggeredTrajectory>(o);
+            // Audit both takeoff and the earliest possible triggered movement.
+            // Reset below before any actual playback or prediction sampling.
+            obstacle_trajectory_->update(obstacle_trajectory_->readyTime(),
+                Eigen::Vector3d::Zero(),Eigen::Vector3d::Zero(),0.0);
+            cmd_trajectory_=obstacle_trajectory_;
+        } else if (type == "omtraj") {
             cmd_trajectory_ = px4ctrl::loadOmTrajectoryReference(
                 px4controlnode_.get_parameter("trajectory.omtraj.file").as_string(), p.gra);
         } else {
@@ -760,9 +777,32 @@ bool PX4CtrlFSM::prepare_cmd_trajectory()
             "rate %.2f rad/s, alpha %.2f rad/s2, static motors [%.2f, %.2f] N; sampled nominal audit only",
             type.c_str(), cmd_trajectory_->duration(), audit.max_speed, audit.min_thrust,
             audit.max_thrust, audit.max_rate, audit.max_angular_acceleration, audit.min_motor, audit.max_motor);
+        if (obstacle_trajectory_) {
+            obstacle_trajectory_->reset(0.0);
+            const auto topic=px4controlnode_.get_parameter("trajectory.obstacle_trigger.topic").as_string();
+            if(topic.empty()) {throw std::invalid_argument("Obstacle pose topic must not be empty");}
+            obstacle_position_=px4ctrl::ObstaclePosition(
+                px4controlnode_.get_parameter("trajectory.obstacle_trigger.frame_id").as_string());
+            obstacle_subscription_=px4controlnode_.create_subscription<geometry_msgs::msg::PoseStamped>(
+                topic,rclcpp::SensorDataQoS().keep_last(1),
+                [this](geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) {
+                    const auto &p=msg->pose.position;
+                    if(msg->header.stamp.sec<0 || msg->header.stamp.nanosec>=1000000000u) {return;}
+                    const double stamp=msg->header.stamp.sec+1e-9*msg->header.stamp.nanosec;
+                    if(!obstacle_position_.accept({p.x,p.y,p.z},stamp,
+                        px4controlnode_.get_clock()->now().seconds(),msg->header.frame_id,obstacle_timeout_)) {
+                        RCLCPP_WARN_THROTTLE(px4controlnode_.get_logger(),*px4controlnode_.get_clock(),
+                            2000,"Obstacle pose rejected: invalid/stale/out-of-order stamp, position or frame");
+                    }
+                });
+            RCLCPP_INFO(px4controlnode_.get_logger(),
+                "Obstacle trigger on %s: wait after takeoff, move once along world X, then hold endpoint",
+                topic.c_str());
+        }
         return true;
     } catch (const std::exception &error) {
         cmd_trajectory_.reset();
+        obstacle_trajectory_.reset();obstacle_subscription_.reset();
         RCLCPP_ERROR(px4controlnode_.get_logger(), "Cannot prepare trajectory: %s", error.what());
         return false;
     }
@@ -771,10 +811,16 @@ bool PX4CtrlFSM::prepare_cmd_trajectory()
 bool PX4CtrlFSM::load_cmd_trajectory_()
 {
     if (!cmd_trajectory_) {return false;}
+    const double start=px4controlnode_.get_clock()->now().seconds();
+    if (obstacle_trajectory_) {
+        obstacle_trajectory_->reset(get_yaw_from_quaternion(record_state_data.q));
+        obstacle_position_.clear();
+        obstacle_start_time_=start;
+    }
     if (external_) {external_->startClock(px4controlnode_.get_clock()->now().seconds());}
-    trajectory_reference_.start(cmd_trajectory_, px4controlnode_.get_clock()->now().seconds(),
+    trajectory_reference_.start(cmd_trajectory_, start,
         external_ ? Eigen::Vector3d::Zero().eval() : record_state_data.p,
-        external_ ? 0.0 : get_yaw_from_quaternion(record_state_data.q));
+        (external_ || obstacle_trajectory_) ? 0.0 : get_yaw_from_quaternion(record_state_data.q));
     return true;
 }
 
@@ -1370,6 +1416,15 @@ void PX4CtrlFSM::calculate_control_()
             sens_data, now, dt_, control_sp_, px4controlnode_.param);
     };
     try {
+        if (obstacle_trajectory_ && trajectory_reference_.active() &&
+            ref_.fsm_state == FSM_STATE(cmd) && pose_is_received(now_time) && pose_is_valid(pose_data)) {
+            if (obstacle_trajectory_->update(now-obstacle_start_time_,pose_data.p,
+                obstacle_position_.position(),obstacle_position_.age(now))) {
+                RCLCPP_INFO(px4controlnode_.get_logger(),
+                    "Obstacle triggered at distance %.3f m: execute world-X move, then hold",
+                    (obstacle_position_.position()-pose_data.p).norm());
+            }
+        }
         calculate(make_reference());
     } catch (const std::invalid_argument &error) {
         // Never execute a stale preview after a rejected reference. Recover to

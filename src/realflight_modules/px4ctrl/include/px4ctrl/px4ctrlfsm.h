@@ -22,6 +22,8 @@
 #include <px4ctrl/input.h>
 #include <px4ctrl/acados_nmpc.h>
 #include <px4ctrl/trajectory.h>
+#include <px4ctrl/obstacle_trajectory.h>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <px4ctrl/external_execution.h>
 #include <px4ctrl/takeoff_origin.h>
 #include <px4ctrl/landing_reference.h>
@@ -198,6 +200,11 @@ private:
     std::shared_ptr<const px4ctrl::Trajectory> cmd_trajectory_;
     bool load_cmd_trajectory_();
     std::unique_ptr<px4ctrl::ExternalExecution> external_;
+    std::shared_ptr<px4ctrl::ObstacleTriggeredTrajectory> obstacle_trajectory_;
+    px4ctrl::ObstaclePosition obstacle_position_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr obstacle_subscription_;
+    double obstacle_start_time_{0.0};
+    double obstacle_timeout_{0.2};
     bool switch_to_offboard_mode_();
     bool switch_to_manual_mode_();
     void set_requested_landing_ref_();
