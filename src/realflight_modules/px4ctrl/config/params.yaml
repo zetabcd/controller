@@ -12,7 +12,7 @@ px4ctrl_node:
 
     # All controllers use the same source. Selection/parameters take effect after restart.
     trajectory:
-      type: vertical_circle  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj external
+      type: omtraj  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj external
       takeoff_height: 1.6 # relative to CMD activation position [m]
       takeoff_duration: 3.0
       settle_duration: 0.5
@@ -196,3 +196,86 @@ px4ctrl_node:
       rate_des_x_deg: 57.3    # 期望角速度(deg/s)，仅在angular_rate_loop=true时有效
       rate_des_y_deg: 0.0
       rate_des_z_deg: 0.0
+
+
+#还原1001里面的pending
+
+#最开始的飞行轨迹，没有实飞过
+# trajectory:
+#       type: vertical_circle  # 旧: vertical_circle ；可选 horizontal_circle / vertical_circle / helix / figure_eight / omtraj
+#       takeoff_height: 1.5 # relative to CMD activation position [m]
+#       takeoff_duration: 3.0
+#       settle_duration: 0.5
+#       
+#       vertical_circle:
+#         radius: 0.9
+#         turns: 1
+#         centripetal_g: 1.8 # A/g > 1; slowing arbitrarily destroys inversion
+#         entry_duration: 0.85
+#         exit_duration: 0.85
+#         entry_distance: 1.35
+#         exit_distance: 1.35
+
+# TOP
+# trajectory:
+#   type: vertical_circle
+#   takeoff_height: 0.4
+#   takeoff_duration: 3.0
+#   settle_duration: 0.5
+
+#   vertical_circle:
+#     radius: 0.8
+#     turns: 1
+#     centripetal_g: 1.8
+#     entry_duration: 1.8
+#     exit_duration: 1.8
+#     entry_distance: 0.3
+#     exit_distance: 0.3
+#     connector_height: 0.4
+
+#和上面一样的进入方式，没有实飞，takeoff_height: 0.4
+# type: helix
+# helix:
+#   radius: 0.8
+#   turns: 3
+#   pitch: 0.2
+#   axis_transition_duration: 1.0
+#   centripetal_g: 1.8
+#   entry_duration: 1.8
+#   exit_duration: 1.8
+#   entry_distance: 0.3
+#   exit_distance: 0.3
+#   connector_height: 0.4
+
+#实飞，但是失败
+# type: helix
+# takeoff_height: 1.6
+
+# helix:
+#   radius: 0.8
+#   turns: 3
+#   pitch: 0.2
+#   axis_transition_duration: 1.0
+#   centripetal_g: 1.55
+#   entry_duration: 1.2
+#   exit_duration: 1.2
+#   entry_distance: 1.45
+#   exit_distance: 1.45
+#   connector_height: 1.6
+
+# 飞行成功
+# trajectory:
+#   takeoff_height: 1.05
+#   helix:
+#     radius: 0.8
+#     turns: 3
+#     pitch: 0.2
+#     centripetal_g: 1.55
+#     axis_transition_duration: 1.0
+#     entry_duration: 0.85
+#     exit_duration: 0.85
+#     entry_distance: 1.2
+#     exit_distance: 1.2
+#     connector_height: 1.05（这是现在无人机上跑的params_ommpc_flip，但是高度不应该给为1.5而是1.05）
+# 垂直圆的轨迹其实也是0.8但是改成了0.9，高度还是没有改对（0.9下高度是1.5是对的，但是0.8应该对应的是1.05）
+# 这些都是因为参数没有纳入记录，有时改了又随着合并一起commit了，有时候台式机没有改直接到机载电脑上去的，所以还停留在之前的版本，有些时候又把realflight的提交合并了，所以比较混乱。
